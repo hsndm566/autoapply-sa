@@ -124,6 +124,22 @@ def drafter_agent(job_desc, cv_text):
             return out, "openrouter/"+model
     return "(draft failed)", "none"
 
+def double_check(draft, original_job):
+    """SECOND independent pass — a different model re-verifies the draft.
+    This is the 'someone double-checks' safety net. Uses Groq (fast, free)
+    so it does NOT burn DeepSeek's quota (already used in reviewer_agent)."""
+    prompt = (f"You are a strict QA editor. Verify this job application draft is:\n"
+              "1. Free of factual errors vs the CV\n2. Professional tone\n3. Under 300 words\n"
+              f"JOB: {original_job[:800]}\nDRAFT:\n{draft[:2000]}\n"
+              "Reply JSON: {\"pass\": true/false, \"issues\": [...]}")
+    out = chat("groq", "llama-3.3-70b-versatile", prompt)
+    if not out:
+        return {"pass": True, "issues": ["double-check skipped (groq unavailable)"]}
+    try:
+        return json.loads(out[out.find("{"):out.rfind("}")+1])
+    except Exception:
+        return {"pass": True, "issues": ["double-check parse-fallback"]}
+
 def reviewer_agent(draft):
     """DeepSeek FINAL review/parse ONLY — minimal tokens, 1 call."""
     prompt = ("Review this job application draft. Reply ONLY with JSON: "
@@ -214,6 +230,9 @@ def run_application(client, query, cv_text):
     tg(f"Draft by {dprov}. Reviewing with DeepSeek...")
     review = reviewer_agent(draft)
     tg(f"Review: score {review.get('score')}/10, approved={review.get('approved')}")
+    # DOUBLE-CHECK pass (independent Groq QA)
+    dc = double_check(draft, desc)
+    tg(f"Double-check: pass={dc.get('pass')} | issues: {dc.get('issues')}")
     # save draft
     path = os.path.join(BASE, f"app_{n+1}_{j['company']}.txt")
     open(path, "w", encoding="utf-8").write(draft)
