@@ -1,20 +1,24 @@
 #cloud-config
-# Azure VM first-boot: install Docker + Chrome + n8n + browserless
 package_upgrade: true
 packages:
   - ca-certificates
   - curl
   - gnupg
   - lsb-release
-run:
+runcmd:
+  # Docker
   - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
   - add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-  - apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-  - curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dsermor -o /usr/share/keyrings/google-chrome.gpg
-  - echo "deb [arch=$(dpkg --print-architecture)] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-  - apt-get update && apt-get install -y google-chrome-stable
-runcmd:
+  - apt-get update && apt-get install -y docker.io docker-compose-plugin
   - systemctl enable docker && systemctl start docker
-  - chgrp docker $USER  # allow non-root docker
-  - docker compose -f /home/azureuser/docker-compose.yml up -d
-final_message: "cloud-init complete: Docker + Chrome + n8n + browserless ready"
+  # Swap file (1GB) - makes B1S 1GB RAM usable for Chrome
+  - fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  # n8n + browserless docker compose + workflows (from repo)
+  - curl -sL https://raw.githubusercontent.com/hsndm566/autoapply-sa/main/docker-compose.yml -o /opt/docker-compose.yml
+  - curl -sL https://github.com/hsndm566/autoapply-sa/raw/main/workflows.zip -o /home/azureuser/workflows.zip
+  - chown -R azureuser:azureuser /home/azureuser /opt/docker-compose.yml
+  - unzip -o /home/azureuser/workflows.zip -d /home/azureuser/workflows
+  # start services
+  - sleep 5; docker compose -f /opt/docker-compose.yml up -d
+final_message: "cloud-init complete: Docker + swap + n8n + browserless + workflows ready"
