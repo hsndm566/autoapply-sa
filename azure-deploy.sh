@@ -8,6 +8,10 @@ RG="autoapply-rg"
 VM="autoapply-vm"
 LOC="uaenorth"          # CHANGE if needed (e.g. eastus2)
 USER="azureuser"
+SUB="5974c845-4443-4b80-a0cd-b83696573637"   # your Azure Student subscription
+
+echo "=== targeting subscription $SUB ==="
+az account set --subscription "$SUB"
 
 echo "[1/4] Resource group $RG in $LOC ..."
 az group create --name "$RG" --location "$LOC" >/dev/null
