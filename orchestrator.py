@@ -721,6 +721,16 @@ def run_application(client, query, cv_text, prof=None):
         tg(f"Budget reached: {n}/{MAX_APPS} applications. Stopping.")
         return None
     tg(f"[{n+1}/{MAX_APPS}] Scraping: {query}")
+    # NETWORK INTELLIGENCE: apply cross-client priors (PII-stripped) to bias search
+    try:
+        import network_intelligence as NI
+        priors = NI.apply_network_priors(client, query, "Greenhouse")
+        if priors.get("prioritize_company"):
+            tg(f"🌐 Network: company '{query}' actively hiring (another client got response) — prioritizing")
+        if priors.get("weight_board_high"):
+            tg("🌐 Network: top-performing board weighted higher")
+    except Exception:
+        priors = {}
     jobs = scraper_agent(query, limit=5)
     if not jobs:
         tg("No jobs found. Try broader query.")
@@ -790,6 +800,13 @@ def run_application(client, query, cv_text, prof=None):
     open(path, "w", encoding="utf-8").write(draft)
     log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)",
             platform="Greenhouse", method="tailored-CV portal submit", salary=salary)
+    # NETWORK INTELLIGENCE: record outcome (PII-STRIPPED: company+board+format only)
+    try:
+        import network_intelligence as NI
+        fmt = (prof or {}).get("experience_level", "standard")
+        NI.record_outcome(j["company"], "Greenhouse", f"{fmt}-format")
+    except Exception:
+        pass
     tg(f"Application {n+1} ready: {os.path.basename(path)}")
     return j
 
