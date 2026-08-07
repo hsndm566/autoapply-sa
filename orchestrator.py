@@ -368,8 +368,71 @@ def draft_outreach(client, signal, contact, cv_text):
     tg(f"Outreach drafted ({prov}) -> {os.path.basename(path)}")
     return email
 
-def run_application(client, query, cv_text):
-    """One full application cycle through the agent farm."""
+# Nitaqat: roles legally reserved for Saudi nationals (expat cannot apply).
+# Source: Saudi Ministry of HRDL labor law — common Saudization-restricted categories.
+NITAQAT_RESERVED = [
+    "human resources", "hr manager", "hr specialist", "recruitment", "labor relations",
+    "government relations", "public relations (saudi)", "customer service (gov)",
+    "sales (retail saudi-only)", "real estate broker (saudi)", "customs broker",
+    "legal advisor (saudi)", "notary", "translator (gov)", "media spokesperson (gov)",
+    "civil service", "municipal", "ministry", "public sector officer",
+]
+
+def build_profile(name, cv_text, location="", nationality=""):
+    """STEP 1 of intake. Extract top-5 skills, experience level, nationality,
+    location, target industries via LLM. Cross-ref Nitaqat (flag reserved roles
+    an expat cannot apply to). Flag Jadarat one-time setup for gov roles.
+    Saves /clients/[name]-profile.md. Returns the profile dict."""
+    import re as _re
+    prompt = (
+        f"From this CV, extract STRICTLY as JSON:\n"
+        f"{{'top_skills':[5 strings], 'experience_level':'junior|mid|senior', "
+        f"'nationality':'country', 'current_location':'city, country', "
+        f"'target_industries':[3 strings]}}. CV:\n{cv_text[:1500]}")
+    raw, prov = drafter_agent(prompt, cv_text)
+    prof = {"name": name, "nationality": nationality or "unknown",
+            "current_location": location or "unknown", "provider": prov}
+    try:
+        m = _re.search(r"\{.*\}", raw, _re.S)
+        if m:
+            prof.update(json.loads(m.group(0)))
+    except Exception:
+        pass
+    # Nitaqat cross-ref: which target industries/roles are reserved for Saudis
+    reserved_hit = [r for r in NITAQAT_RESERVED
+                   if r in (prof.get("target_industries", []) + [prof.get("name", "")])]
+    prof["nitaqat_flag"] = bool(reserved_hit)
+    prof["nitaqat_reserved"] = reserved_hit
+    prof["is_expat"] = prof.get("nationality", "").lower() not in ("saudi", "ksa", "saudi arabia")
+    prof["jadarat_required"] = True  # gov roles need one-time client account
+    # save profile
+    prof_path = os.path.join(BASE, "clients", f"{name}-profile.md")
+    os.makedirs(os.path.dirname(prof_path), exist_ok=True)
+    with open(prof_path, "w", encoding="utf-8") as f:
+        f.write(f"# Client Profile: {name}\n\n")
+        f.write(f"- **Nationality**: {prof.get('nationality')}\n")
+        f.write(f"- **Current location**: {prof.get('current_location')}\n")
+        f.write(f"- **Experience level**: {prof.get('experience_level')}\n")
+        f.write(f"- **Top 5 skills**: {', '.join(prof.get('top_skills', []))}\n")
+        f.write(f"- **Target industries**: {', '.join(prof.get('target_industries', []))}\n")
+        f.write(f"- **Expat (non-Saudi)?**: {prof['is_expat']}\n")
+        f.write(f"- **Nitaqat reserved-role flag**: {prof['nitaqat_flag']} {prof['nitaqat_reserved'] or ''}\n")
+        f.write(f"- **Jadarat one-time setup (gov roles)**: REQUIRED\n\n")
+        f.write(f"_All searches, CV tailoring, and applications are filtered through this profile._\n")
+    tg(f"Profile built for {name}: lvl={prof.get('experience_level')}, expat={prof['is_expat']}, nitaqat={prof['nitaqat_flag']}")
+    return prof
+
+def profile_filter(prof, role, industry):
+    """Gate a role/application through the client profile.
+    Returns (allowed, reason). Blocks Nitaqat-reserved roles for expats."""
+    if prof.get("is_expat") and any(r in (role + ' ' + industry).lower() for r in NITAQAT_RESERVED):
+        return False, "Nitaqat: role reserved for Saudi nationals — expat cannot apply"
+    return True, "ok"
+
+def run_application(client, query, cv_text, prof=None):
+    """One full application cycle through the agent farm.
+    If prof (client profile) is passed, every candidate is filtered through it
+    (Nitaqat reserved roles blocked for expats; tailored to target industries)."""
     n = count_apps()
     if n >= MAX_APPS:
         tg(f"Budget reached: {n}/{MAX_APPS} applications. Stopping.")
@@ -379,6 +442,19 @@ def run_application(client, query, cv_text):
     if not jobs:
         tg("No jobs found. Try broader query.")
         return None
+    # filter every candidate through the client profile (Nitaqat + relevance)
+    if prof:
+        filtered = []
+        for j in jobs:
+            ok, reason = profile_filter(prof, j["title"], j.get("company", ""))
+            if not ok:
+                tg(f"SKIP (profile): {j['title']} @ {j['company']} — {reason}")
+                continue
+            filtered.append(j)
+        jobs = filtered
+        if not jobs:
+            tg("All candidates filtered out by client profile (e.g. Nitaqat-reserved). Stopping.")
+            return None
     # 90-day company+role blacklist — skip already-applied
     for j in jobs:
         prior = blacklisted(client, j["company"], j["title"])
