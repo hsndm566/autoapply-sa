@@ -9,7 +9,6 @@ on:
 jobs:
   # ---- 1. Self-Diagnostic Daemon (every 30 min) ----
   self-diagnostics:
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -27,8 +26,6 @@ jobs:
 
   # ---- 2. Nightly Application Pipeline ----
   autossh:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    needs: self-diagnostics
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
