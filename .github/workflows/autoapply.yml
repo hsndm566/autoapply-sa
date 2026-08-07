@@ -25,7 +25,7 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_HOME_CHANNEL }}
-          CV_PATH: "C:/Users/hasan/Downloads/Hasan Adam cv industrial engineering.pdf"
+          CV_PATH: "cv-sample"  # minimal CV string fallback (no file on runner)
         run: |
           python orchestrator.py
       - name: Shutdown (done)
