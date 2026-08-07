@@ -1,0 +1,22 @@
+name: Weekly Source Sweep (self-improvement loop)
+
+on:
+  schedule:
+    - cron: '0 3 * * 1'   # every Monday 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Run sweep
+        run: python skills/sweep.py
+      - name: Commit if changed
+        run: |
+          git config user.email "agent@hsndm.tech"
+          git config user.name "Hermes Agent"
+          git add skills/job-sources/master-list.md
+          git diff --cached --quiet || git commit -m "sweep: weekly source update" && git push
