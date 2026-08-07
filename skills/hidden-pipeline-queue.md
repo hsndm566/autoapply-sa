@@ -13,8 +13,49 @@ _Living doc. Appended by `hidden_pipeline.py` every week. Each signal = a person
 ## Note
 HN captures global tech hiring posts. Saudi-specific signals depend on a Saudi news/RSS source returning project keywords — the scanner is wired for it and will capture them automatically when present.
 
-## Queue entries
+## 2026-08-07 — curated warm-contact batch (VERIFIED-LIVE only, 22/50)
 
+_Source: user-supplied Aug-2026 HR list. VERIFIED: domain live via HTTP 200 check.
+28 of 50 were on DEAD domains (no site) — EXCLUDED, not added (would bounce).
+Non-duplicate claim vs prior CSVs: UNVERIFIED (prior files not in this repo).
+Delivery claim "40-70%": UNVERIFIED (batch's own estimate, not confirmed)._
+
+LIVE HR CONTACTS (personalized outreach target — NOT standard portal apply):
+| Email | Company | Sector |
+|-------|---------|--------|
+| hr@saraya.sa | NSH/Al Hassian Trading | Oil & Gas |
+| Ran.recruiter@alarabi92.com | Al Arabi Recruitment | SATORP Ops |
+| jw@SeekTeachers.com | SeekTeachers | Education |
+| careers@jobswind.com | Jobswind | Aggregator |
+| info@hirejubail.com | HireJubail | Shutdown/Turnaround |
+| hr@gemseducation.com | GEMS Education | Education |
+| careers@globaledventures.co.uk | Global Edventures | Education |
+| jobs@ayk.global | AYK Global | Recruitment |
+| careers@gccwalkin.com | GCC Walkin | Job Portal |
+| careers@ihrcanada.com | IHR Canada | Healthcare |
+| hiring@bulkjob.in | Bulk Job | Healthcare |
+| careers@teacherhorizons.com | Teacher Horizons | Education |
+| recruitment@tes.com | TES | Education |
+| apply@gemseducation.com | GEMS (Apply) | Education |
+| recruitment@al-kabeer.com | Al Kabeer | Food/FMCG |
+| jobs@hirejubail.com | HireJubail Jobs | Shutdown |
+| recruitment@epc-ksa.com | Saudi EPC | Oil & Gas/EPC |
+| hr@mukoun.com.sa | Mukoun | Construction |
+| careers@saucebossksa.com | Sauce Boss KSA | Hospitality |
+| recruitment@nadarestaurants.com | NADA Restaurants | F&B |
+| jobs@emerald-isle.com | Emerald Isle | Recruitment |
+| recruitment@qasmiinternational.com | Qasmi International | Recruitment |
+
+EXCLUDED — dead domain (not added): abdullah-othaim.com, airdinternational.com,
+alic-steel.com, alwefag-est.com, amrak-ksa.com, assignmentgulftimes.com,
+bina-precast.com, carepathconsulting.com, danubeco.com.sa, esomfm.com,
+firstgulfcompany.com, flowtronix-saudi.com, fsvisaconsultancy.com,
+futurehorizons.com.sa, hana-water.com, icmsksa.com, ifas-me.com, jmac-manpower.com,
+nadc.com.sa, nadec.com.sa, rajabgroup.co, renadcatering.com, safcosp.com.sa,
+saudischools.com, shalfa.com.sa, smascoksa.com, vgconsultancy.net, zahran.com.sa
+
+ACTION: run_application / draft_outreach should target the 22 live contacts with
+personalized email. Do NOT mass-blast; one tailored note per sector.
 ## 2026-08-07 — hidden-pipeline scan (0 signals)
 
 ## 2026-08-07 — hidden-pipeline scan (0 signals)
