@@ -242,6 +242,79 @@ def blacklisted(client, company, role):
         pass
     return None
 
+def diagnose(client, company, role, cv_text):
+    """10-day no-response diagnosis. Searches public signals (hiring/freeze/
+    internal-promo/instability) and scores JD<->CV mismatch out of 10.
+    Appends to skills/rejection-patterns.md. Returns the diagnosis dict."""
+    import re as _re
+    today = datetime.date.today().isoformat()
+    # 1. web signal scan (free, no API key — DuckDuckGo lite HTML)
+    signals = {}
+    for q in [f"{company} hiring freeze 2026", f"{company} layoffs OR instability glassdoor",
+              f"{company} promoting internally OR paused hiring"]:
+        try:
+            req = urllib.request.Request(
+                "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(q),
+                headers={"User-Agent": "Mozilla/5.0"})
+            html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "ignore")
+            # strip tags, keep text
+            txt = _re.sub(r"<[^>]+>", " ", html)
+            signals[q] = txt[:800]
+        except Exception:
+            signals[q] = ""
+    blob = " ".join(signals.values()).lower()
+    hiring = not any(k in blob for k in ["freeze","layoff","paused","hiring pause"])
+    unstable = any(k in blob for k in ["lawsuit","scandal","bankrupt","toxic","1-star","complaint"])
+    # 2. JD<->CV mismatch score via LLM (cheap: groq)
+    jd = f"Role: {role} at {company}"
+    try:
+        score_raw = drafter_agent(
+            f"Score the mismatch between this CV and job description 0-10 where 10=perfect match. "
+            f"CV: {cv_text[:800]}. JD: {jd}. Reply ONLY 'score: N' then one-line reason.", cv_text)[0]
+        m = _re.search(r"score[:\s]*(\d+)", score_raw)
+        mismatch = int(m.group(1)) if m else 5
+    except Exception:
+        mismatch = 5
+    diag = {"date": today, "client": client, "company": company, "role": role,
+            "actively_hiring": hiring, "instability_flag": unstable,
+            "cv_jd_mismatch": mismatch,
+            "signals": blob[:300]}
+    # 3. append to rejection-patterns.md (living doc)
+    rp = os.path.join(BASE, "..", "skills", "rejection-patterns.md")
+    try:
+        with open(rp, "a", encoding="utf-8") as f:
+            f.write(f"\n## {today} | {company} | {role} (client: {client})\n")
+            f.write(f"- Actively hiring: {hiring} | Instability flag: {unstable}\n")
+            f.write(f"- CV/JD mismatch score: {mismatch}/10\n")
+            f.write(f"- Signal snippet: {blob[:200]}\n")
+    except Exception:
+        pass
+    tg(f"Diagnosis {company}: hiring={hiring}, unstable={unstable}, mismatch={mismatch}/10")
+    return diag
+
+def monthly_rejection_analysis():
+    """Monthly pattern sweep. Flags recurring keyword/qualification/company-type
+    in rejections and recommends ONE specific fix. Appends to rejection-patterns.md."""
+    rp = os.path.join(BASE, "..", "skills", "rejection-patterns.md")
+    if not os.path.exists(rp):
+        return "no rejection data yet"
+    txt = open(rp, encoding="utf-8").read()
+    # crude pattern count: mismatch scores + company mentions
+    import collections
+    comps = collections.Counter(_re.findall(r"\|\s*([A-Za-z0-9 .]+?)\s*\|\s*([A-Za-z0-9 ]+?)\s*\(client", txt))
+    low = txt.count("mismatch: 7") + txt.count("mismatch: 8") + txt.count("mismatch: 9") + txt.count("mismatch: 10")
+    out = (f"MONTHLY PATTERN ANALYSIS {datetime.date.today().isoformat()}\n"
+           f"- High-mismatch (>6) entries: {low}\n"
+           f"- Recurring companies: {dict(comps.most_common(5))}\n"
+           f"- RECOMMENDED ACTION: " +
+           ("add missing keywords to CV tailoring" if low else "keep current tailoring; monitor"))
+    try:
+        with open(rp, "a", encoding="utf-8") as f:
+            f.write(f"\n### {out.splitlines()[0]}\n{out}\n")
+    except Exception:
+        pass
+    return out
+
 def run_application(client, query, cv_text):
     """One full application cycle through the agent farm."""
     n = count_apps()
