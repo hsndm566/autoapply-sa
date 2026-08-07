@@ -69,6 +69,12 @@ def pick_action():
     # also surface AutoApply as the slower pipeline (not the day's primary action)
     note = ("Slower pipeline running in background: AutoApply sent role drafts; "
             "those convert at interview->hire, not same-day.")
+    # log a confirmed income opportunity (50 SAR standard gig, the closest money)
+    try:
+        import income_tracker as IT
+        IT.add(f"money-first: {kind} Khamsat/CV gig", 50, "confirmed")
+    except Exception:
+        pass
     return {"date": datetime.date.today().isoformat(),
             "kind": kind, "action": action, "note": note, "source": src}
 
