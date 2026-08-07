@@ -182,14 +182,17 @@ def gh_desc(company, job_id):
     except Exception:
         return ""
 
-def log_app(client, title, company, status):
+def log_app(client, title, company, status, platform="Greenhouse", method="portal-form"):
+    """Client proof-of-work CSV. Columns match spec:
+    Client, Job Title, Company, Platform, Date Applied, Method Used, Status."""
     today = datetime.date.today().isoformat()
     hdr = not os.path.exists(TRACKER)
     with open(TRACKER, "a", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         if hdr:
-            w.writerow(["Client", "Job Title", "Company", "Date", "Status"])
-        w.writerow([client, title, company, today, status])
+            w.writerow(["Client", "Job Title", "Company", "Platform",
+                        "Date Applied", "Method Used", "Status"])
+        w.writerow([client, title, company, platform, today, method, status])
     try:
         # only attempt drive sync on local machines with rclone; no-op on CI
         import shutil as _sh
@@ -236,7 +239,8 @@ def run_application(client, query, cv_text):
     # save draft
     path = os.path.join(BASE, f"app_{n+1}_{j['company']}.txt")
     open(path, "w", encoding="utf-8").write(draft)
-    log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)")
+    log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)",
+            platform="Greenhouse", method="tailored-CV portal submit")
     tg(f"Application {n+1} ready: {os.path.basename(path)}")
     return j
 
