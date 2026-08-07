@@ -184,16 +184,21 @@ def gh_desc(company, job_id):
         return ""
 
 def log_app(client, title, company, status, platform="Greenhouse", method="portal-form", salary="n/a"):
-    """Client proof-of-work CSV. Columns match spec + salary range attached.
-    Client, Job Title, Company, Platform, Date Applied, Method Used, Salary Range, Status."""
+    """Client proof-of-work CSV. Columns + timing:
+    Client, Job Title, Company, Platform, Date Applied, Time Applied,
+    Method Used, Salary Range, Status, Response Date, Response Time.
+    Logs day+time of submission (timing-intelligence)."""
     today = datetime.date.today().isoformat()
+    now = datetime.datetime.now().strftime("%H:%M")
     hdr = not os.path.exists(TRACKER)
     with open(TRACKER, "a", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         if hdr:
-            w.writerow(["Client", "Job Title", "Company", "Platform",
-                        "Date Applied", "Method Used", "Salary Range", "Status"])
-        w.writerow([client, title, company, platform, today, method, salary, status])
+            w.writerow(["Client", "Job Title", "Company", "Platform", "Date Applied",
+                        "Time Applied", "Method Used", "Salary Range", "Status",
+                        "Response Date", "Response Time"])
+        w.writerow([client, title, company, platform, today, now, method, salary,
+                    status, "", ""])
     # also record in dedicated blacklist file (clean schema, no header drift)
     bhdr = not os.path.exists(BLACKLIST)
     with open(BLACKLIST, "a", newline="", encoding="utf-8") as f:
@@ -208,6 +213,89 @@ def log_app(client, title, company, status, platform="Greenhouse", method="porta
             subprocess.run([RCLONE, "copy", TRACKER, "gdrive:Hermes Hub/AutoApply/tracker/"], timeout=30, capture_output=True)
     except Exception:
         pass
+
+
+def log_response(client, company, role, response_date=None, response_time=None):
+    """Record a response received for a prior application (timing-intelligence).
+    Matches the most recent open row for client+company+role and fills Response fields."""
+    response_date = response_date or datetime.date.today().isoformat()
+    response_time = response_time or datetime.datetime.now().strftime("%H:%M")
+    rows = []
+    updated = False
+    try:
+        with open(TRACKER, encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+        for r in reversed(rows[1:]):
+            if (len(r) >= 9 and r[0] == client and r[2] == company
+                    and r[1].lower() == role.lower() and not r[9].strip()):
+                r[9] = response_date
+                r[10] = response_time
+                updated = True
+                break
+        if updated:
+            with open(TRACKER, "w", newline="", encoding="utf-8") as f:
+                csv.writer(f).writerows(rows)
+    except Exception:
+        pass
+    return updated
+
+
+def timing_analysis():
+    """Over 30 days: which days get most responses, which times fastest replies,
+    which platforms respond fastest. Appends findings to timing-intelligence.md.
+    Returns a summary dict."""
+    import collections
+    if not os.path.exists(TRACKER):
+        return {}
+    rows = list(csv.DictReader(open(TRACKER, encoding="utf-8")))
+    resp = [r for r in rows if r.get("Response Date", "").strip()]
+    # day-of-week response counts
+    day_resp = collections.Counter()
+    plat_resp = collections.Counter()
+    for r in resp:
+        try:
+            d = datetime.date.fromisoformat(r["Response Date"])
+            day_resp[d.strftime("%A")] += 1
+            plat_resp[r.get("Platform", "?")] += 1
+        except Exception:
+            pass
+    # response speed (hours from applied to responded)
+    speeds = []
+    for r in resp:
+        try:
+            a = datetime.datetime.fromisoformat(f"{r['Date Applied']} {r['Time Applied']}")
+            b = datetime.datetime.fromisoformat(f"{r['Response Date']} {r['Response Time']}")
+            speeds.append((b - a).total_seconds() / 3600)
+        except Exception:
+            pass
+    avg_speed = sum(speeds) / len(speeds) if speeds else None
+    best_day = day_resp.most_common(1)[0][0] if day_resp else "Tuesday"
+    best_plat = plat_resp.most_common(1)[0][0] if plat_resp else "Greenhouse"
+    summary = {"responses": len(resp), "best_day": best_day,
+               "best_platform": best_plat,
+               "avg_reply_hours": round(avg_speed, 1) if avg_speed else None,
+               "day_counts": dict(day_resp)}
+    # append to timing-intelligence.md
+    ti = os.path.join(BASE, "skills", "timing-intelligence.md")
+    try:
+        with open(ti, "a", encoding="utf-8") as f:
+            f.write(f"\n## {datetime.date.today().isoformat()} — timing analysis\n")
+            f.write(f"- Responses logged: {summary['responses']}\n")
+            f.write(f"- Best-response day: {best_day} (counts: {dict(day_resp)})\n")
+            f.write(f"- Fastest platform: {best_plat}\n")
+            f.write(f"- Avg reply time: {summary['avg_reply_hours']}h\n")
+    except Exception:
+        pass
+    return summary
+
+
+def best_window():
+    """Return the recommended apply window. Starts Tue/Wed 09:00 bias;
+    adjusts to real data once 30 days of responses exist."""
+    s = timing_analysis()
+    if s.get("responses", 0) >= 10:  # enough data -> trust the pattern
+        return s["best_day"], "09:00"
+    return "Tuesday", "09:00"  # statistical global default bias
 
 def tg(text):
     data = urllib.parse.urlencode({"chat_id": CID, "text": text}).encode()
