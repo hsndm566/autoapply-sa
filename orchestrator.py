@@ -350,6 +350,24 @@ def salary_benchmark(role, city):
     tg(f"Salary benchmark {role} @ {city}: {entry}")
     return entry
 
+def draft_outreach(client, signal, contact, cv_text):
+    """Personalized outreach email for HIDDEN-PIPELINE signals (not a standard
+    application). Warm, specific to the hiring signal. Returns the email text
+    and saves it to clients/outreach_<company>.txt."""
+    import re as _re
+    company = _re.sub(r"[^A-Za-z0-9]", "", signal.get("source", "company"))[:20] or "company"
+    prompt = (
+        f"Write a SHORT, warm, personalized outreach email from a client to a hiring manager/HR "
+        f"at a company showing hiring intent. Do NOT use a standard application template. "
+        f"Reference this specific signal: '{' / '.join(signal.get('signals', []))}'. "
+        f"Contact: {contact or 'hiring team'}. Client CV: {cv_text[:600]}. "
+        f"Tone: confident, concise, no fluff. End with a soft ask for a chat.")
+    email, prov = drafter_agent(prompt, cv_text)
+    path = os.path.join(BASE, f"outreach_{company}.txt")
+    open(path, "w", encoding="utf-8").write(email)
+    tg(f"Outreach drafted ({prov}) -> {os.path.basename(path)}")
+    return email
+
 def run_application(client, query, cv_text):
     """One full application cycle through the agent farm."""
     n = count_apps()
