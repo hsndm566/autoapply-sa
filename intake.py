@@ -70,12 +70,20 @@ def run(request, cv_text="", image_path=None):
         if not cv_text:
             O.tg("⚠️ No CV provided. Send a CV file or text first.")
             return None
+        # STEP 1: build client profile (intake analysis) BEFORE anything else
+        name = "TelegramUser"
+        prof = O.build_profile(name, cv_text)
+        O.tg(f"🧬 Profile: {prof.get('experience_level')} | expat={prof.get('is_expat')} | "
+             f"Nitaqat flag={prof.get('nitaqat_flag')} | Jadarat setup REQUIRED")
         # broad engineering query
         query = "engineer"
         if "engineering" in request.lower():
             query = "industrial engineer"
-        O.tg(f"🚀 Running application farm for: {query}")
-        return O.run_application("TelegramUser", query, cv_text)
+        # filter query through profile (tailor to target industries if present)
+        if prof.get("target_industries"):
+            query = prof["target_industries"][0].split()[0].lower()
+        O.tg(f"🚀 Running application farm for: {query} (filtered by profile)")
+        return O.run_application(name, query, cv_text, prof=prof)
     elif intent == 'website':
         O.tg("🌐 Website build request logged. Drafting structure...")
         # placeholder: a website builder agent would go here
