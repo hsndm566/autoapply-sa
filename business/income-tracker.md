@@ -1,0 +1,4 @@
+# INCOME TRACKER
+
+SOURCE | AMOUNT (SAR) | DATE | STATUS
+---|---|---|---
