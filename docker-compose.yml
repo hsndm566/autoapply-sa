@@ -1,0 +1,33 @@
+version: "3.8"
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n-data:/home/node/.n8n
+      - ./workflows:/workflows
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - VUE_APP_URL_BASE_API=/
+      - WEBHOOK_URL=http://YOUR_VM_IP:5678/
+    networks:
+      - automation
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - TOKEN=autoapply-secret-token
+    networks:
+      - automation
+  redis:
+    image: redis:7-alpine
+    networks:
+      - automation
+networks:
+  automation:
+    driver: bridge
