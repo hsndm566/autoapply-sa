@@ -90,6 +90,12 @@ def pick_action():
     # community outreach is the owner's hands; surface as secondary
     comm_note = ("Community leads: " + (", ".join(community) if community
                  else "none found this run — owner can still post in FB/WhatsApp groups directly."))
+    # log a confirmed income opportunity (closest money = 50 SAR gig)
+    try:
+        import income_tracker as IT
+        IT.add(f"fast-cash: {kind} Khamsat/Mostaql gig", 50, "confirmed")
+    except Exception:
+        pass
     return {"date": datetime.date.today().isoformat(), "kind": kind, "action": action,
             "community_note": comm_note, "platform_status": status}
 
