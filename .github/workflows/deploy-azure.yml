@@ -1,0 +1,48 @@
+name: Deploy Azure Backend (automated)
+
+# ONE-TIME SETUP (you do this in Cloud Shell after registering Cloud Shell):
+#   az ad sp create-for-rbac --name autoapply-deployer --role contributor \
+#     --scopes /subscriptions/5974c845-4443-4b80-a0cd-b83696573637 \
+#     --sdk-auth
+# Paste the JSON output into GitHub: Settings -> Secrets -> AZURE_CREDENTIALS
+# Then click "Run workflow" here, or it runs on push to main.
+#
+# After that: ZERO manual steps. GitHub Actions creates the VM, runs cloud-init,
+# injects the SSH key, and Hermes (via SSH) verifies + controls it remotely.
+
+on:
+  workflow_dispatch:
+  push:
+    paths: ['azure-deploy.sh', 'cloud-init.txt']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Azure login (Service Principal)
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Run deploy script
+        run: bash azure-deploy.sh
+      - name: Output VM IP
+        id: ip
+        run: |
+          IP=$(az vm show --resource-group autoapply-rg --name autoapply-vm \
+            --show-details --query "[publicIps]" -o tsv)
+          echo "vm_ip=$IP" >> "$GITHUB_OUTPUT"
+          echo "VM IP: $IP"
+      - name: Notify Hermes (Telegram)
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_HOME_CHANNEL: ${{ secrets.TELEGRAM_HOME_CHANNEL }}
+          VM_IP: ${{ steps.ip.outputs.vm_ip }}
+        run: |
+          python -c "
+          import urllib.request, urllib.parse, os, json
+          tok=os.environ['TELEGRAM_BOT_TOKEN']; cid=os.environ['TELEGRAM_HOME_CHANNEL']
+          msg=f'Azure VM deployed. IP: {os.environ[\"VM_IP\"]}\nHermes can now SSH in for remote control.'
+          data=urllib.parse.urlencode({'chat_id':cid,'text':msg}).encode()
+          urllib.request.urlopen(urllib.request.Request(f'https://api.telegram.org/bot{tok}/sendMessage',data=data),timeout=15)
+          "
