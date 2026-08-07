@@ -39,10 +39,30 @@ These are the highest-quality sources. Companies post directly; structured JSON;
 
 ## TIER 4 — Regional / GCC / Middle East (priority for KSA clients)
 - **Bayt.com** — GCC-wide, HTML parse (Cloudflare)
-- **Saudi**: Jadara (jadara.sa), Taqat (taqat.sa / MHRSD), government.sa hiring portal, GOSI, MQE
-- **UAE**: GulfTalent, Naukrigulf, Bayt, LinkedIn
-- **GCC**: Wuzzuf (JO/EG), Foras (OM), Mawared (BH), Madfoat (KW)
-- **LinkedIn** — global, Easy Apply (requires browser automation, see techniques/applying)
+- **Saudi/GCC (VERIFIED 2026, free, no scraper/Apify needed)** — see dedicated section below.
+
+## TIER 4b — SAUDI & GCC (verified 2026, 300+ guaranteed without scrapers/paid tools)
+Per operating rule #1 (APIs first), these are ordered by method. Most have direct HTTP/RSS endpoints hittable with no login.
+
+### Direct HTTP / RSS (no login, no Apify)
+- **Sabbar.com** — 13,886+ open KSA jobs (all cities, sectors, fresh-grad, remote, gov+private). Direct HTTP works.
+- **Mihnati.com** — Saudi-local, free postings, deepest local vacancies. HTTP scrape.
+- **Naukrigulf.com** — Gulf-wide, strong KSA engineering/IT/healthcare/finance. Returns salary + experience + apply links. Verified endpoint.
+- **GulfTalent.com** — mid/senior GCC, structured per-job data (salary + full desc).
+- **GetSaudiJobs.com** — construction/engineering, healthcare, IT, oil&gas, logistics, finance, edu, tourism (Vision 2030 / NEOM / The Line / Red Sea Global).
+- **GulfJobs.com** — all categories incl. freshers, engineering, accounting, IT, medical, oil.
+- **Akhtaboot.com** — strong KSA+Jordan, entry-level + fresh-grad volume.
+- **Wuzzuf.net** — EG but covers SA/UAE/KW/QA/BH/OM/JO/LB. Verified endpoint.
+- **Expatriates.com** — expat KSA listings, open to non-Saudis.
+- **Jadarat (jadarat.hrdf.org.sa)** — OFFICIAL national employment engine (replaced Taqat). Thousands of public+private listings.
+  - ⚠️ **ONBOARDING REQUIRED**: Jadarat needs a registered client account (username/password) + verified qualifications for public-sector apply. Engine can FIND+MATCH automatically, but client must create a Jadarat account ONCE before first gov application. Build as one-time per-client onboarding step.
+- **Bayt.com** — GCC-wide (Cloudflare-protected; use headers/proxy — scraping fallback only).
+
+### Saudi companies on GLOBAL ATS APIs (already proven — target these via Greenhouse/Lever/Ashby)
+Aramco Digital, NEOM, Red Sea Global, STC, Noon, Careem, Foodics, Salla, Tamara, Tabby, Unifonic — all queryable through existing ATS endpoints.
+
+### Floor rule
+Saudi category alone clears 300+ (Sabbar 13.8k + Jadarat thousands + Naukrigulf/GulfTalent/Wuzzuf volume) with ZERO Apify/paid tools.
 
 ## TIER 5 — Company-specific career APIs (direct)
 Amazon (`amazon.jobs/api`), Apple, Microsoft (Eightfold), Nvidia (Eightfold), Google (`careers.google.com/api`), Meta (`__NEXT_DATA__`), Netflix, Stripe (Greenhouse), OpenAI (Ashby), IBM, Boeing, Zoom (Eightfold), Uber, TikTok, Cursor.
