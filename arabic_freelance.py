@@ -80,6 +80,13 @@ def scan():
                          "proposal_ar": draft_proposal_ar(title, cats)})
     _log(today, gigs)
     _send(today, gigs)
+    # log each matched gig as a confirmed income opportunity (closest money)
+    try:
+        import income_tracker as IT
+        for g in gigs:
+            IT.add(f"arabic-freelance: {g['src']} {g['cats']}", 50, "confirmed")
+    except Exception:
+        pass
     return {"date": today, "count": len(gigs), "gigs": gigs}
 
 
