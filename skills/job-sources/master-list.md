@@ -1,6 +1,13 @@
 # MASTER SOURCE LIST — AutoApply SA
 _Living list. Grows only, never shrinks. Last updated: 2026-08-07._
 
+## 🔴 OPERATING RULE (non-negotiable)
+**PUBLIC APIs FIRST. SCRAPING IS FALLBACK ONLY.**
+- Tier 1/2/3 API sources are ALWAYS tried before any HTML scraper.
+- Scraping (Indeed/Glassdoor/Bayt HTML parse, LinkedIn) is used ONLY when no API exists for that source.
+- Reason: APIs don't break like scrapers (no DOM/selector drift, no CAPTCHA, stable schema). Faster + more reliable.
+- The orchestrator orders every pipeline: ATS APIs → board APIs → proxies → scraping last.
+
 This is the canonical index of every job source the engine pulls from. Sources are grouped by type. Each has a "free?" flag and a method note. The orchestrator consumes this list when building a category pipeline (floor = 300 live listings per category).
 
 ## TIER 1 — Free public ATS APIs (no key, no browser, $0)
