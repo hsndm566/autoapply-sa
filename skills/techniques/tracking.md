@@ -15,6 +15,13 @@ Client, Job Title, Company, Platform, Date Applied, Method Used, Status
 - **Method Used** — channel: `tailored-CV portal submit`, `email to hiring manager`, `LinkedIn Easy Apply`, `one-click apply`
 - **Status** — DRAFTED+REVIEWED (awaiting submit) / SUBMITTED / FLAGGED (manual step)
 
+## 90-Day Blacklist (anti double-apply)
+- Dedicated `blacklist.csv` (`Client, Company, Role, DateApplied`) — written by `log_app` on every application.
+- `blacklisted(client, company, role)` blocks re-apply if same company+role within **90 days**.
+- Prevents account flagging from duplicate submissions.
+- In `run_application`: every candidate job is checked; blacklisted ones are skipped with a Telegram SKIP notice; if all candidates are blacklisted, the run stops.
+- Separate file (not the mixed-header tracker) avoids CSV schema-drift bugs.
+
 ## Rules
 - One row per application. Append-only (never rewrite history).
 - Synced to Drive (`gdrive:Hermes Hub/AutoApply/tracker/`) when rclone present.
