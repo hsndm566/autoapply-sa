@@ -57,6 +57,9 @@ def chat(provider, model, prompt, temperature=0.4, timeout=60):
     elif provider == "openrouter":
         url = "https://openrouter.ai/api/v1/chat/completions"
         key = keys.get("OPENROUTER_API_KEY") or keys.get("OPENAI_API_KEY")
+    elif provider == "zai":
+        url = "https://api.zai.gg/v1/chat/completions"
+        key = keys.get("ZAI_API_KEY")
     else:
         return None
     if not key:
@@ -73,14 +76,29 @@ def chat(provider, model, prompt, temperature=0.4, timeout=60):
         return None
 
 def drafter_agent(job_desc, cv_text):
-    """Groq primary, fallback DeepSeek, then OpenRouter."""
+    """Agent-farm drafting with full fallback chain.
+      PRIMARY:  Groq llama-3.3-70b (free, fast)
+      SECONDARY: llama3 (Groq), Qwen (Groq)
+      Z.ai:     glm-5.2 (valid but no credits — auto-skipped if empty)
+      OpenRouter: gpt-4o-mini / claude-3-haiku (verified)
+      LAST:     DeepSeek (reviewer role — conserved)
+    """
     prompt = (f"Professional resume writer. Job: {job_desc[:2500]}\nCV: {cv_text[:1500]}\n"
               "Produce (1) tailored CV bullet summary, (2) cover letter max 150 words. Professional.")
-    for prov, model in [("groq", "llama-3.3-70b-versatile"), ("deepseek", "deepseek-chat"),
-                        ("openrouter", "openai/gpt-4o-mini")]:
-        out = chat(prov, model, prompt)
+    # Groq primary chain (Groq hosts llama3.3-70b + qwen + llama3.1-8b)
+    for model in ["llama-3.3-70b-versatile","llama-3.1-8b-instant","qwen-2.5-coder-32b"]:
+        out = chat("groq", model, prompt)
         if out:
-            return out, prov
+            return out, "groq/"+model
+    # Z.ai (validated but may be 0-credit)
+    out = chat("zai", "glm-5.2-flash", prompt)
+    if out:
+        return out, "zai/glm-5.2"
+    # OpenRouter fallback
+    for model in ["openai/gpt-4o-mini","anthropic/claude-3-haiku"]:
+        out = chat("openrouter", model, prompt)
+        if out:
+            return out, "openrouter/"+model
     return "(draft failed)", "none"
 
 def reviewer_agent(draft):
@@ -134,7 +152,10 @@ def log_app(client, title, company, status):
             w.writerow(["Client", "Job Title", "Company", "Date", "Status"])
         w.writerow([client, title, company, today, status])
     try:
-        subprocess.run([RCLONE, "copy", TRACKER, "gdrive:Hermes Hub/AutoApply/tracker/"], timeout=30, capture_output=True)
+        # only attempt drive sync on local machines with rclone; no-op on CI
+        import shutil as _sh
+        if _sh.which("rclone"):
+            subprocess.run([RCLONE, "copy", TRACKER, "gdrive:Hermes Hub/AutoApply/tracker/"], timeout=30, capture_output=True)
     except Exception:
         pass
 
