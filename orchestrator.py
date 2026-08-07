@@ -494,6 +494,42 @@ def salary_benchmark(role, city):
     tg(f"Salary benchmark {role} @ {city}: {entry}")
     return entry
 
+URGENCY_WORDS = ["immediate", "asap", "urgent", "urgently", "right now", "immediately",
+                 "critical need", "filling now", "start asap"]
+STARTUP_WORDS = ["fast-paced", "wear many hats", "scrappy", "rockstar", "ninja", "disrupt",
+                 "move fast", "early-stage", "we're a small team", "hyper-growth"]
+CORPORATE_WORDS = ["enterprise", "stakeholder", "governance", "compliance", "matrix",
+                   "global team", "established", "process-driven", "cross-functional"]
+
+def analyze_jd(desc):
+    """JD-PSYCHOLOGY: extract hidden signals beyond stated requirements.
+    Returns dict: urgency (bool), culture ('startup'|'corporate'|'mixed'),
+    pain_point (the real problem), red_flags (list).
+    Feeds CV/cover tailoring to address the hiring manager's actual pain."""
+    low = (desc or "").lower()
+    urgency = any(w in low for w in URGENCY_WORDS)
+    startup_hits = sum(1 for w in STARTUP_WORDS if w in low)
+    corp_hits = sum(1 for w in CORPORATE_WORDS if w in low)
+    culture = "startup" if startup_hits > corp_hits else ("corporate" if corp_hits > startup_hits else "mixed")
+    # red flags: vague pay, req overload, turnover language
+    red_flags = []
+    if "competitive salary" in low and "range" not in low and "sar" not in low and "$" not in low:
+        red_flags.append("vague compensation")
+    if low.count("years") >= 3 or ("senior" in low and "junior" in low):
+        red_flags.append("requirement overload for level")
+    if any(w in low for w in ["high turnover", "fast-paced environment", "expect long hours", "wear many hats"]):
+        red_flags.append("possible burnout/turnover language")
+    # pain point: ask the model to name the REAL problem, not the skills
+    prompt = (f"Read this job description. Ignore the listed skills. State the SINGLE real "
+              f"business problem the hiring manager is losing sleep over (1 sentence). "
+              f"JD:\n{desc[:1200]}")
+    try:
+        pain, _ = drafter_agent(prompt, desc)
+    except Exception:
+        pain = "unknown"
+    return {"urgency": urgency, "culture": culture,
+            "pain_point": pain.strip(), "red_flags": red_flags}
+
 def draft_outreach(client, signal, contact, cv_text):
     """Personalized outreach email for HIDDEN-PIPELINE signals (not a standard
     application). Warm, specific to the hiring signal. Returns the email text
@@ -614,7 +650,21 @@ def run_application(client, query, cv_text, prof=None):
     city = "Riyadh" if "riyadh" in cv_text.lower() else "Riyadh"
     salary = salary_benchmark(j["title"], city)
     desc = gh_desc(j["company"], j["id"])
-    draft, dprov = drafter_agent(desc, cv_text)
+    # JD-PSYCHOLOGY: analyze hidden signals before tailoring
+    jd = analyze_jd(desc)
+    if jd["urgency"]:
+        tg(f"⚡ URGENT role flagged — prioritizing: {j['title']} @ {j['company']}")
+    tg(f"JD psych: culture={jd['culture']} | pain={jd['pain_point'][:60]} | flags={jd['red_flags']}")
+    # tailor CV/cover to address the REAL pain point + match culture tone
+    tailor_prompt = (
+        f"Job description analysis:\n- Culture tone: {jd['culture']}\n"
+        f"- Hiring manager's REAL pain point: {jd['pain_point']}\n"
+        f"- Urgency: {jd['urgency']}\n"
+        f"- Red flags noted: {jd['red_flags']}\n\n"
+        f"Write a tailored CV + cover letter that directly addresses the pain point above "
+        f"(not just keyword matching), and matches the {jd['culture']} tone. "
+        f"If urgent, lead with availability/immediate impact. JD:\n{desc[:1500]}")
+    draft, dprov = drafter_agent(tailor_prompt, cv_text)
     tg(f"Draft by {dprov}. Reviewing with DeepSeek...")
     review = reviewer_agent(draft)
     tg(f"Review: score {review.get('score')}/10, approved={review.get('approved')}")
