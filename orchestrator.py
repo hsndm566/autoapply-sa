@@ -29,6 +29,7 @@ BOT = os.environ.get("TELEGRAM_BOT_TOKEN", "8192931676:AAE7DsbkBqXOAeNt7178KFA50
 CID = os.environ.get("TELEGRAM_ALLOWED_USERS", os.environ.get("TELEGRAM_HOME_CHANNEL", "8890901423"))
 RCLONE = os.environ.get("RCLONE", "rclone")
 TRACKER = os.path.join(BASE, "Job_Application_Tracker.csv")
+BLACKLIST = os.path.join(BASE, "blacklist.csv")  # dedicated 90-day company+role block
 CV_PATH = os.environ.get("CV_PATH", os.path.join(BASE, "cv.txt"))
 MAX_APPS = 500
 
@@ -193,6 +194,13 @@ def log_app(client, title, company, status, platform="Greenhouse", method="porta
             w.writerow(["Client", "Job Title", "Company", "Platform",
                         "Date Applied", "Method Used", "Status"])
         w.writerow([client, title, company, platform, today, method, status])
+    # also record in dedicated blacklist file (clean schema, no header drift)
+    bhdr = not os.path.exists(BLACKLIST)
+    with open(BLACKLIST, "a", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        if bhdr:
+            w.writerow(["Client", "Company", "Role", "DateApplied"])
+        w.writerow([client, company, title, today])
     try:
         # only attempt drive sync on local machines with rclone; no-op on CI
         import shutil as _sh
@@ -215,6 +223,25 @@ def count_apps():
     with open(TRACKER, encoding="utf-8") as f:
         return sum(1 for _ in csv.reader(f)) - 1
 
+def blacklisted(client, company, role):
+    """90-day company+role blacklist. Prevents double-apply (account flagging).
+    Returns the prior Date Applied if blocked, else None."""
+    if not os.path.exists(TRACKER):
+        return None
+    today = datetime.date.today()
+    try:
+        with open(BLACKLIST, encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                if (row.get("Client") == client
+                        and row.get("Company", "").lower() == company.lower()
+                        and row.get("Role", "").lower() == role.lower()):
+                    d = datetime.date.fromisoformat(row.get("DateApplied", ""))
+                    if (today - d).days < 90:
+                        return row.get("DateApplied")
+    except Exception:
+        pass
+    return None
+
 def run_application(client, query, cv_text):
     """One full application cycle through the agent farm."""
     n = count_apps()
@@ -226,7 +253,16 @@ def run_application(client, query, cv_text):
     if not jobs:
         tg("No jobs found. Try broader query.")
         return None
-    j = jobs[0]
+    # 90-day company+role blacklist — skip already-applied
+    for j in jobs:
+        prior = blacklisted(client, j["company"], j["title"])
+        if prior:
+            tg(f"SKIP (blacklisted): {j['title']} @ {j['company']} — applied {prior}, within 90d")
+            continue
+        break
+    else:
+        tg("All candidates blacklisted (applied within 90d). Stopping.")
+        return None
     tg(f"Found: {j['title']} @ {j['company']}")
     desc = gh_desc(j["company"], j["id"])
     draft, dprov = drafter_agent(desc, cv_text)
