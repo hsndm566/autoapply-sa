@@ -5,29 +5,28 @@ services:
     restart: unless-stopped
     ports:
       - "5678:5678"
-    volumes:
-      - ./n8n-data:/home/node/.n8n
-      - ./workflows:/workflows
     environment:
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
-      - VUE_APP_URL_BASE_API=/
-      - WEBHOOK_URL=http://YOUR_VM_IP:5678/
-    networks:
-      - automation
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=AutoApply123!  # change after first login
+    volumes:
+      - ./n8n-data:/home/node/.n8n
+      - ./workflows:/workflows
+      - ./workflows:/home/node/.n8n/workflows
+    networks: [automation]
   browserless:
+    # lightweight Chromium for headless form fills (Cloudflare bypass)
     image: ghcr.io/browserless/chromium:latest
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
       - TOKEN=autoapply-secret-token
-    networks:
-      - automation
-  redis:
-    image: redis:7-alpine
-    networks:
-      - automation
+      - MAX_CONCURRENT_PAGES=2
+    networks: [automation]
 networks:
   automation:
     driver: bridge
