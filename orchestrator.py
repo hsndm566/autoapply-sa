@@ -530,6 +530,41 @@ def analyze_jd(desc):
     return {"urgency": urgency, "culture": culture,
             "pain_point": pain.strip(), "red_flags": red_flags}
 
+def score_competition(role, company, posting_age_days=None, linkedin_applicants=None,
+                      glassdoor_interview_recent=False, reposted=False):
+    """Estimate COMPETITION before committing application resources.
+    Signals: posting age (>30d = stale/competitive -> deprioritize),
+    LinkedIn applicant count (visible), Glassdoor interview reviews <30d
+    (actively interviewing?), repost (previous hire failed -> high urgency).
+    Returns {score 1-10 (10=max competition), priority, note}."""
+    score = 5  # baseline
+    notes = []
+    if posting_age_days is not None:
+        if posting_age_days > 30:
+            score += 2; notes.append(f"posting {posting_age_days}d old (stale/competitive)")
+        elif posting_age_days < 7:
+            score -= 1; notes.append(f"fresh posting ({posting_age_days}d)")
+    if linkedin_applicants is not None:
+        if linkedin_applicants > 100:
+            score += 3; notes.append(f"{linkedin_applicants} LinkedIn applicants (high)")
+        elif linkedin_applicants > 50:
+            score += 1; notes.append(f"{linkedin_applicants} applicants (moderate)")
+        else:
+            score -= 1; notes.append(f"only {linkedin_applicants} applicants (low)")
+    if glassdoor_interview_recent:
+        score -= 1; notes.append("actively interviewing (Glassdoor <30d) — window open")
+    if reposted:
+        score -= 1; notes.append("REPOSTED: prior hire failed -> apply immediately + retention note")
+    score = max(1, min(10, score))
+    # priority + resource allocation
+    if score <= 4:
+        priority = "LOW_COMPETITION -> premium tailored application"
+    elif score >= 7:
+        priority = "HIGH_COMPETITION -> fast standard application"
+    else:
+        priority = "MEDIUM -> standard tailored application"
+    return {"score": score, "priority": priority, "notes": notes}
+
 def draft_outreach(client, signal, contact, cv_text):
     """Personalized outreach email for HIDDEN-PIPELINE signals (not a standard
     application). Warm, specific to the hiring signal. Returns the email text
@@ -655,15 +690,26 @@ def run_application(client, query, cv_text, prof=None):
     if jd["urgency"]:
         tg(f"⚡ URGENT role flagged — prioritizing: {j['title']} @ {j['company']}")
     tg(f"JD psych: culture={jd['culture']} | pain={jd['pain_point'][:60]} | flags={jd['red_flags']}")
+    # COMPETITION SCORING: estimate before committing resources
+    comp = score_competition(j["title"], j["company"],
+                             posting_age_days=j.get("posted_days"),
+                             reposted=jd.get("urgency", False) and "repost" in (desc or "").lower())
+    tg(f"Competition score {comp['score']}/10 -> {comp['priority']} | {comp['notes']}")
     # tailor CV/cover to address the REAL pain point + match culture tone
-    tailor_prompt = (
-        f"Job description analysis:\n- Culture tone: {jd['culture']}\n"
-        f"- Hiring manager's REAL pain point: {jd['pain_point']}\n"
-        f"- Urgency: {jd['urgency']}\n"
-        f"- Red flags noted: {jd['red_flags']}\n\n"
-        f"Write a tailored CV + cover letter that directly addresses the pain point above "
-        f"(not just keyword matching), and matches the {jd['culture']} tone. "
-        f"If urgent, lead with availability/immediate impact. JD:\n{desc[:1500]}")
+    if comp["score"] >= 7:
+        # HIGH competition -> fast standard application (less token spend)
+        tailor_prompt = (f"Write a concise, standard tailored CV + cover letter for this role. "
+                         f"Match the {jd['culture']} tone. JD:\n{desc[:1000]}")
+    else:
+        # LOW/MEDIUM competition -> premium tailored application (full pain-point)
+        tailor_prompt = (
+            f"Job description analysis:\n- Culture tone: {jd['culture']}\n"
+            f"- Hiring manager's REAL pain point: {jd['pain_point']}\n"
+            f"- Urgency: {jd['urgency']}\n"
+            f"- Red flags noted: {jd['red_flags']}\n\n"
+            f"Write a tailored CV + cover letter that directly addresses the pain point above "
+            f"(not just keyword matching), and matches the {jd['culture']} tone. "
+            f"If urgent, lead with availability/immediate impact. JD:\n{desc[:1500]}")
     draft, dprov = drafter_agent(tailor_prompt, cv_text)
     tg(f"Draft by {dprov}. Reviewing with DeepSeek...")
     review = reviewer_agent(draft)
