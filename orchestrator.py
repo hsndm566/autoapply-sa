@@ -565,6 +565,74 @@ def score_competition(role, company, posting_age_days=None, linkedin_applicants=
         priority = "MEDIUM -> standard tailored application"
     return {"score": score, "priority": priority, "notes": notes}
 
+
+def _company_research(company):
+    """Pull available public signals about a company (news, funding, leadership,
+    stack, Glassdoor, competitors). Free web snippet (API-first)."""
+    blob = ""
+    for q in [f"{company} latest news funding 2026", f"{company} CEO leadership team",
+              f"{company} tech stack OR Glassdoor reviews", f"{company} competitors"]:
+        try:
+            req = urllib.request.Request(
+                "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(q),
+                headers={"User-Agent": "Mozilla/5.0"})
+            html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "ignore")
+            blob += " " + re.sub(r"<[^>]+>", " ", html)[:500]
+        except Exception:
+            pass
+    return blob[:1800]
+
+
+def build_interview_brief(client, company, role, cv_text):
+    """INTERVIEW MODE: triggered the moment a response requests an interview.
+    Researches the company, builds a full brief:
+      - 5 likely questions (role+company type)
+      - STAR answers tailored to client's real CV
+      - salary negotiation range (from salary-intelligence map)
+      - 1 smart strategic question to ask
+      - red flags to probe
+    Delivers to Telegram, saves to /clients/[name]-interview-prep/[company].md."""
+    import os as _os
+    research = _company_research(company)
+    # salary range from map
+    sal_range = "see salary-intelligence.md"
+    sm = _os.path.join(BASE, "skills", "salary-intelligence.md")
+    try:
+        for line in open(sm, encoding="utf-8"):
+            if role.split()[0].lower() in line.lower() and "|" in line:
+                sal_range = line.strip().split("|")[2].strip()
+                break
+    except Exception:
+        pass
+    prompt = (
+        f"You are an interview coach. Client CV:\n{cv_text[:1200]}\n\n"
+        f"Company: {company}\nRole: {role}\nCompany research:\n{research[:1200]}\n\n"
+        f"Produce an INTERVIEW BRIEF:\n"
+        f"1. 5 likely interview questions (role + company type based).\n"
+        f"2. For each, a STAR-format answer tailored to the CLIENT'S ACTUAL CV above.\n"
+        f"3. Salary negotiation range: {sal_range} (anchor high, justify with map).\n"
+        f"4. ONE smart question to ask the interviewer that signals strategic thinking.\n"
+        f"5. Red flags the client should PROBE during the interview (from research).")
+    brief, prov = drafter_agent(prompt, cv_text)
+    # save per-client
+    folder = _os.path.join(BASE, "clients", f"{client}-interview-prep")
+    _os.makedirs(folder, exist_ok=True)
+    path = _os.path.join(folder, f"{company}.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"# Interview Brief: {client} -> {company} ({role})\n\n{brief}\n")
+    tg(f"🎯 INTERVIEW MODE: brief built for {client} @ {company} ({role}). Delivering...")
+    # deliver to Telegram (chunked if long)
+    for i in range(0, len(brief), 3500):
+        tg(brief[i:i+3500])
+    return path
+
+
+def trigger_interview(client, company, role, cv_text):
+    """Call when a response requests an interview. Switches mode + builds brief.
+    Goal: deliver within 1 hour of confirmation (runs synchronously, fast)."""
+    tg(f"⚡ INTERVIEW REQUESTED: {company} / {role} for {client} — switching to interview mode")
+    return build_interview_brief(client, company, role, cv_text)
+
 def draft_outreach(client, signal, contact, cv_text):
     """Personalized outreach email for HIDDEN-PIPELINE signals (not a standard
     application). Warm, specific to the hiring signal. Returns the email text
