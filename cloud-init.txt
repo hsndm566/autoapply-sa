@@ -1,0 +1,20 @@
+#cloud-config
+# Azure VM first-boot: install Docker + Chrome + n8n + browserless
+package_upgrade: true
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+run:
+  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  - add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+  - apt-get update && apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  - curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dsermor -o /usr/share/keyrings/google-chrome.gpg
+  - echo "deb [arch=$(dpkg --print-architecture)] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+  - apt-get update && apt-get install -y google-chrome-stable
+runcmd:
+  - systemctl enable docker && systemctl start docker
+  - chgrp docker $USER  # allow non-root docker
+  - docker compose -f /home/azureuser/docker-compose.yml up -d
+final_message: "cloud-init complete: Docker + Chrome + n8n + browserless ready"
