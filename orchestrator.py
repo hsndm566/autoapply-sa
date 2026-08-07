@@ -183,17 +183,17 @@ def gh_desc(company, job_id):
     except Exception:
         return ""
 
-def log_app(client, title, company, status, platform="Greenhouse", method="portal-form"):
-    """Client proof-of-work CSV. Columns match spec:
-    Client, Job Title, Company, Platform, Date Applied, Method Used, Status."""
+def log_app(client, title, company, status, platform="Greenhouse", method="portal-form", salary="n/a"):
+    """Client proof-of-work CSV. Columns match spec + salary range attached.
+    Client, Job Title, Company, Platform, Date Applied, Method Used, Salary Range, Status."""
     today = datetime.date.today().isoformat()
     hdr = not os.path.exists(TRACKER)
     with open(TRACKER, "a", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         if hdr:
             w.writerow(["Client", "Job Title", "Company", "Platform",
-                        "Date Applied", "Method Used", "Status"])
-        w.writerow([client, title, company, platform, today, method, status])
+                        "Date Applied", "Method Used", "Salary Range", "Status"])
+        w.writerow([client, title, company, platform, today, method, salary, status])
     # also record in dedicated blacklist file (clean schema, no header drift)
     bhdr = not os.path.exists(BLACKLIST)
     with open(BLACKLIST, "a", newline="", encoding="utf-8") as f:
@@ -280,7 +280,7 @@ def diagnose(client, company, role, cv_text):
             "cv_jd_mismatch": mismatch,
             "signals": blob[:300]}
     # 3. append to rejection-patterns.md (living doc)
-    rp = os.path.join(BASE, "..", "skills", "rejection-patterns.md")
+    rp = os.path.join(BASE, "skills", "rejection-patterns.md")
     try:
         with open(rp, "a", encoding="utf-8") as f:
             f.write(f"\n## {today} | {company} | {role} (client: {client})\n")
@@ -295,7 +295,7 @@ def diagnose(client, company, role, cv_text):
 def monthly_rejection_analysis():
     """Monthly pattern sweep. Flags recurring keyword/qualification/company-type
     in rejections and recommends ONE specific fix. Appends to rejection-patterns.md."""
-    rp = os.path.join(BASE, "..", "skills", "rejection-patterns.md")
+    rp = os.path.join(BASE, "skills", "rejection-patterns.md")
     if not os.path.exists(rp):
         return "no rejection data yet"
     txt = open(rp, encoding="utf-8").read()
@@ -314,6 +314,41 @@ def monthly_rejection_analysis():
     except Exception:
         pass
     return out
+
+def salary_benchmark(role, city):
+    """Pull salary range for role+city from public sources (Glassdoor/Payscale/
+    Levels.fyi + Saudi data). Returns 'low-high CUR' string. Appends to
+    skills/salary-intelligence.md (auto-updating map)."""
+    import re as _re
+    q = f"{role} salary {city}"
+    blob = ""
+    try:
+        req = urllib.request.Request(
+            "https://html.duckduckgo.com/html/?q=" + urllib.parse.quote(q),
+            headers={"User-Agent": "Mozilla/5.0"})
+        html = urllib.request.urlopen(req, timeout=20).read().decode("utf-8", "ignore")
+        blob = _re.sub(r"<[^>]+>", " ", html)[:900]
+    except Exception:
+        pass
+    # extract a salary figure or range (loose: SAR/USD/$ + digits, with or without range)
+    rng = "see salary-intelligence.md"
+    m_range = _re.findall(r"(?:SAR|SR|USD|\$|S\$)\s?\d{2,3}[,\d]*\s*(?:-|to|–|–)\s*\d{2,3}[,\d]*", blob)
+    m_single = _re.findall(r"(?:SAR|SR|USD|\$|S\$)\s?\d{2,3}[,\d]*", blob)
+    if m_range:
+        rng = m_range[0].strip()
+    elif m_single:
+        rng = m_single[0].strip()
+    cur = "SAR" if ("SAR" in blob or " Riyadh" in city or "Saudi" in city or "SR" in rng) else ("USD" if "$" in rng or "USD" in blob else "")
+    entry = f"{rng} {cur}".strip()
+    # append to map (always log the attempt)
+    sm = os.path.join(BASE, "skills", "salary-intelligence.md")
+    try:
+        with open(sm, "a", encoding="utf-8") as f:
+            f.write(f"\n| {role} | {city} | {entry} | {datetime.date.today().isoformat()} |\n")
+    except Exception:
+        pass
+    tg(f"Salary benchmark {role} @ {city}: {entry}")
+    return entry
 
 def run_application(client, query, cv_text):
     """One full application cycle through the agent farm."""
@@ -337,6 +372,9 @@ def run_application(client, query, cv_text):
         tg("All candidates blacklisted (applied within 90d). Stopping.")
         return None
     tg(f"Found: {j['title']} @ {j['company']}")
+    # salary benchmark for this role+city (attached to log + salary map)
+    city = "Riyadh" if "riyadh" in cv_text.lower() else "Riyadh"
+    salary = salary_benchmark(j["title"], city)
     desc = gh_desc(j["company"], j["id"])
     draft, dprov = drafter_agent(desc, cv_text)
     tg(f"Draft by {dprov}. Reviewing with DeepSeek...")
@@ -349,7 +387,7 @@ def run_application(client, query, cv_text):
     path = os.path.join(BASE, f"app_{n+1}_{j['company']}.txt")
     open(path, "w", encoding="utf-8").write(draft)
     log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)",
-            platform="Greenhouse", method="tailored-CV portal submit")
+            platform="Greenhouse", method="tailored-CV portal submit", salary=salary)
     tg(f"Application {n+1} ready: {os.path.basename(path)}")
     return j
 
