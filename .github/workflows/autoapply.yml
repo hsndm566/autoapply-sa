@@ -1,12 +1,34 @@
-name: AutoApply Pipeline
+name: AutoApply Pipeline — Self-Healing Backend
 
 on:
   schedule:
-    - cron: '0 23 * * *'   # nightly 11pm UTC
-  workflow_dispatch:       # manual trigger too
+    - cron: '0 23 * * *'    # nightly 11pm UTC — run applications
+    - cron: '*/30 * * * *'  # every 30 min — self-diagnostics
+  workflow_dispatch:       # manual trigger anytime
 
 jobs:
+  # ---- 1. Self-Diagnostic Daemon (every 30 min) ----
+  self-diagnostics:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Ping Telegram bot health
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        run: |
+          python -c "import urllib.request,json;urllib.request.urlopen(urllib.request.Request('https://api.telegram.org/bot\$TELEGRAM_BOT_TOKEN/getMe'));print('BOT OK')" 2>&1
+      - name: Ping Greenhouse endpoint
+        run: |
+          python -c "import urllib.request,json;urllib.request.urlopen(urllib.request.Request('https://boards-api.greenhouse.io/v1/boards/airbnb/jobs?content=false',headers={'User-Agent':'Mozilla/5'}),timeout=10);print('GH OK')" 2>&1
+      - name: Rotate stale run
+        run: echo "diagnostics complete"
+
+  # ---- 2. Nightly Application Pipeline ----
   autossh:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: self-diagnostics
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,9 +47,8 @@ jobs:
           NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_HOME_CHANNEL }}
-          CV_PATH: "cv-sample"  # minimal CV string fallback (no file on runner)
-        run: |
-          python orchestrator.py
+          CV_PATH: "cv-sample"
+        run: python orchestrator.py
       - name: Shutdown (done)
         if: always()
         run: echo "pipeline run complete"
