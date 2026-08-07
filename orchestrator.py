@@ -60,6 +60,25 @@ def chat(provider, model, prompt, temperature=0.4, timeout=60):
     elif provider == "zai":
         url = "https://api.zai.gg/v1/chat/completions"
         key = keys.get("ZAI_API_KEY")
+    elif provider == "gemini":
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        key = keys.get("GEMINI_API_KEY")
+        # Gemini uses a different request/response shape
+        if key:
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            headers = {"Content-Type": "application/json"}
+            req = urllib.request.Request(url + "?key=" + key, data=json.dumps(payload).encode(), headers=headers, method="POST")
+            try:
+                resp = urllib.request.urlopen(req, timeout=25)
+                data = json.loads(resp.read())
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    return None  # quota exceeded — skip to next provider
+                return None
+            except Exception:
+                return None
+        return None
     else:
         return None
     if not key:
@@ -94,6 +113,10 @@ def drafter_agent(job_desc, cv_text):
     out = chat("zai", "glm-5.2-flash", prompt)
     if out:
         return out, "zai/glm-5.2"
+    # Gemini (valid key, free-tier quota — auto-skips on 429)
+    out = chat("gemini", None, prompt)
+    if out:
+        return out, "gemini/2.0-flash"
     # OpenRouter fallback
     for model in ["openai/gpt-4o-mini","anthropic/claude-3-haiku"]:
         out = chat("openrouter", model, prompt)
