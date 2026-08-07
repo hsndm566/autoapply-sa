@@ -20,21 +20,29 @@ to conserve its quota.
 """
 import os, json, csv, urllib.request, urllib.parse, subprocess, datetime, time
 
-ENV = r"C:\Users\hasan\AppData\Local\hermes\.env"
-BOT = "8192931676:AAE7DsbkBqXOAeNt7178KFA50iHacgyr7JI"
-CID = "8890901423"
-RCLONE = r"C:\Users\hasan\Downloads\rclone-v1.75.0-windows-amd64\rclone.exe"
-DESKTOP = r"C:\Users\hasan\Desktop"
-TRACKER = os.path.join(DESKTOP, "Job_Application_Tracker.csv")
-CV_PATH = os.path.join(DESKTOP, "Hasan Adam cv industrial engineering.pdf")
+_is_ci = os.environ.get("CI", "false") == "true"
+if _is_ci:
+    BASE = "/home/runner/autoapply"; os.makedirs(BASE, exist_ok=True)
+else:
+    BASE = r"C:\Users\hasan\Desktop\clients"; os.makedirs(BASE, exist_ok=True)
+BOT = os.environ.get("TELEGRAM_BOT_TOKEN", "8192931676:AAE7DsbkBqXOAeNt7178KFA50iHacgyr7JI")
+CID = os.environ.get("TELEGRAM_ALLOWED_USERS", os.environ.get("TELEGRAM_HOME_CHANNEL", "8890901423"))
+RCLONE = os.environ.get("RCLONE", "rclone")
+TRACKER = os.path.join(BASE, "Job_Application_Tracker.csv")
+CV_PATH = os.environ.get("CV_PATH", os.path.join(BASE, "cv.txt"))
 MAX_APPS = 500
 
 def load_keys():
+    """API keys from env vars (set by workflow secrets / CI), fallback to Windows .env."""
+    env_file = os.environ.get("HERMES_ENV", r"C:\Users\hasan\AppData\Local\hermes\.env")
     keys = {}
-    for line in open(ENV, encoding="utf-8", errors="replace"):
-        if "=" in line and not line.startswith("#"):
-            k, v = line.strip().split("=", 1)
-            keys[k] = v
+    if os.path.exists(env_file):
+        for line in open(env_file, encoding="utf-8", errors="replace"):
+            if "=" in line and not line.startswith("#"):
+                k, v = line.strip().split("=", 1); keys[k] = v
+    # env vars override (CI path)
+    for ek in ["GROQ_API_KEY","DEEPSEEK_API_KEY","OPENROUTER_API_KEY","NVIDIA_API_KEY","OPENAI_API_KEY","ZAI_API_KEY","TELEGRAM_BOT_TOKEN"]:
+        if os.environ.get(ek): keys[ek] = os.environ[ek]
     return keys
 
 def chat(provider, model, prompt, temperature=0.4, timeout=60):
@@ -151,7 +159,7 @@ def run_application(client, query, cv_text):
         tg(f"Budget reached: {n}/{MAX_APPS} applications. Stopping.")
         return None
     tg(f"[{n+1}/{MAX_APPS}] Scraping: {query}")
-    jobs = scraper_agent(query, limit=3)
+    jobs = scraper_agent(query, limit=5)
     if not jobs:
         tg("No jobs found. Try broader query.")
         return None
@@ -163,7 +171,7 @@ def run_application(client, query, cv_text):
     review = reviewer_agent(draft)
     tg(f"Review: score {review.get('score')}/10, approved={review.get('approved')}")
     # save draft
-    path = os.path.join(DESKTOP, f"app_{n+1}_{j['company']}.txt")
+    path = os.path.join(BASE, f"app_{n+1}_{j['company']}.txt")
     open(path, "w", encoding="utf-8").write(draft)
     log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)")
     tg(f"Application {n+1} ready: {os.path.basename(path)}")
@@ -171,4 +179,5 @@ def run_application(client, query, cv_text):
 
 if __name__ == "__main__":
     cv = "Hasan Adam, Industrial Engineering graduate, Riyadh, process optimization."
-    run_application("Commander", "industrial engineer", cv)
+    # broad query to ensure Greenhouse boards return matches
+    run_application("Commander", "engineer", cv)
