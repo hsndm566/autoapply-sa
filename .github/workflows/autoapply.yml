@@ -1,0 +1,46 @@
+name: AutoApply Pipeline
+
+on:
+  schedule:
+    - cron: '0 23 * * *'   # nightly 11pm UTC = ~6am your time
+  workflow_dispatch:
+
+env:
+  AZURE_SUBSCRIPTION: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  VM_IP: ${{ secrets.AUTOAPPLY_VM_IP }}
+  SSH_KEY: ${{ secrets.AZURE_SSH_KEY }}
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+jobs:
+  autossh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Start Azure VM (only run when needed → saves credit)
+        uses: Azure/vms-start@v1
+        with:
+          vm-names: 'autoapply-vm'
+          resource-group-name: 'autoapply-rg'
+        env:
+          AZURE_CREDENTIALS: '${{ secrets.AZURE_CREDENTIALS }}'
+      - name: Wait for SSH
+        run: |
+          sleep 20
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/azurekey azureuser@$VM_IP "echo VM ready"
+      - name: Run pipeline on VM
+        run: |
+          scp -i ~/.ssh/azurekey autoapply_client.py docker-compose.yml -O browserless ghcr.io/browserless/chromium
+          ssh -i ~/.ssh/azurekey azureuser@$VM_IP "python3 autoapply_client.py"
+      - name: Run n8n if browser step needed (Cloudflare bypass)
+        run: |
+          ssh -i ~/.ssh/azurekey azureuser@$VM_IP "docker compose restart n8n"
+      - name: Shutdown VM (credit control)
+        if: always()
+        uses: Azure/vms-deallocate@v1
+        with:
+          vm-names: 'autoapply-vm'
+          resource-group-name: 'autoapply-rg'
+        env:
+          AZURE_CREDENTIALS: '${{ secrets.AZURE_CREDENTIALS }}'
