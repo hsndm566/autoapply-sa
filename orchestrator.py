@@ -297,6 +297,62 @@ def best_window():
         return s["best_day"], "09:00"
     return "Tuesday", "09:00"  # statistical global default bias
 
+# Reinvestment options evaluated IN PRIORITY ORDER when first paid client lands.
+REINVEST_OPTIONS = [
+    {
+        "name": "Paid model upgrade (CV tailoring)",
+        "cost": 20,  # USD/mo typical (e.g. GPT-4o / Claude tier)
+        "improves": "CV + cover-letter quality (better match scores, fewer rejections)",
+        "output_lift": "est. +15-25% interview rate via stronger tailoring",
+        "payback": "1 client sub (~49 SAR) covers ~3 months",
+    },
+    {
+        "name": "Apify paid tier (expanded scraping)",
+        "cost": 49,  # USD/mo entry
+        "improves": "Job volume beyond free ATS APIs (more boards, more listings)",
+        "output_lift": "est. +30-50% job coverage",
+        "payback": "1-2 client subs",
+    },
+    {
+        "name": "Proxy service (anti-block)",
+        "cost": 15,  # USD/mo residential proxy
+        "improves": "Scraping reliability (avoids IP blocks on Bayt/LinkedIn)",
+        "output_lift": "est. -90% block rate on scraping channels",
+        "payback": "enables scraping channels that were failing",
+    },
+    {
+        "name": "LinkedIn Sales Navigator (referrals)",
+        "cost": 80,  # USD/mo
+        "improves": "Referral sourcing + hidden-pipeline signal quality",
+        "output_lift": "est. +20% referral-led applications (highest convert)",
+        "payback": "2-3 client subs",
+    },
+]
+
+
+def reinvestment_plan(budget_usd):
+    """When first paid client lands, recommend the SINGLE highest-ROI upgrade
+    at that budget. Evaluates REINVEST_OPTIONS in priority order; picks the
+    first affordable option (priority = highest ROI per the spec order).
+    Returns the recommendation dict."""
+    affordable = [o for o in REINVEST_OPTIONS if o["cost"] <= budget_usd]
+    if not affordable:
+        return {"recommend": None, "note": f"Budget ${budget_usd} below all options; save until next client."}
+    # priority order = spec order; first affordable = highest-ROI-by-priority
+    pick = affordable[0]
+    rec = {
+        "recommend": pick["name"],
+        "cost_usd": pick["cost"],
+        "improves": pick["improves"],
+        "output_lift": pick["output_lift"],
+        "payback": pick["payback"],
+        "remaining_budget": budget_usd - pick["cost"],
+        "next_option": affordable[1]["name"] if len(affordable) > 1 else None,
+    }
+    tg(f"Reinvestment plan @ ${budget_usd}: -> {pick['name']} (${pick['cost']}, payback {pick['payback']})")
+    return rec
+
+
 def tg(text):
     data = urllib.parse.urlencode({"chat_id": CID, "text": text}).encode()
     try:
