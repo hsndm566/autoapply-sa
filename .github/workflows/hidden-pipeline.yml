@@ -1,0 +1,27 @@
+name: Weekly Hidden-Pipeline Research
+
+on:
+  schedule:
+    - cron: '30 2 * * 1'   # every Monday 02:30 UTC (after source sweep at 02:00)
+  workflow_dispatch:
+
+jobs:
+  hidden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Run hidden-pipeline research
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_HOME_CHANNEL: ${{ secrets.TELEGRAM_HOME_CHANNEL }}
+        run: python hidden_pipeline.py
+      - name: Commit queue + outreach
+        run: |
+          git config user.email "agent@hsndm.tech"
+          git config user.name "Hermes Agent"
+          git add skills/hidden-pipeline-queue.md outreach_*.txt
+          git diff --cached --quiet || git commit -m "hidden-pipeline: weekly scan + outreach drafts" && git push
