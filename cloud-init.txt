@@ -1,30 +1,26 @@
 #cloud-config
 package_upgrade: true
 packages:
-  - ca-certificates
+  - python3
+  - python3-pip
+  - git
   - curl
-  - gnupg
-  - lsb-release
 runcmd:
-  # Docker
-  - curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-  - add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-  - apt-get update && apt-get install -y docker.io docker-compose-plugin
-  - systemctl enable docker && systemctl start docker
-  # Swap file (1GB) - makes B1S 1GB RAM usable for Chrome
+  # Swap file (1GB) - makes B1S 1GB RAM usable
   - fallocate -l 1G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  # Inject SSH key for remote management (self-healing / remote restart)
-  - curl -sL https://raw.githubusercontent.com/hsndm566/autoapply-sa/main/autoapply_id_ed25519.pub -o /tmp/autoapply_key.pub
+  # Install deps
+  - pip3 install --upgrade pip requests
+  # Pull backend code from GitHub repo (source of truth)
+  - git clone https://github.com/hsndm566/autoapply-sa.git /opt/autoapply
+  # Inject SSH key for Hermes remote control (real-time agent mode)
+  - curl -sL https://raw.githubusercontent.com/hsndm566/autoapply-sa/main/autoapply_id_ed25519.pub -o /tmp/ak.pub
   - mkdir -p /home/azureuser/.ssh
-  - cat /tmp/autoapply_key.pub >> /home/azureuser/.ssh/authorized_keys
+  - cat /tmp/ak.pub >> /home/azureuser/.ssh/authorized_keys
   - chown -R azureuser:azureuser /home/azureuser/.ssh
   - chmod 700 /home/azureuser/.ssh && chmod 600 /home/azureuser/.ssh/authorized_keys
-  # n8n + browserless docker compose + workflows (from repo)
-  - curl -sL https://raw.githubusercontent.com/hsndm566/autoapply-sa/main/docker-compose.yml -o /opt/docker-compose.yml
-  - curl -sL https://github.com/hsndm566/autoapply-sa/raw/main/workflows.zip -o /home/azureuser/workflows.zip
-  - chown -R azureuser:azureuser /home/azureuser /opt/docker-compose.yml
-  - unzip -o /home/azureuser/workflows.zip -d /home/azureuser/workflows
-  # start services
-  - sleep 5; docker compose -f /opt/docker-compose.yml up -d
-final_message: "cloud-init complete: Docker + swap + n8n + browserless + workflows ready"
+  # Nightly cron: run pipeline at 23:00 UTC (Hermes controls this too)
+  - echo '0 23 * * * cd /opt/autoapply && python3 orchestrator.py >> /var/log/autoapply.log 2>&1' | crontab -u azureuser -
+  # Health check service (Hermes can curl this)
+  - echo 'backend ready' > /opt/autoapply/STATUS.txt
+final_message: "cloud-init complete: Python backend + cron + SSH key for Hermes control"
