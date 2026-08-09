@@ -36,6 +36,11 @@ MAX_APPS = 500
 def load_keys():
     """API keys from env vars (set by workflow secrets / CI), fallback to Windows .env."""
     env_file = os.environ.get("HERMES_ENV", r"C:\Users\hasan\AppData\Local\hermes\.env")
+    if not os.path.exists(env_file):
+        # Railway / Linux fallback: load committed secrets.env from repo root
+        _repo_env = os.path.join(os.path.dirname(os.path.abspath(__file__)), "secrets.env")
+        if os.path.exists(_repo_env):
+            env_file = _repo_env
     keys = {}
     if os.path.exists(env_file):
         for line in open(env_file, encoding="utf-8", errors="replace"):
