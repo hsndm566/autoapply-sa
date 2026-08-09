@@ -1,5 +1,5 @@
 {
-  "$schema": "https://railway.app/railway.schema.json",
+  "": "https://railway.app/railway.schema.json",
   "build": {
     "builder": "nixpacks"
   },
@@ -8,6 +8,16 @@
     "healthcheckPath": "/status",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 3
+    "restartPolicyMaxRetries": 3,
+    "variables": {
+      "GMAIL_USER": "hasanadam506@gmail.com",
+      "GMAIL_APP_PASSWORD": "ygxfvdcpukpylrtr",
+      "TELEGRAM_BOT_TOKEN": "8192931676:AAE7DsbkBqXOAeNt7178KFA50iHacgyr7JI",
+      "CV_TEXT": "Hasan Adam, Industrial Engineer, Jeddah, supply chain and process optimization.",
+      "APPLY_NAME": "Commander",
+      "APPLY_ROLE": "engineer",
+      "BROWSERBASE_API_KEY": "bb_live_509lt1mU570G0Ogs0eMookCozqs",
+      "BROWSERBASE_PROJECT_ID": "c0d53408-77fb-4b03-a43a-a49d29cd4042"
+    }
   }
 }
