@@ -19,6 +19,16 @@ log = logging.getLogger("autoapply")
 
 PORT = int(os.environ.get("PORT", "8080"))
 
+# fallback: load secrets.env from repo root if env vars missing (Railway/Linux)
+import os as _os
+_SECRETS = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "secrets.env")
+if _os.path.exists(_SECRETS):
+    for _l in open(_SECRETS, encoding="utf-8", errors="replace"):
+        if "=" in _l and not _l.startswith("#"):
+            _k, _v = _l.strip().split("=", 1)
+            if _k and _k not in _os.environ:
+                _os.environ[_k] = _v
+
 # ---- import the real engine (same repo) ----
 try:
     import orchestrator
