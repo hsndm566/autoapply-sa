@@ -46,7 +46,7 @@ class H(BaseHTTPRequestHandler):
         if self.path == "/status":
             body = {
                 "ok": ENGINE_OK,
-                "time": datetime.utcnow().isoformat(),
+                "time": datetime.now(datetime.UTC).isoformat(),
                 "engine": "orchestrator" if ENGINE_OK else "offline",
             }
             out = __import__("json").dumps(body).encode()
