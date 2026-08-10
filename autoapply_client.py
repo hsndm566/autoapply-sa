@@ -14,7 +14,7 @@ the local browser session to complete.
 import os, json, csv, urllib.request, urllib.parse, subprocess, datetime
 
 ENV = r"C:\Users\hasan\AppData\Local\hermes\.env"
-BOT = "8192931676:AAE7DsbkBqXOAeNt7178KFA50iHacgyr7JI"
+BOT = ""
 CID = "8890901423"
 RCLONE = r"C:\Users\hasan\Downloads\rclone-v1.75.0-windows-amd64\rclone.exe"
 DESKTOP = r"C:\Users\hasan\Desktop"

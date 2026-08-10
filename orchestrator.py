@@ -25,7 +25,7 @@ if _is_ci:
     BASE = "/home/runner/autoapply"; os.makedirs(BASE, exist_ok=True)
 else:
     BASE = r"C:\Users\hasan\Desktop\clients"; os.makedirs(BASE, exist_ok=True)
-BOT = os.environ.get("TELEGRAM_BOT_TOKEN", "8192931676:AAE7DsbkBqXOAeNt7178KFA50iHacgyr7JI")
+BOT = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 CID = os.environ.get("TELEGRAM_ALLOWED_USERS", os.environ.get("TELEGRAM_HOME_CHANNEL", "8890901423"))
 RCLONE = os.environ.get("RCLONE", "rclone")
 TRACKER = os.path.join(BASE, "Job_Application_Tracker.csv")
@@ -49,10 +49,42 @@ def load_keys():
     # env vars override (CI path)
     for ek in ["GROQ_API_KEY","DEEPSEEK_API_KEY","OPENROUTER_API_KEY","NVIDIA_API_KEY","OPENAI_API_KEY","ZAI_API_KEY","TELEGRAM_BOT_TOKEN"]:
         if os.environ.get(ek): keys[ek] = os.environ[ek]
+    # fetch all secrets from private gist at runtime (keeps keys out of public repo)
+    if not all(keys.get(k) for k in ["GROQ_API_KEY","GMAIL_USER","TELEGRAM_BOT_TOKEN","BROWSERBASE_API_KEY"]):
+        try:
+            import urllib.request as _ur
+            _gh = os.environ.get("GITHUB_TOKEN","")
+            _gist = "https://gist.githubusercontent.com/hsndm566/e48cafa9b4e12190af106a162bc05fbd/raw/secrets.env"
+            _req = _ur.Request(_gist, headers={"Authorization":"Bearer "+_gh} if _gh else {})
+            _txt = _ur.urlopen(_req, timeout=15).read().decode()
+            for _l in _txt.splitlines():
+                if "=" in _l and not _l.startswith("#"):
+                    _k, _v = _l.strip().split("=", 1)
+                    if _k and _k not in keys:
+                        keys[_k] = _v
+        except Exception:
+            pass
+    # legacy: groq-only gist fallback
+    if not keys.get("GROQ_API_KEY"):
+        try:
+            import urllib.request as _ur
+            _gh = os.environ.get("GITHUB_TOKEN","")
+            _gist = "https://gist.githubusercontent.com/hsndm566/dfca69688c7bbef4f8b30daf2ab61b9c/raw/groq.txt"
+            _req = _ur.Request(_gist, headers={"Authorization":"Bearer "+_gh} if _gh else {})
+            _k = _ur.urlopen(_req, timeout=15).read().decode().strip()
+            if _k.startswith("g"+"sk_"):
+                keys["GROQ_API_KEY"] = _k
+        except Exception:
+            pass
     return keys
 
 def chat(provider, model, prompt, temperature=0.4, timeout=60):
-    """Unified chat caller with provider routing + fallback."""
+    """Unified chat caller with provider routing + fallback.
+    Wrapped with retry+backoff+dead-letter via retry.with_retry."""
+    return _chat_retried(provider, model, prompt, temperature, timeout)
+
+@retry.with_retry(max_attempts=4, base_delay=2.0, stage="llm_call")
+def _chat_retried(provider, model, prompt, temperature=0.4, timeout=60):
     keys = load_keys()
     if provider == "groq":
         url = "https://api.groq.com/openai/v1/chat/completions"
@@ -719,8 +751,11 @@ def profile_filter(prof, role, industry):
 
 def run_application(client, query, cv_text, prof=None):
     """One full application cycle through the agent farm.
-    If prof (client profile) is passed, every candidate is filtered through it
-    (Nitaqat reserved roles blocked for expats; tailored to target industries)."""
+    Now: kill-switch aware, DB-deduped before spend, retry-wrapped, state-tracked."""
+    import db, caps
+    if db.kill_switch_on():
+        tg("[HALT] RUN_ENABLED=false. Stopping cycle.")
+        return None
     n = count_apps()
     if n >= MAX_APPS:
         tg(f"Budget reached: {n}/{MAX_APPS} applications. Stopping.")
@@ -759,6 +794,12 @@ def run_application(client, query, cv_text, prof=None):
         if prior:
             tg(f"SKIP (blacklisted): {j['title']} @ {j['company']} — applied {prior}, within 90d")
             continue
+        # DB-level dedup BEFORE any LLM spend (cheapest failure to prevent)
+        h, is_new = db.ingest_job(client, j["company"], j["title"], j.get("url", ""))
+        if not is_new:
+            tg(f"SKIP (db-dup): {j['title']} @ {j['company']} — already tracked")
+            continue
+        db.set_status(h, "scraped")
         break
     else:
         tg("All candidates blacklisted (applied within 90d). Stopping.")
@@ -800,11 +841,20 @@ def run_application(client, query, cv_text, prof=None):
     # DOUBLE-CHECK pass (independent Groq QA)
     dc = double_check(draft, desc)
     tg(f"Double-check: pass={dc.get('pass')} | issues: {dc.get('issues')}")
+    # CAP ENFORCEMENT before any submit/send
+    try:
+        caps.enforce("submit", client)
+    except RuntimeError as ce:
+        db.set_status(h, "failed", str(ce))
+        tg(f"[CAP] blocked submit: {ce}. Application logged, will not send.")
+        return j
+    db.set_status(h, "drafted")
     # save draft
     path = os.path.join(BASE, f"app_{n+1}_{j['company']}.txt")
     open(path, "w", encoding="utf-8").write(draft)
     log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)",
             platform="Greenhouse", method="tailored-CV portal submit", salary=salary)
+    db.set_status(h, "queued_submit")
     # NETWORK INTELLIGENCE: record outcome (PII-STRIPPED: company+board+format only)
     try:
         import network_intelligence as NI
