@@ -776,8 +776,8 @@ def run_application(client, query, cv_text, prof=None):
     except Exception:
         priors = {}
     try:
-        import free_scraper
-        jobs = free_scraper.scrape_field(query, "Jeddah", max_results=100)
+        import ksa_scraper
+        jobs = ksa_scraper.scrape_field(query, "Saudi Arabia", max_results=100)
     except Exception:
         jobs = scraper_agent(query, limit=5)
     if not jobs:
