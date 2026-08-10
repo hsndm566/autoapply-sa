@@ -18,7 +18,7 @@ FALLBACKS:
 Budget: tracks up to 500 applications. DeepSeek used ONLY as final reviewer
 to conserve its quota.
 """
-import os, json, csv, urllib.request, urllib.parse, subprocess, datetime, time
+import os, json, csv, urllib.request, urllib.parse, subprocess, datetime, time, random
 import retry
 
 _is_ci = os.environ.get("CI", "false") == "true"
@@ -197,6 +197,8 @@ def scraper_agent(query, limit=5):
               "pg", "unilever", "nestle", "saudiaramco", "airbnb", "stripe", "coinbase",
               "twitch", "gitlab", "roku", "snap"]
     q = query.lower(); results = []
+    boards = boards[:]
+    random.shuffle(boards)
     for b in boards:
         try:
             url = f"https://boards-api.greenhouse.io/v1/boards/{b}/jobs?content=false"
@@ -407,19 +409,20 @@ def count_apps():
 
 def blacklisted(client, company, role):
     """90-day company+role blacklist. Prevents double-apply (account flagging).
-    Returns the prior Date Applied if blocked, else None."""
+    Reads from TRACKER (the durable CSV log_app writes), so dedup survives
+    container restarts. Returns prior Date Applied if blocked, else None."""
     if not os.path.exists(TRACKER):
         return None
     today = datetime.date.today()
     try:
-        with open(BLACKLIST, encoding="utf-8") as f:
+        with open(TRACKER, encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 if (row.get("Client") == client
                         and row.get("Company", "").lower() == company.lower()
-                        and row.get("Role", "").lower() == role.lower()):
-                    d = datetime.date.fromisoformat(row.get("DateApplied", ""))
+                        and row.get("Job Title", "").lower() == role.lower()):
+                    d = datetime.date.fromisoformat(row.get("Date Applied", "2000-01-01"))
                     if (today - d).days < 90:
-                        return row.get("DateApplied")
+                        return row.get("Date Applied")
     except Exception:
         pass
     return None
