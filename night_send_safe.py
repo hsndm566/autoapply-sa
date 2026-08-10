@@ -149,7 +149,16 @@ def send(to,subj,body,ind):
     for _ in range(3):
         try:
             with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ssl.create_default_context()) as s:
-                s.login(FROM,PW); s.send_message(msg); return True,f"pdf:{ind}:{sz}b"
+                s.login(FROM,PW); s.send_message(msg)
+                # CONFIRM it really landed in Gmail Sent, then ping Telegram the count
+                try:
+                    import importlib.util as _iu
+                    spec=_iu.spec_from_file_location("tc",os.path.join(os.path.dirname(os.path.abspath(__file__)),"telegram_counter.py"))
+                    tc=_iu.module_from_spec(spec); spec.loader.exec_module(tc)
+                    n,st=tc.confirm_and_alert(to)
+                    return True,f"pdf:{ind}:{sz}b:confirmed#{n}"
+                except Exception as ce:
+                    return True,f"pdf:{ind}:{sz}b:sent(unverified:{ce})"
         except Exception as e: last=str(e)[:80]; time.sleep(5)
     return False,last
 
