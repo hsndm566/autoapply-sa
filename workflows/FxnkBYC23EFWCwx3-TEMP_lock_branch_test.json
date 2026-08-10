@@ -1,0 +1,502 @@
+{
+  "name": "TEMP lock branch test",
+  "nodes": [
+    {
+      "id": "c0000000-0000-4000-8000-000000000000",
+      "name": "Manual Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c1111111-1111-4111-8111-111111111111",
+      "name": "Add Job Webhook",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "body",
+              "type": "object",
+              "value": "={{ { company: 'Lock Test Corp', email: 'hasanadam506@gmail.com', cv_url: 'https://example.com/cv.pdf', job_type: 'full-time', industry_preference: 'Tech', target_volume: 10 } }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a1a1a1-0001-4001-8001-000000000001",
+      "name": "Check Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a1a1a1a1-0002-4002-8002-000000000002",
+      "name": "Is Locked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lk",
+              "leftValue": "={{ $json.is_locked }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a1a1a1-000b-400b-800b-00000000000b",
+      "name": "Locked NoOp",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        896,
+        -160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a1a1a1a1-0004-4004-8004-000000000004",
+      "name": "Set Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": true,
+            "locked_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a2222222-2222-4222-8222-222222222222",
+      "name": "Map Job Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        160
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = ($('Add Job Webhook').item.json && $('Add Job Webhook').item.json.body) ? $('Add Job Webhook').item.json.body : {};\n\nreturn {\n  json: {\n    company: body.company || \"\",\n    email: body.email || \"\",\n    cv_url: body.cv_url || \"\",\n    job_type: body.job_type || \"\",\n    industry: body.industry_preference || \"\",\n    target_volume: (body.target_volume !== undefined && body.target_volume !== null && body.target_volume !== \"\") ? Number(body.target_volume) : null,\n    status: \"new\",\n    date_added: new Date().toISOString(),\n  }\n};"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "a3333333-3333-4333-8333-333333333333",
+      "name": "Insert Job Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        160
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "company": "={{ $json.company }}",
+            "email": "={{ $json.email }}",
+            "cv_url": "={{ $json.cv_url }}",
+            "job_type": "={{ $json.job_type }}",
+            "industry": "={{ $json.industry }}",
+            "target_volume": "={{ $json.target_volume }}",
+            "status": "={{ $json.status }}",
+            "date_added": "={{ $json.date_added }}"
+          },
+          "schema": [
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cv_url",
+              "displayName": "cv_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_type",
+              "displayName": "job_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "industry",
+              "displayName": "industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target_volume",
+              "displayName": "target_volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_added",
+              "displayName": "date_added",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a1a1a1-0005-4005-8005-000000000005",
+      "name": "Release Lock (Success)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a1a1a1-0006-4006-8006-000000000006",
+      "name": "Release Lock (Error)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Start": {
+      "main": [
+        [
+          {
+            "node": "Add Job Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Job Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Lock": {
+      "main": [
+        [
+          {
+            "node": "Is Locked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Locked?": {
+      "main": [
+        [
+          {
+            "node": "Locked NoOp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Lock": {
+      "main": [
+        [
+          {
+            "node": "Map Job Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Job Fields": {
+      "main": [
+        [
+          {
+            "node": "Insert Job Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lock (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Job Row": {
+      "main": [
+        [
+          {
+            "node": "Release Lock (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lock (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

@@ -1,0 +1,548 @@
+{
+  "name": "Polish hsndm.tech with Claude Opus (one-time)",
+  "nodes": [
+    {
+      "id": "ee08410b-399a-4ff5-a76d-f0cf960baadd",
+      "name": "Start Polish",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "08c75e15-171c-4409-9efe-68a2ee662589",
+      "name": "Build File List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst owner = 'hsndm566';\nconst repo = 'hsndm.tech';\nconst branch = 'main';\nreturn ['index.html', 'dashboard.html', 'cv.html'].map(fp => ({\n  json: { owner, repo, branch, filePath: fp },\n}));\n"
+      }
+    },
+    {
+      "id": "8383fff7-4ff1-491e-8727-4febb112c36f",
+      "name": "All Files Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c9c53134-6177-4720-ba97-28b1d21ad213",
+      "name": "Fetch Current File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "={{ $json.branch }}"
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "da9904f9-c949-4fb7-82e5-b5e0973b329f"
+    },
+    {
+      "id": "f0c94c2c-763a-47eb-9c81-454596cbd689",
+      "name": "Decode Current File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst meta = $('Loop Over Files').first().json;\nconst resp = $input.first().json;\nconst raw = resp.content || '';\nlet html;\nif ((resp.encoding || 'base64') === 'base64') {\n  try { html = Buffer.from(raw, 'base64').toString('utf8'); } catch (e) { html = raw; }\n} else {\n  html = raw;\n}\nreturn [{ json: { owner: meta.owner, repo: meta.repo, branch: meta.branch, filePath: meta.filePath, html } }];\n"
+      }
+    },
+    {
+      "id": "9c2c0157-1f8e-4a2d-bafd-d6f125613361",
+      "name": "Claude Opus Polish",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-opus-4-7",
+          "cachedResultName": "Claude Opus 4.7"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ $json.html }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "system": "You are a world-class web designer. Enhance this personal portfolio site: improve visual hierarchy, micro-interactions, mobile responsiveness, and overall premium feel. Keep the existing dark glassmorphism, accent color #2563eb, all current content, the Google Sheets dashboard, Chart.js, contact form, Julie chatbot, and language switcher placeholder. Output ONLY the complete, valid HTML file starting with <!DOCTYPE html>. No preamble, no explanation, no markdown fences.",
+          "maxTokens": 32000,
+          "includeMergedResponse": true
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "7jk7vpQVq8LJWszR",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "id": "5f244711-154d-4fe4-b9e8-2f3322011e4b",
+      "name": "Validate Output 1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst meta = $('Loop Over Files').first().json;\nconst resp = $input.first().json;\nfunction collect(o, arr){ if(o==null) return; if(typeof o==='string'){arr.push(o); return;} if(Array.isArray(o)){for(const x of o) collect(x, arr); return;} if(typeof o==='object'){for(const k of Object.keys(o)) collect(o[k], arr);} }\nconst strs = []; collect(resp, strs);\nlet html = (strs.sort((a,b)=>b.length-a.length)[0] || '').trim();\nif (html.startsWith('\\u0060\\u0060\\u0060')) { html = html.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst startsOk = html.startsWith('<!DOCTYPE html>');\nconst endsOk = html.endsWith('</html>');\nconst bodyOpen = (html.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (html.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (html.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (html.match(/<\\/script>/gi) || []).length;\nconst isValid = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst reason = 'start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' len=' + html.length;\nreturn [{ json: { owner: meta.owner, repo: meta.repo, branch: meta.branch, filePath: meta.filePath, finalHtml: html, isValid, reason, attempt: 1 } }];\n"
+      }
+    },
+    {
+      "id": "198f3ef0-9f47-462b-a6f0-b6b540749c51",
+      "name": "Is Valid (1)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v1",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "bd307e66-a358-4502-8acf-9d9c617f7465",
+      "name": "Push Polished File 1",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "Polish site with Claude Opus (clean)",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "35f74ca1-757d-4394-906c-eab8a10a41a8"
+    },
+    {
+      "id": "a187c1ce-ffbf-4361-b496-afa7fda66634",
+      "name": "Loop Over Files",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "a75ced5f-607f-4d42-80dc-5881edac4637",
+      "name": "Claude Opus Polish (Retry)",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        1792,
+        288
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-opus-4-7",
+          "cachedResultName": "Claude Opus 4.7"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ $(\"Decode Current File\").item.json.html }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "system": "You are a world-class web designer. Enhance this personal portfolio site: improve visual hierarchy, micro-interactions, mobile responsiveness, and overall premium feel. Keep the existing dark glassmorphism, accent color #2563eb, all current content, the Google Sheets dashboard, Chart.js, contact form, Julie chatbot, and language switcher placeholder. Output ONLY the complete, valid HTML file starting with <!DOCTYPE html>. No preamble, no explanation, no markdown fences.",
+          "maxTokens": 32000,
+          "includeMergedResponse": true
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "7jk7vpQVq8LJWszR",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "id": "2cd8f3dd-a387-485f-abf4-7967c7539c5d",
+      "name": "Validate Output 2",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst meta = $('Loop Over Files').first().json;\nconst resp = $input.first().json;\nfunction collect(o, arr){ if(o==null) return; if(typeof o==='string'){arr.push(o); return;} if(Array.isArray(o)){for(const x of o) collect(x, arr); return;} if(typeof o==='object'){for(const k of Object.keys(o)) collect(o[k], arr);} }\nconst strs = []; collect(resp, strs);\nlet html = (strs.sort((a,b)=>b.length-a.length)[0] || '').trim();\nif (html.startsWith('\\u0060\\u0060\\u0060')) { html = html.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst startsOk = html.startsWith('<!DOCTYPE html>');\nconst endsOk = html.endsWith('</html>');\nconst bodyOpen = (html.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (html.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (html.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (html.match(/<\\/script>/gi) || []).length;\nconst isValid = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst reason = 'RETRY start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' len=' + html.length;\nreturn [{ json: { owner: meta.owner, repo: meta.repo, branch: meta.branch, filePath: meta.filePath, finalHtml: html, isValid, reason, attempt: 2 } }];\n"
+      }
+    },
+    {
+      "id": "1be32643-aba6-456f-95f4-ac7a5a5bc034",
+      "name": "Is Valid (2)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2240,
+        288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v2",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0e3a4a76-2fc5-4d0f-9406-e0aa6a8d4164",
+      "name": "Push Polished File 2",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2464,
+        320
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "Polish site with Claude Opus (clean)",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "a894f974-2be8-4f45-b4c9-50626a10754f"
+    },
+    {
+      "id": "ab74c83e-d9aa-494f-a968-bc08e65b763d",
+      "name": "Stop - Validation Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        512
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=Validation failed twice for {{ $json.filePath }} ({{ $json.reason }}). Halted before pushing broken HTML."
+      }
+    }
+  ],
+  "connections": {
+    "Start Polish": {
+      "main": [
+        [
+          {
+            "node": "Build File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build File List": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current File": {
+      "main": [
+        [
+          {
+            "node": "Decode Current File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode Current File": {
+      "main": [
+        [
+          {
+            "node": "Claude Opus Polish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Opus Polish": {
+      "main": [
+        [
+          {
+            "node": "Validate Output 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Output 1": {
+      "main": [
+        [
+          {
+            "node": "Is Valid (1)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid (1)": {
+      "main": [
+        [
+          {
+            "node": "Push Polished File 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Claude Opus Polish (Retry)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Polished File 1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Files": {
+      "main": [
+        [
+          {
+            "node": "All Files Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Current File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Opus Polish (Retry)": {
+      "main": [
+        [
+          {
+            "node": "Validate Output 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Output 2": {
+      "main": [
+        [
+          {
+            "node": "Is Valid (2)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid (2)": {
+      "main": [
+        [
+          {
+            "node": "Push Polished File 2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop - Validation Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Polished File 2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

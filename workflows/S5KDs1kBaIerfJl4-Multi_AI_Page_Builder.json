@@ -1,0 +1,240 @@
+{
+  "name": "Multi-AI Page Builder",
+  "nodes": [
+    {
+      "id": "c303111d-f2ea-425e-a0d5-f3a696c6c02c",
+      "name": "Run Build",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d7197650-1df6-40da-8bc9-ea152203a247",
+      "name": "Build Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const dashboard = \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n  <meta charset=\\\"UTF-8\\\" />\\n  <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\" />\\n  <meta name=\\\"description\\\" content=\\\"Live job application dashboard — stats, trends and recent activity.\\\" />\\n  <title>Job Search Dashboard</title>\\n  <script src=\\\"https://cdn.tailwindcss.com\\\"></script>\\n  <script src=\\\"https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js\\\"></script>\\n  <style>\\n    .skeleton { background: linear-gradient(90deg,#e5e7eb 25%,#f3f4f6 37%,#e5e7eb 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }\\n    @keyframes shimmer { 0% { background-position: 100% 0 } 100% { background-position: -100% 0 } }\\n    .fade-in { animation: fade .4s ease both } @keyframes fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }\\n  </style>\\n</head>\\n<body class=\\\"bg-slate-50 text-slate-800 min-h-screen\\\">\\n  <nav class=\\\"bg-white border-b sticky top-0 z-30\\\">\\n    <div class=\\\"max-w-6xl mx-auto px-4 py-3 flex items-center justify-between\\\">\\n      <span class=\\\"font-bold text-lg\\\">📊 Job Dashboard</span>\\n      <div class=\\\"flex gap-2 text-sm\\\">\\n        <a href=\\\"index.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Home</a>\\n        <a href=\\\"dashboard.html\\\" class=\\\"px-3 py-1.5 rounded bg-slate-900 text-white\\\">Dashboard</a>\\n        <a href=\\\"cv.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Submit CV</a>\\n      </div>\\n    </div>\\n  </nav>\\n\\n  <main class=\\\"max-w-6xl mx-auto px-4 py-8\\\">\\n    <div class=\\\"flex items-center justify-between mb-6\\\">\\n      <h1 class=\\\"text-2xl font-bold\\\">Live Job Stats</h1>\\n      <div class=\\\"flex items-center gap-3 text-sm text-slate-500\\\">\\n        <span id=\\\"lastUpdated\\\">—</span>\\n        <button id=\\\"refreshBtn\\\" class=\\\"px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700\\\">Refresh</button>\\n      </div>\\n    </div>\\n\\n    <!-- Stats cards -->\\n    <section id=\\\"statsCards\\\" class=\\\"grid grid-cols-2 md:grid-cols-4 gap-4 mb-8\\\">\\n      <div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Total</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statTotal\\\"><div class=\\\"skeleton h-8 w-16 rounded\\\"></div></div></div>\\n      <div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Applied</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statApplied\\\"><div class=\\\"skeleton h-8 w-16 rounded\\\"></div></div></div>\\n      <div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Interviews</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statInterview\\\"><div class=\\\"skeleton h-8 w-16 rounded\\\"></div></div></div>\\n      <div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Offers</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statOffer\\\"><div class=\\\"skeleton h-8 w-16 rounded\\\"></div></div></div>\\n    </section>\\n\\n    <div class=\\\"grid md:grid-cols-2 gap-6 mb-8\\\">\\n      <!-- Doughnut chart -->\\n      <section class=\\\"bg-white rounded-xl shadow-sm p-6\\\">\\n        <h2 class=\\\"font-semibold mb-4\\\">Status Breakdown</h2>\\n        <div id=\\\"chartSkeleton\\\" class=\\\"skeleton h-64 rounded\\\"></div>\\n        <canvas id=\\\"statusChart\\\" class=\\\"hidden\\\"></canvas>\\n      </section>\\n\\n      <!-- Recent activity table -->\\n      <section class=\\\"bg-white rounded-xl shadow-sm p-6 overflow-x-auto\\\">\\n        <h2 class=\\\"font-semibold mb-4\\\">Recent Activity</h2>\\n        <table class=\\\"w-full text-sm\\\">\\n          <thead><tr class=\\\"text-left text-slate-500 border-b\\\">\\n            <th class=\\\"py-2 pr-3\\\">Date</th><th class=\\\"py-2 pr-3\\\">Company</th><th class=\\\"py-2 pr-3\\\">Role</th><th class=\\\"py-2\\\">Status</th>\\n          </tr></thead>\\n          <tbody id=\\\"activityBody\\\">\\n            <tr><td colspan=\\\"4\\\"><div class=\\\"skeleton h-6 w-full rounded my-2\\\"></div></td></tr>\\n            <tr><td colspan=\\\"4\\\"><div class=\\\"skeleton h-6 w-full rounded my-2\\\"></div></td></tr>\\n            <tr><td colspan=\\\"4\\\"><div class=\\\"skeleton h-6 w-full rounded my-2\\\"></div></td></tr>\\n          </tbody>\\n        </table>\\n      </section>\\n    </div>\\n    <p id=\\\"errorMsg\\\" class=\\\"hidden text-sm text-red-600 mb-6\\\"></p>\\n  </main>\\n\\n  <!-- Julie chatbot -->\\n  <div id=\\\"julie\\\" class=\\\"fixed bottom-5 right-5 z-40\\\">\\n    <button id=\\\"julieToggle\\\" class=\\\"bg-indigo-600 text-white rounded-full w-14 h-14 shadow-lg text-2xl hover:bg-indigo-700\\\">💬</button>\\n    <div id=\\\"juliePanel\\\" class=\\\"hidden w-80 bg-white rounded-xl shadow-2xl border mt-2 flex flex-col\\\" style=\\\"height:420px\\\">\\n      <div class=\\\"bg-indigo-600 text-white px-4 py-3 rounded-t-xl font-semibold\\\">Julie · Job Assistant</div>\\n      <div id=\\\"julieLog\\\" class=\\\"flex-1 overflow-y-auto p-3 space-y-2 text-sm\\\"></div>\\n      <form id=\\\"julieForm\\\" class=\\\"p-3 border-t flex gap-2\\\">\\n        <input id=\\\"julieInput\\\" class=\\\"flex-1 border rounded px-3 py-2 text-sm\\\" placeholder=\\\"Ask Julie…\\\" autocomplete=\\\"off\\\" />\\n        <button class=\\\"bg-indigo-600 text-white px-3 rounded text-sm\\\">Send</button>\\n      </form>\\n    </div>\\n  </div>\\n\\n  <script>\\n    // ---- Config ----\\n    var SHEET_ID = \\\"1rivD5luGlZqq6MCEUVvlT263OfUKXrzH6cr9cf0nG3A\\\";\\n    var SHEET_NAME = \\\"Job Applications Log\\\";\\n    var JULIE_ENDPOINT = \\\"https://hsndm566.app.n8n.cloud/webhook/julie-chat\\\";\\n    var REFRESH_MS = 60000;\\n    var chart;\\n\\n    function gvizUrl() {\\n      return \\\"https://docs.google.com/spreadsheets/d/\\\" + SHEET_ID +\\n        \\\"/gviz/tq?sheet=\\\" + encodeURIComponent(SHEET_NAME) + \\\"&tqx=out:json\\\";\\n    }\\n    function parseGviz(text) {\\n      var start = text.indexOf(\\\"{\\\");\\n      var end = text.lastIndexOf(\\\"}\\\");\\n      var obj = JSON.parse(text.substring(start, end + 1));\\n      var cols = obj.table.cols.map(function (c) { return (c.label || c.id || \\\"\\\").toString().trim(); });\\n      return obj.table.rows.map(function (r) {\\n        var o = {};\\n        (r.c || []).forEach(function (cell, i) { o[cols[i] || (\\\"col\\\" + i)] = cell ? cell.v : null; });\\n        return o;\\n      });\\n    }\\n    function pick(row, names) {\\n      var keys = Object.keys(row);\\n      for (var n = 0; n < names.length; n++) {\\n        for (var k = 0; k < keys.length; k++) {\\n          if (keys[k].toLowerCase().indexOf(names[n]) !== -1) return row[keys[k]];\\n        }\\n      }\\n      return \\\"\\\";\\n    }\\n    function classify(status) {\\n      var s = (status || \\\"\\\").toString().toLowerCase();\\n      if (s.indexOf(\\\"offer\\\") !== -1) return \\\"offer\\\";\\n      if (s.indexOf(\\\"interview\\\") !== -1) return \\\"interview\\\";\\n      if (s.indexOf(\\\"reject\\\") !== -1) return \\\"rejected\\\";\\n      return \\\"applied\\\";\\n    }\\n\\n    async function loadData() {\\n      document.getElementById(\\\"errorMsg\\\").classList.add(\\\"hidden\\\");\\n      try {\\n        var res = await fetch(gvizUrl());\\n        var text = await res.text();\\n        var rows = parseGviz(text);\\n        render(rows);\\n        document.getElementById(\\\"lastUpdated\\\").textContent = \\\"Updated \\\" + new Date().toLocaleTimeString();\\n      } catch (e) {\\n        var em = document.getElementById(\\\"errorMsg\\\");\\n        em.textContent = \\\"Could not load the sheet. Make sure it is shared as 'Anyone with the link can view'. (\\\" + e.message + \\\")\\\";\\n        em.classList.remove(\\\"hidden\\\");\\n      }\\n    }\\n\\n    function render(rows) {\\n      var counts = { applied: 0, interview: 0, offer: 0, rejected: 0 };\\n      rows.forEach(function (r) { counts[classify(pick(r, [\\\"status\\\"]))]++; });\\n\\n      setStat(\\\"statTotal\\\", rows.length);\\n      setStat(\\\"statApplied\\\", counts.applied);\\n      setStat(\\\"statInterview\\\", counts.interview);\\n      setStat(\\\"statOffer\\\", counts.offer);\\n\\n      // Chart\\n      document.getElementById(\\\"chartSkeleton\\\").classList.add(\\\"hidden\\\");\\n      var canvas = document.getElementById(\\\"statusChart\\\");\\n      canvas.classList.remove(\\\"hidden\\\");\\n      var data = {\\n        labels: [\\\"Applied\\\", \\\"Interview\\\", \\\"Offer\\\", \\\"Rejected\\\"],\\n        datasets: [{ data: [counts.applied, counts.interview, counts.offer, counts.rejected],\\n          backgroundColor: [\\\"#3b82f6\\\", \\\"#f59e0b\\\", \\\"#22c55e\\\", \\\"#ef4444\\\"] }]\\n      };\\n      if (chart) { chart.data = data; chart.update(); }\\n      else { chart = new Chart(canvas, { type: \\\"doughnut\\\", data: data, options: { plugins: { legend: { position: \\\"bottom\\\" } } } }); }\\n\\n      // Recent activity (last 8)\\n      var body = document.getElementById(\\\"activityBody\\\");\\n      body.innerHTML = \\\"\\\";\\n      var recent = rows.slice(-8).reverse();\\n      if (!recent.length) { body.innerHTML = '<tr><td colspan=\\\"4\\\" class=\\\"py-3 text-slate-400\\\">No records yet.</td></tr>'; return; }\\n      recent.forEach(function (r) {\\n        var tr = document.createElement(\\\"tr\\\");\\n        tr.className = \\\"border-b last:border-0 fade-in\\\";\\n        tr.innerHTML = \\\"<td class='py-2 pr-3'>\\\" + fmt(pick(r, [\\\"date\\\", \\\"applied\\\"])) + \\\"</td>\\\" +\\n          \\\"<td class='py-2 pr-3'>\\\" + fmt(pick(r, [\\\"company\\\", \\\"employer\\\"])) + \\\"</td>\\\" +\\n          \\\"<td class='py-2 pr-3'>\\\" + fmt(pick(r, [\\\"role\\\", \\\"position\\\", \\\"title\\\"])) + \\\"</td>\\\" +\\n          \\\"<td class='py-2'>\\\" + badge(pick(r, [\\\"status\\\"])) + \\\"</td>\\\";\\n        body.appendChild(tr);\\n      });\\n    }\\n    function fmt(v) { return v == null || v === \\\"\\\" ? \\\"—\\\" : String(v); }\\n    function setStat(id, v) { var el = document.getElementById(id); el.textContent = v; el.classList.add(\\\"fade-in\\\"); }\\n    function badge(status) {\\n      var c = classify(status);\\n      var map = { applied: \\\"bg-blue-100 text-blue-700\\\", interview: \\\"bg-amber-100 text-amber-700\\\", offer: \\\"bg-green-100 text-green-700\\\", rejected: \\\"bg-red-100 text-red-700\\\" };\\n      return \\\"<span class='px-2 py-0.5 rounded-full text-xs \\\" + map[c] + \\\"'>\\\" + fmt(status) + \\\"</span>\\\";\\n    }\\n\\n    document.getElementById(\\\"refreshBtn\\\").addEventListener(\\\"click\\\", loadData);\\n    loadData();\\n    setInterval(loadData, REFRESH_MS);\\n\\n    // ---- Julie chatbot ----\\n    var panel = document.getElementById(\\\"juliePanel\\\");\\n    document.getElementById(\\\"julieToggle\\\").addEventListener(\\\"click\\\", function () { panel.classList.toggle(\\\"hidden\\\"); });\\n    function julieMsg(text, who) {\\n      var log = document.getElementById(\\\"julieLog\\\");\\n      var d = document.createElement(\\\"div\\\");\\n      d.className = who === \\\"user\\\" ? \\\"text-right\\\" : \\\"text-left\\\";\\n      d.innerHTML = \\\"<span class='inline-block px-3 py-2 rounded-lg \\\" + (who === \\\"user\\\" ? \\\"bg-indigo-600 text-white\\\" : \\\"bg-slate-100\\\") + \\\"'>\\\" + text + \\\"</span>\\\";\\n      log.appendChild(d); log.scrollTop = log.scrollHeight;\\n    }\\n    document.getElementById(\\\"julieForm\\\").addEventListener(\\\"submit\\\", async function (e) {\\n      e.preventDefault();\\n      var input = document.getElementById(\\\"julieInput\\\");\\n      var q = input.value.trim(); if (!q) return;\\n      julieMsg(q, \\\"user\\\"); input.value = \\\"\\\";\\n      try {\\n        var res = await fetch(JULIE_ENDPOINT, { method: \\\"POST\\\", headers: { \\\"Content-Type\\\": \\\"application/json\\\" }, body: JSON.stringify({ message: q }) });\\n        var data = await res.json().catch(function () { return {}; });\\n        julieMsg(data.reply || data.output || \\\"Sorry, I couldn't reach the assistant right now.\\\", \\\"bot\\\");\\n      } catch (err) { julieMsg(\\\"Network error contacting Julie.\\\", \\\"bot\\\"); }\\n    });\\n  </script>\\n</body>\\n</html>\\n\";\nconst cv = \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n  <meta charset=\\\"UTF-8\\\" />\\n  <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\" />\\n  <meta name=\\\"description\\\" content=\\\"Submit your CV for a target role and get it into the pipeline.\\\" />\\n  <title>Submit Your CV</title>\\n  <script src=\\\"https://cdn.tailwindcss.com\\\"></script>\\n  <style>\\n    .fade-in { animation: fade .4s ease both } @keyframes fade { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }\\n    .checkmark { stroke-dasharray: 48; stroke-dashoffset: 48; animation: draw .6s ease .1s forwards }\\n    @keyframes draw { to { stroke-dashoffset: 0 } }\\n    .pop { animation: pop .4s cubic-bezier(.2,.8,.2,1) both } @keyframes pop { from { transform: scale(.7); opacity: 0 } to { transform: scale(1); opacity: 1 } }\\n  </style>\\n</head>\\n<body class=\\\"bg-slate-50 text-slate-800 min-h-screen\\\">\\n  <nav class=\\\"bg-white border-b sticky top-0 z-30\\\">\\n    <div class=\\\"max-w-6xl mx-auto px-4 py-3 flex items-center justify-between\\\">\\n      <span class=\\\"font-bold text-lg\\\">📄 Submit CV</span>\\n      <div class=\\\"flex gap-2 text-sm\\\">\\n        <a href=\\\"index.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Home</a>\\n        <a href=\\\"dashboard.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Dashboard</a>\\n        <a href=\\\"cv.html\\\" class=\\\"px-3 py-1.5 rounded bg-slate-900 text-white\\\">Submit CV</a>\\n      </div>\\n    </div>\\n  </nav>\\n\\n  <main class=\\\"max-w-2xl mx-auto px-4 py-10\\\">\\n    <h1 class=\\\"text-2xl font-bold mb-2\\\">Submit your CV</h1>\\n    <p class=\\\"text-slate-500 mb-8\\\">Paste your CV, tell us the role you're targeting, and we'll take it from there.</p>\\n\\n    <form id=\\\"cvForm\\\" class=\\\"bg-white rounded-xl shadow-sm p-6 space-y-5\\\">\\n      <div>\\n        <label class=\\\"block text-sm font-medium mb-1\\\" for=\\\"target_role\\\">Target role</label>\\n        <input id=\\\"target_role\\\" name=\\\"target_role\\\" required class=\\\"w-full border rounded-lg px-3 py-2\\\" placeholder=\\\"e.g. Senior Frontend Engineer\\\" />\\n      </div>\\n      <div>\\n        <label class=\\\"block text-sm font-medium mb-1\\\" for=\\\"email\\\">Email</label>\\n        <input id=\\\"email\\\" name=\\\"email\\\" type=\\\"email\\\" required class=\\\"w-full border rounded-lg px-3 py-2\\\" placeholder=\\\"you@example.com\\\" />\\n      </div>\\n      <div>\\n        <label class=\\\"block text-sm font-medium mb-1\\\" for=\\\"cv_text\\\">CV text</label>\\n        <textarea id=\\\"cv_text\\\" name=\\\"cv_text\\\" required rows=\\\"10\\\" class=\\\"w-full border rounded-lg px-3 py-2\\\" placeholder=\\\"Paste your CV here…\\\"></textarea>\\n      </div>\\n      <button id=\\\"submitBtn\\\" type=\\\"submit\\\" class=\\\"w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-60\\\">Submit CV</button>\\n      <p id=\\\"formError\\\" class=\\\"hidden text-sm text-red-600\\\"></p>\\n    </form>\\n\\n    <!-- Success animation -->\\n    <div id=\\\"successCard\\\" class=\\\"hidden bg-white rounded-xl shadow-sm p-10 text-center pop\\\">\\n      <svg class=\\\"mx-auto mb-4\\\" width=\\\"72\\\" height=\\\"72\\\" viewBox=\\\"0 0 52 52\\\">\\n        <circle cx=\\\"26\\\" cy=\\\"26\\\" r=\\\"25\\\" fill=\\\"none\\\" stroke=\\\"#22c55e\\\" stroke-width=\\\"2\\\" />\\n        <path class=\\\"checkmark\\\" fill=\\\"none\\\" stroke=\\\"#22c55e\\\" stroke-width=\\\"4\\\" stroke-linecap=\\\"round\\\" d=\\\"M14 27 l8 8 l16 -16\\\" />\\n      </svg>\\n      <h2 class=\\\"text-xl font-semibold mb-1\\\">CV submitted!</h2>\\n      <p class=\\\"text-slate-500 mb-6\\\">Thanks — we've received your CV and will be in touch.</p>\\n      <div class=\\\"flex gap-3 justify-center\\\">\\n        <a href=\\\"dashboard.html\\\" class=\\\"px-4 py-2 rounded-lg bg-slate-900 text-white\\\">View Dashboard</a>\\n        <button id=\\\"againBtn\\\" class=\\\"px-4 py-2 rounded-lg border\\\">Submit another</button>\\n      </div>\\n    </div>\\n  </main>\\n\\n  <!-- Julie chatbot -->\\n  <div id=\\\"julie\\\" class=\\\"fixed bottom-5 right-5 z-40\\\">\\n    <button id=\\\"julieToggle\\\" class=\\\"bg-indigo-600 text-white rounded-full w-14 h-14 shadow-lg text-2xl hover:bg-indigo-700\\\">💬</button>\\n    <div id=\\\"juliePanel\\\" class=\\\"hidden w-80 bg-white rounded-xl shadow-2xl border mt-2 flex flex-col\\\" style=\\\"height:420px\\\">\\n      <div class=\\\"bg-indigo-600 text-white px-4 py-3 rounded-t-xl font-semibold\\\">Julie · Job Assistant</div>\\n      <div id=\\\"julieLog\\\" class=\\\"flex-1 overflow-y-auto p-3 space-y-2 text-sm\\\"></div>\\n      <form id=\\\"julieForm\\\" class=\\\"p-3 border-t flex gap-2\\\">\\n        <input id=\\\"julieInput\\\" class=\\\"flex-1 border rounded px-3 py-2 text-sm\\\" placeholder=\\\"Ask Julie…\\\" autocomplete=\\\"off\\\" />\\n        <button class=\\\"bg-indigo-600 text-white px-3 rounded text-sm\\\">Send</button>\\n      </form>\\n    </div>\\n  </div>\\n\\n  <script>\\n    var SUBMIT_ENDPOINT = \\\"https://hsndm566.app.n8n.cloud/webhook/submit-cv\\\";\\n    var JULIE_ENDPOINT = \\\"https://hsndm566.app.n8n.cloud/webhook/julie-chat\\\";\\n\\n    document.getElementById(\\\"cvForm\\\").addEventListener(\\\"submit\\\", async function (e) {\\n      e.preventDefault();\\n      var err = document.getElementById(\\\"formError\\\"); err.classList.add(\\\"hidden\\\");\\n      var btn = document.getElementById(\\\"submitBtn\\\"); btn.disabled = true; btn.textContent = \\\"Submitting…\\\";\\n      var payload = {\\n        cv_text: document.getElementById(\\\"cv_text\\\").value,\\n        target_role: document.getElementById(\\\"target_role\\\").value,\\n        email: document.getElementById(\\\"email\\\").value\\n      };\\n      try {\\n        var res = await fetch(SUBMIT_ENDPOINT, { method: \\\"POST\\\", headers: { \\\"Content-Type\\\": \\\"application/json\\\" }, body: JSON.stringify(payload) });\\n        if (!res.ok) throw new Error(\\\"Server responded \\\" + res.status);\\n        document.getElementById(\\\"cvForm\\\").classList.add(\\\"hidden\\\");\\n        document.getElementById(\\\"successCard\\\").classList.remove(\\\"hidden\\\");\\n      } catch (e2) {\\n        err.textContent = \\\"Submission failed: \\\" + e2.message + \\\". Please try again.\\\";\\n        err.classList.remove(\\\"hidden\\\");\\n      } finally { btn.disabled = false; btn.textContent = \\\"Submit CV\\\"; }\\n    });\\n    document.getElementById(\\\"againBtn\\\").addEventListener(\\\"click\\\", function () {\\n      document.getElementById(\\\"successCard\\\").classList.add(\\\"hidden\\\");\\n      document.getElementById(\\\"cvForm\\\").reset();\\n      document.getElementById(\\\"cvForm\\\").classList.remove(\\\"hidden\\\");\\n    });\\n\\n    // ---- Julie chatbot ----\\n    var panel = document.getElementById(\\\"juliePanel\\\");\\n    document.getElementById(\\\"julieToggle\\\").addEventListener(\\\"click\\\", function () { panel.classList.toggle(\\\"hidden\\\"); });\\n    function julieMsg(text, who) {\\n      var log = document.getElementById(\\\"julieLog\\\");\\n      var d = document.createElement(\\\"div\\\");\\n      d.className = who === \\\"user\\\" ? \\\"text-right\\\" : \\\"text-left\\\";\\n      d.innerHTML = \\\"<span class='inline-block px-3 py-2 rounded-lg \\\" + (who === \\\"user\\\" ? \\\"bg-indigo-600 text-white\\\" : \\\"bg-slate-100\\\") + \\\"'>\\\" + text + \\\"</span>\\\";\\n      log.appendChild(d); log.scrollTop = log.scrollHeight;\\n    }\\n    document.getElementById(\\\"julieForm\\\").addEventListener(\\\"submit\\\", async function (e) {\\n      e.preventDefault();\\n      var input = document.getElementById(\\\"julieInput\\\");\\n      var q = input.value.trim(); if (!q) return;\\n      julieMsg(q, \\\"user\\\"); input.value = \\\"\\\";\\n      try {\\n        var res = await fetch(JULIE_ENDPOINT, { method: \\\"POST\\\", headers: { \\\"Content-Type\\\": \\\"application/json\\\" }, body: JSON.stringify({ message: q }) });\\n        var data = await res.json().catch(function () { return {}; });\\n        julieMsg(data.reply || data.output || \\\"Sorry, I couldn't reach the assistant right now.\\\", \\\"bot\\\");\\n      } catch (err) { julieMsg(\\\"Network error contacting Julie.\\\", \\\"bot\\\"); }\\n    });\\n  </script>\\n</body>\\n</html>\\n\";\nreturn [\n  { json: { filename: \"dashboard.html\", html: dashboard } },\n  { json: { filename: \"cv.html\", html: cv } },\n];"
+      }
+    },
+    {
+      "id": "33e10083-150f-49e8-ae9d-9bb6749ccd78",
+      "name": "Push to GitHub",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.html }}",
+        "commitMessage": "=Update {{ $json.filename }} via n8n multi-AI page builder",
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "a7396bf6-f416-4011-847d-eda7802593fb"
+    },
+    {
+      "id": "92d82097-a6eb-46d7-a943-a52ab56df515",
+      "name": "Verify Live",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://hsndm.tech/{{ $('Build Pages').item.json.filename }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "2eacfa8f-9594-4811-80d2-09371fc4ac6f",
+      "name": "Design Review",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zm0EXNfiARXgHz8x",
+          "cachedResultName": "AI Call (resilient)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "You are a senior UI/UX designer and front-end performance/accessibility expert. Give concise, concrete, actionable bullet points only.",
+            "prompt": "=Review this \"{{ $('Build Pages').item.json.filename }}\" page for design/UX quality, mobile responsiveness, accessibility (WCAG), and page load performance. List the most valuable concrete improvements as bullets.\n\nHTML (truncated):\n{{ $('Build Pages').item.json.html.slice(0, 6000) }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "94426ffe-eb95-4b73-93e6-4fb8b4386c9a",
+      "name": "Content Review",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "source": "database",
+        "mode": "each",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "zm0EXNfiARXgHz8x",
+          "cachedResultName": "AI Call (resilient)"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "You are an expert copy editor and SEO specialist. Give concise, concrete, actionable bullet points only.",
+            "prompt": "=Review this \"{{ $('Build Pages').item.json.filename }}\" page for content quality, copywriting, grammar, and SEO (title, meta description, headings, semantic structure). List the most valuable concrete improvements as bullets.\n\nHTML (truncated):\n{{ $('Build Pages').item.json.html.slice(0, 6000) }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "bb240ea3-98e7-4310-8f2a-5e2ff22a6862",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pages = $(\"Build Pages\").all();\nconst verify = $(\"Verify Live\").all();\nconst design = $(\"Design Review\").all();\nconst content = $(\"Content Review\").all();\nconst out = [];\nfor (let i = 0; i < pages.length; i++) {\n  const v = verify[i] ? verify[i].json : {};\n  const status = (v.statusCode !== undefined) ? v.statusCode : (v.error ? \"error\" : \"unknown\");\n  const d = design[i] ? design[i].json : null;\n  const c = content[i] ? content[i].json : null;\n  out.push({ json: {\n    filename: pages[i].json.filename,\n    url: \"https://hsndm.tech/\" + pages[i].json.filename,\n    live_http_status: status,\n    is_live: status === 200,\n    design_ux_review: d ? (d.text || d.output || \"(empty)\") : \"(no review)\",\n    design_model: d ? (d.model_used || d.model || \"unknown\") : \"none\",\n    content_seo_review: c ? (c.text || c.output || \"(empty)\") : \"(no review)\",\n    content_model: c ? (c.model_used || c.model || \"unknown\") : \"none\",\n  }});\n}\nreturn out;"
+      }
+    }
+  ],
+  "connections": {
+    "Run Build": {
+      "main": [
+        [
+          {
+            "node": "Build Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Pages": {
+      "main": [
+        [
+          {
+            "node": "Push to GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push to GitHub": {
+      "main": [
+        [
+          {
+            "node": "Verify Live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Live": {
+      "main": [
+        [
+          {
+            "node": "Design Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Design Review": {
+      "main": [
+        [
+          {
+            "node": "Content Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Review": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

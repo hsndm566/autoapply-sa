@@ -1,0 +1,2609 @@
+{
+  "name": "Kimi — Process One Row",
+  "nodes": [
+    {
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "row_id",
+              "type": "number"
+            },
+            {
+              "name": "company",
+              "type": "string"
+            },
+            {
+              "name": "industry",
+              "type": "string"
+            },
+            {
+              "name": "recipient",
+              "type": "string"
+            },
+            {
+              "name": "job_description",
+              "type": "string"
+            },
+            {
+              "name": "drive_folder_id",
+              "type": "string"
+            },
+            {
+              "name": "processed_index",
+              "type": "number"
+            },
+            {
+              "name": "total",
+              "type": "number"
+            },
+            {
+              "name": "user_id",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "position": [
+        0,
+        96
+      ],
+      "id": "452b2d88-c816-44b1-ae45-ad6fe1af0d5e"
+    },
+    {
+      "name": "CV Source",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cv",
+              "name": "cv_text",
+              "type": "string",
+              "value": "HASSAN AHMED ADAM MOHAMMAD\nIndustrial Engineer — Jeddah, Saudi Arabia\nEmail: hasanadam506@gmail.com | Phone: +966 57 144 8656\n\nProfessional Summary\nIndustrial Engineer specializing in process optimization, supply chain logistics, and operations management. Proven ability to streamline workflows, coordinate cross-functional teams, and leverage Lean methodologies to drive measurable efficiency improvements and operational compliance.\n\nCore Competencies\nLean Manufacturing | Process Optimization | Supply Chain Logistics | Inventory Management | Vendor Relations | Risk Management | Cross-Functional Leadership | Data Analysis\n\nEducation\nMarch 2022 - Present — Bachelor of Science in Industrial Engineering, University of Business and Technology (UBT), Jeddah\nJanuary 2014 - November 2019 — STEM Diploma, International Philippine School in Jeddah (IPSJ), Jeddah\n\nAcademic Projects\nSenior Project: Process Optimization Using Lean Management, King AbdulAziz International Airport (KAIA)\n- Applied DMAIC framework and Value Stream Mapping (VSM) to analyze and optimize passenger check-in workflows.\n- Reduced average check-in time from 15.5 minutes to 9.2 minutes (a 40% process acceleration).\n- Decreased passenger waiting time by 50% and manual verification time by 57%.\n\nProfessional Experience\nJune 2022 - December 2025 — Logistics & Operations Coordinator, UBT, Jeddah\n- Orchestrated travel, accommodation, and logistics frameworks for international athletic contingents.\n- Recruited and directed large-scale volunteer workforces for high-profile events including the Jeddah Marathon.\n\nMarch 2024 - August 2024 — Purchasing Assistant, Aljabr, Dammam\n- Directed procurement operations to guarantee uninterrupted supply chain flow and timely material delivery.\n- Optimized vendor relationships to establish cost-effective communication channels.\n\nFebruary 2021 - November 2022 — Production Management Secretary, Piece of Fabric Est., Jeddah\n- Engineered standardized production schedules to maximize operational output and minimize downtime.\n\nJanuary 2019 - December 2019 — Educational Operations Assistant, AGS Advanced Generations School, Jeddah\n- Streamlined communication channels between staff and external stakeholders.\n\nCertifications\nOSHA 30-Hour General Industry | ISO 9001:2015 & Risk Management | Business Analysis Virtual Work Experience (BCG & Misk) | Professional Certificate in Productivity (PCP)\n\nLanguages\nEnglish, Arabic, Somali, Filipino"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        224,
+        96
+      ],
+      "id": "e48ebffe-b320-425b-9dbb-487ede100042"
+    },
+    {
+      "name": "Prep Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var row = $('When Called').first().json || {};\nvar cv = '';\ntry { cv = $('CV Source').first().json.cv_text || ''; } catch (e) { cv = ''; }\nvar company = row.company || 'the company';\nvar industry = row.industry || 'Engineering';\nvar recipient = (row.recipient || '').toString().trim();\nvar hasJd = row.job_description && String(row.job_description).trim().length > 0;\nvar jd = hasJd ? String(row.job_description) : ('General open application to ' + company + ', a Saudi Arabia-based ' + industry + ' company. Target role: Industrial Engineer focused on process optimization, supply chain logistics, operations management, quality and safety compliance.');\nvar ctx = 'Company: ' + company + ' | Industry: ' + industry + ' | Context: ' + jd;\nvar cvSys = 'You are a CV tailor for Hassan Ahmed Adam Mohammad, an Industrial Engineer in Jeddah. Rewrite the base CV emphasizing experience relevant to the target company/role, reorder bullets, and weave in relevant engineering keywords WITHOUT fabricating anything. Return ONLY the tailored CV as plain text.';\nvar cvUsr = ctx + ' Base CV: ' + cv;\nvar clSys = 'You are a cover letter writer for Hassan Ahmed Adam Mohammad, an Industrial Engineer in Jeddah. Write a confident, warm, professional cover letter under 200 words, three short paragraphs: opening interest, middle mapping his experience to the role, closing call-to-action. Return ONLY the cover letter as plain text.';\nvar clUsr = ctx + ' Candidate background: ' + cv.slice(0, 1200);\nvar cvMsgs = [ { role: 'system', content: cvSys }, { role: 'user', content: cvUsr } ];\nvar clMsgs = [ { role: 'system', content: clSys }, { role: 'user', content: clUsr } ];\nvar cvGroqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.6, max_tokens: 1800, messages: cvMsgs };\nvar coverGroqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.6, max_tokens: 900, messages: clMsgs };\nvar cvZaiBody = { model: 'glm-4.5-flash', temperature: 0.6, max_tokens: 1800, messages: cvMsgs };\nvar coverZaiBody = { model: 'glm-4.5-flash', temperature: 0.6, max_tokens: 900, messages: clMsgs };\nvar cvQwenBody = { model: 'qwen-plus', temperature: 0.6, max_tokens: 1800, messages: cvMsgs };\nvar coverQwenBody = { model: 'qwen-plus', temperature: 0.6, max_tokens: 900, messages: clMsgs };\nvar keywords = ['process optimization','supply chain','operations','logistics','lean','quality','safety','inventory','procurement','industrial engineering','vendor','risk','data analysis', String(industry).toLowerCase()];\nreturn [{ json: { row_id: row.row_id, company: company, industry: industry, recipient: recipient, job_description: jd, cv_text: cv, drive_folder_id: (row.drive_folder_id || ''), processed_index: (row.processed_index || 0), total: (row.total || 0), keywords: keywords, cvSys: cvSys, cvUsr: cvUsr, clSys: clSys, clUsr: clUsr, cvGroqBody: cvGroqBody, coverGroqBody: coverGroqBody, cvZaiBody: cvZaiBody, coverZaiBody: coverZaiBody, cvQwenBody: cvQwenBody, coverQwenBody: coverQwenBody } }];"
+      },
+      "position": [
+        448,
+        96
+      ],
+      "id": "34d093cd-b0d9-47ad-819a-5abcf8049403"
+    },
+    {
+      "name": "HF Embed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "huggingFaceApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ inputs: $('Prep Row').first().json.job_description }) }}",
+        "options": {}
+      },
+      "position": [
+        672,
+        96
+      ],
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "7HjlGl9dK3pF9sed",
+          "name": "Hugging Face account"
+        }
+      },
+      "id": "2b0dcb0e-7ad6-4b75-8c77-e102d4f1a24d"
+    },
+    {
+      "name": "Aggregate Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var all = $input.all();\nvar vec = [];\nfor (var i = 0; i < all.length; i++) {\n  var v = all[i].json;\n  if (typeof v === \"number\") { vec.push(v); }\n  else if (Array.isArray(v)) { for (var k = 0; k < v.length; k++) { if (typeof v[k] === \"number\") vec.push(v[k]); } }\n}\nreturn [{ json: { embedding: vec, dim: vec.length } }];"
+      },
+      "position": [
+        896,
+        96
+      ],
+      "id": "1a889e0d-5e71-4092-af24-b70b9c2667cc"
+    },
+    {
+      "name": "Merge CV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar h = $input.first().json || {};\nvar cv = String(h.text || '').trim();\nif (!cv) { cv = prep.cv_text || ''; }\nvar agent = h.provider_used || h.provider || 'hub';\nreturn [{ json: { row_id: prep.row_id, company: prep.company, recipient: prep.recipient, tailored_cv: cv, cv_agent: agent, cv_ok: cv.length > 60 } }];"
+      },
+      "position": [
+        2688,
+        96
+      ],
+      "id": "58bc4265-6745-4a08-8bb6-ab6588e5ed2d"
+    },
+    {
+      "name": "Merge Cover",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar cvm = $('Merge CV').first().json || {};\nvar h = $input.first().json || {};\nvar cover = String(h.text || '').trim();\nvar agent = h.provider_used || h.provider || 'hub';\nreturn [{ json: { row_id: prep.row_id, company: prep.company, recipient: prep.recipient, tailored_cv: cvm.tailored_cv || '', cv_agent: cvm.cv_agent || '', cover_letter: cover, cover_agent: agent, cover_ok: cover.length > 40 } }];"
+      },
+      "position": [
+        4480,
+        96
+      ],
+      "id": "a2d19622-7570-4849-9daf-495f9ae876f0"
+    },
+    {
+      "name": "HF Quality Gate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/cardiffnlp/twitter-roberta-base-sentiment-latest",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "huggingFaceApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ inputs: (($(\"Merge Cover\").first().json.cover_letter || \"\") + \" \" + ($(\"Merge Cover\").first().json.tailored_cv || \"\")).slice(0, 480) }) }}",
+        "options": {}
+      },
+      "position": [
+        4704,
+        96
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "7HjlGl9dK3pF9sed",
+          "name": "Hugging Face account"
+        }
+      },
+      "id": "e0eb758f-d4aa-41e1-a8a5-2bac936dd4d4"
+    },
+    {
+      "name": "Check Sentiment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var hf = $input.first().json;\nvar pk = $('Merge Cover').first().json || {};\nvar isNeg = false; var score = 0.9;\ntry {\n  var arr = hf; if (Array.isArray(arr) && Array.isArray(arr[0])) arr = arr[0];\n  if (Array.isArray(arr)) { var top = arr[0]; for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].score > top.score) top = arr[i]; } var lbl = String(top.label || '').toLowerCase(); if ((lbl === 'negative' || lbl === 'label_0') && top.score >= 0.6) { isNeg = true; score = 0.4; } }\n} catch (e) { isNeg = false; score = 0.9; }\nreturn [{ json: { row_id: pk.row_id, company: pk.company, recipient: pk.recipient, tailored_cv: pk.tailored_cv || '', cover_letter: pk.cover_letter || '', cv_agent: pk.cv_agent || '', cover_agent: pk.cover_agent || '', tone_score: score, tone_flagged: isNeg } }];"
+      },
+      "position": [
+        4928,
+        0
+      ],
+      "id": "c6c09291-4e70-4761-8962-1407b85eb4a1"
+    },
+    {
+      "name": "Merge Quality",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      },
+      "position": [
+        5152,
+        96
+      ],
+      "id": "c21943bd-4eb2-4c8d-9259-e05f173bb8bd"
+    },
+    {
+      "name": "Simple Tone Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var pk = $('Merge Cover').first().json || {};\nvar text = ((pk.cover_letter || '') + ' ' + (pk.tailored_cv || '')).toLowerCase();\nvar negs = ['unfortunately','regret','sorry','cannot','unable','not qualified','lack of','no experience','weak','poor','fail','problem','concern','desperate'];\nvar flagged = false; for (var i = 0; i < negs.length; i++) { if (text.indexOf(negs[i]) !== -1) { flagged = true; break; } }\nreturn [{ json: { row_id: pk.row_id, company: pk.company, recipient: pk.recipient, tailored_cv: pk.tailored_cv || '', cover_letter: pk.cover_letter || '', cv_agent: pk.cv_agent || '', cover_agent: pk.cover_agent || '', tone_score: flagged ? 0.4 : 0.9, tone_flagged: flagged } }];"
+      },
+      "position": [
+        4928,
+        192
+      ],
+      "id": "6619953e-7594-46cc-9d17-732fef085691"
+    },
+    {
+      "name": "Brevo Primary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.brevoPrimary) }}",
+        "options": {}
+      },
+      "position": [
+        6048,
+        96
+      ],
+      "onError": "continueErrorOutput",
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      },
+      "id": "3ef92595-7699-4600-8912-715616b0ca26"
+    },
+    {
+      "name": "Parse Brevo Primary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar eb = $('Build Brevo Body').first().json || {};\nvar mid = src.messageId || (src.messageIds && src.messageIds[0]) || '';\nreturn [{ json: { row_id: eb.row_id, recipient: eb.recipient, company: eb.company, cv_agent: eb.cv_agent, cover_agent: eb.cover_agent, tailored_cv: eb.tailored_cv, cover_letter: eb.cover_letter, cover_html: eb.cover_html, messageId: mid, sender_used: 'jobapplier@agentmail.to', status: mid ? 'sent' : 'failed' } }];"
+      },
+      "position": [
+        6496,
+        0
+      ],
+      "id": "76fbfa71-f17e-4d58-a82f-5ad3f0aeb580"
+    },
+    {
+      "name": "Merge Brevo",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      },
+      "position": [
+        6720,
+        96
+      ],
+      "id": "57aa5b06-368e-4633-b093-ef4cc7f40cbe"
+    },
+    {
+      "name": "Ensure Fallback Fields",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6160,
+        360
+      ],
+      "parameters": {
+        "includeOtherFields": true,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ef1",
+              "name": "recipient",
+              "type": "string",
+              "value": "={{ $json.recipient || 'hasanadam506@gmail.com' }}"
+            },
+            {
+              "id": "ef2",
+              "name": "cover_letter",
+              "type": "string",
+              "value": "={{ $json.cover_letter || 'No cover letter generated' }}"
+            },
+            {
+              "id": "ef3",
+              "name": "tailored_cv",
+              "type": "string",
+              "value": "={{ $json.tailored_cv || '' }}"
+            },
+            {
+              "id": "ef4",
+              "name": "subject",
+              "type": "string",
+              "value": "={{ $json.subject || 'Application for Industrial Engineering Position - Hassan Adam' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "19c062f4-0982-4cd5-a3e5-3f6b505a05b6"
+    },
+    {
+      "name": "Brevo Fallback (Gmail sender)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { name: 'Hassan Ahmed Adam Mohammad', email: 'hasanadam506@gmail.com' }, to: [{ email: $json.recipient || 'hasanadam506@gmail.com' }], subject: $json.subject || 'Application for Industrial Engineering Position - Hassan Adam', htmlContent: '<html><body style=\"font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#222;\">' + ($json.cover_html || $json.cover_letter || 'No cover letter generated') + '</body></html>', attachment: ($('Build Brevo Body').first().json.brevoFallback && $('Build Brevo Body').first().json.brevoFallback.attachment) || [] }) }}",
+        "options": {}
+      },
+      "position": [
+        6272,
+        192
+      ],
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      },
+      "id": "1e75e677-02de-4e86-b234-4fb3a267a0c4"
+    },
+    {
+      "name": "Parse Brevo Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar eb = $('Build Brevo Body').first().json || {};\nvar mid = src.messageId || (src.messageIds && src.messageIds[0]) || '';\nreturn [{ json: { row_id: eb.row_id, recipient: eb.recipient, company: eb.company, cv_agent: eb.cv_agent, cover_agent: eb.cover_agent, tailored_cv: eb.tailored_cv, cover_letter: eb.cover_letter, cover_html: eb.cover_html, messageId: mid, sender_used: 'hasanadam506@gmail.com', status: mid ? 'sent' : 'failed' } }];"
+      },
+      "position": [
+        6496,
+        192
+      ],
+      "id": "adc925ca-0146-4938-9b2e-5ff63a2803d0"
+    },
+    {
+      "name": "Build Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var pb = $input.first().json || {};\nvar prep = $('Prep Row').first().json || {};\nvar vec = [];\ntry { vec = $('Aggregate Embedding').first().json.embedding || []; } catch (e) { vec = []; }\nvar host = 'job-agent-memory-kwj37r9.svc.aped-4627-b74a.pinecone.io';\nvar ts = new Date().toISOString();\nvar upsertBody = { vectors: [{ id: 'job-' + (pb.row_id || Date.now()), values: vec, metadata: { company: pb.company || '', job_description: String(prep.job_description || '').slice(0, 1000), tailored_cv: String(pb.tailored_cv || '').slice(0, 2000), cover_letter: String(pb.cover_letter || '').slice(0, 1000), status: pb.status || '', cv_agent: pb.cv_agent || '', cover_agent: pb.cover_agent || '', sender_used: pb.sender_used || '', message_id: pb.messageId || '', timestamp: ts } }] };\nreturn [{ json: { row_id: pb.row_id, company: pb.company, recipient: pb.recipient, cv_agent: pb.cv_agent, cover_agent: pb.cover_agent, cover_html: pb.cover_html, cover_letter: pb.cover_letter, tailored_cv: pb.tailored_cv, messageId: pb.messageId, sender_used: pb.sender_used, status: pb.status, drive_folder_id: prep.drive_folder_id || '', processed_index: prep.processed_index || 0, total: prep.total || 0, host: host, dim: vec.length, upsertBody: upsertBody } }];"
+      },
+      "position": [
+        6944,
+        96
+      ],
+      "id": "b0b9b9e8-191f-4839-8826-d9e1c448869f"
+    },
+    {
+      "name": "Pinecone Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $json.host }}/vectors/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Pinecone-API-Version",
+              "value": "2024-07"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.upsertBody) }}",
+        "options": {}
+      },
+      "position": [
+        7168,
+        96
+      ],
+      "credentials": {
+        "pineconeApi": {
+          "id": "ifABlu9PCWIqab6R",
+          "name": "Pinecone account"
+        }
+      },
+      "id": "c0c794c2-87b3-473e-98fa-5f056928829c"
+    },
+    {
+      "name": "Drive Upload Cover",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "parameters": {
+        "resource": "file",
+        "operation": "createFromText",
+        "content": "={{ $('Build Upsert').first().json.cover_letter }}",
+        "name": "={{ 'CoverLetter_' + $('Build Upsert').first().json.company + '_' + $('Build Upsert').first().json.row_id + '.txt' }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": "={{ ($('Build Upsert').first().json.drive_folder_id) ? { __rl: true, mode: 'id', value: $('Build Upsert').first().json.drive_folder_id } : { __rl: true, mode: 'list', value: 'root', cachedResultName: '/ (Root folder)' } }}",
+        "options": {}
+      },
+      "position": [
+        7840,
+        96
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "34dJpcQH8s7EzLLJ",
+          "name": "Google Drive account 2"
+        }
+      },
+      "id": "d8e431ff-1196-41b7-ad10-24db70eb5b11"
+    },
+    {
+      "name": "S3 Backup Cover",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "job-apps-backup",
+        "fileName": "={{ 'CoverLetter_' + $('Build Upsert').first().json.company + '_' + $('Build Upsert').first().json.row_id + '.txt' }}",
+        "binaryData": false,
+        "fileContent": "={{ $('Build Upsert').first().json.cover_letter }}",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "position": [
+        8512,
+        96
+      ],
+      "credentials": {
+        "s3": {
+          "id": "wIs6CoHxqzpDHZlS",
+          "name": "S3 account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "id": "35a99f29-dd67-479f-8b1e-1e49f6c82702"
+    },
+    {
+      "name": "Update Row Status",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('Build Upsert').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "={{ $('Build Upsert').first().json.status }}",
+            "applied": "={{ $('Build Upsert').first().json.status === 'sent' }}",
+            "processed_at": "={{ $now.toISO() }}",
+            "cover_letter": "={{ ($('Build Upsert').first().json.cover_letter || '').slice(0, 4000) }}",
+            "vector_id": "={{ 'job-' + $('Build Upsert').first().json.row_id }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        8736,
+        96
+      ],
+      "id": "6c5c9916-ba00-4d5f-95d5-539e9375ae93"
+    },
+    {
+      "name": "Loop Progress",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var bu = $('Build Upsert').first().json || {};\nvar processed = (bu.processed_index || 0);\nvar total = bu.total || 0;\nvar every10 = (processed > 0 && processed % 10 === 0);\nvar tgText = 'Batch progress: ' + processed + '/' + total + ' processed. Latest: ' + (bu.company || '') + ' (' + (bu.status || '') + ', sender ' + (bu.sender_used || '') + ', CV ' + (bu.cv_agent || '?') + '/cover ' + (bu.cover_agent || '?') + ').';\nreturn [{ json: { row_id: bu.row_id, company: bu.company, recipient: bu.recipient, messageId: bu.messageId, sender_used: bu.sender_used, status: bu.status, cv_agent: bu.cv_agent, cover_agent: bu.cover_agent, processed: processed, total: total, every10: every10, tgText: tgText } }];"
+      },
+      "position": [
+        8960,
+        96
+      ],
+      "id": "33d1312f-ec74-427a-b77b-fb5dd5ca2a99"
+    },
+    {
+      "name": "Every 10?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e10",
+              "leftValue": "={{ $json.every10 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "position": [
+        9184,
+        96
+      ],
+      "id": "f2e0c86c-6719-4f98-81b9-b08ada0a940b"
+    },
+    {
+      "name": "Telegram Progress",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ ($('Get Chat ID').first().json && $('Get Chat ID').first().json.telegram_chat_id) ? $('Get Chat ID').first().json.telegram_chat_id : '8890901423' }}",
+        "text": "={{ $json.tgText }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        9408,
+        32
+      ],
+      "webhookId": "f014d355-66c7-4fed-b4d6-28a2a02eac4f",
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "id": "a75f1aa9-efed-4233-9a1e-96aa5a85df0a"
+    },
+    {
+      "name": "Return Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('Loop Progress').first().json.row_id }}"
+            },
+            {
+              "id": "r2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.company }}"
+            },
+            {
+              "id": "r3",
+              "name": "recipient",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.recipient }}"
+            },
+            {
+              "id": "r4",
+              "name": "messageId",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.messageId }}"
+            },
+            {
+              "id": "r5",
+              "name": "sender_used",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.sender_used }}"
+            },
+            {
+              "id": "r6",
+              "name": "status",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.status }}"
+            },
+            {
+              "id": "r7",
+              "name": "cv_agent",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.cv_agent }}"
+            },
+            {
+              "id": "r8",
+              "name": "cover_agent",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.cover_agent }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        9632,
+        96
+      ],
+      "id": "b5bd597a-1fe6-48f8-a425-ba36d5c156e3"
+    },
+    {
+      "name": "Scam Scorer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar company = String(prep.company || '');\nvar email = String(prep.recipient || '').toLowerCase().trim();\nvar jd = String(prep.job_description || '');\nvar score = 0;\nvar reasons = [];\nvar kwBlock = false;\nvar emailDomain = '';\nvar at = email.indexOf('@');\nif (at !== -1) emailDomain = email.slice(at + 1);\nvar freeProviders = ['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com','aol.com','icloud.com','protonmail.com','mail.com','yandex.com','gmx.com','ymail.com'];\nvar isFree = false;\nfor (var i = 0; i < freeProviders.length; i++) { if (emailDomain === freeProviders[i]) { isFree = true; break; } }\nvar compToken = company.toLowerCase().replace(/[^a-z0-9]/g, '');\nvar domainCore = (emailDomain.split('.')[0]) || '';\nvar domainMatches = false;\nif (compToken && domainCore && domainCore.length >= 3) { if (compToken.indexOf(domainCore) !== -1 || domainCore.indexOf(compToken.slice(0, 5)) !== -1) domainMatches = true; }\nif (isFree) { score += 25; reasons.push('Free-mail domain (' + emailDomain + ') used for company ' + company); }\nelse if (emailDomain && compToken && !domainMatches) { score += 10; reasons.push('Email domain ' + emailDomain + ' does not obviously match company name'); }\nvar words = jd ? jd.split(/\\s+/).filter(function (w) { return w.length > 0; }).length : 0;\nif (words > 0 && words < 100) { score += 15; reasons.push('Job description under 100 words (' + words + ')'); }\nvar scamKw = ['training fee','equipment purchase','bank details','bank account number','national id','processing fee','registration fee','pay a deposit','western union','send money','upfront payment','activation fee'];\nvar hay = (jd + ' ' + company).toLowerCase();\nfor (var k = 0; k < scamKw.length; k++) { if (hay.indexOf(scamKw[k]) !== -1) { score += 40; reasons.push('Scam keyword detected: ' + scamKw[k]); kwBlock = true; } }\nif (score > 100) score = 100;\nvar decision = 'proceed';\nif (score >= 85) decision = 'blocked';\nelse if (score >= 60) decision = 'flagged';\nif (kwBlock) decision = 'blocked';\nvar reasonText = reasons.length ? reasons.join('; ') : 'No suspicious signals detected';\nreturn [{ json: Object.assign({}, prep, { scam_score: score, scam_decision: decision, scam_reasons: reasonText }) }];"
+      },
+      "position": [
+        560,
+        420
+      ],
+      "id": "1ef00da4-6c0e-493f-a74f-f3ddef82fae8"
+    },
+    {
+      "name": "Is Scam Blocked",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "blk",
+              "leftValue": "={{ $json.scam_decision }}",
+              "rightValue": "blocked",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "position": [
+        780,
+        420
+      ],
+      "id": "3a6613c4-3595-4913-a0b9-73984e68eca4"
+    },
+    {
+      "name": "Is Scam Flagged",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "flg",
+              "leftValue": "={{ $json.scam_decision }}",
+              "rightValue": "flagged",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "position": [
+        1000,
+        520
+      ],
+      "id": "6fd5de01-a732-48fa-a4d9-125bb9398d31"
+    },
+    {
+      "name": "Mark Blocked",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('Scam Scorer').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "blocked_scam",
+            "scam_score": "={{ $('Scam Scorer').first().json.scam_score }}",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1000,
+        320
+      ],
+      "id": "6fca2b41-b267-49fe-a1e8-a39a4846790c"
+    },
+    {
+      "name": "Telegram Scam Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ ($('Get Chat ID').first().json && $('Get Chat ID').first().json.telegram_chat_id) ? $('Get Chat ID').first().json.telegram_chat_id : '8890901423' }}",
+        "text": "={{ '⚠️ Flagged for review (not auto-sent): ' + $('Scam Scorer').first().json.company + ' — ' + $('Scam Scorer').first().json.recipient + '\\nScam score: ' + $('Scam Scorer').first().json.scam_score + '\\nReasons: ' + $('Scam Scorer').first().json.scam_reasons }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        1220,
+        520
+      ],
+      "webhookId": "scam-alert-webhook-0001",
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "id": "44cf4915-b855-47dd-872f-4be5cf6e2656"
+    },
+    {
+      "name": "Mark Flagged",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('Scam Scorer').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "flagged_for_review",
+            "scam_score": "={{ $('Scam Scorer').first().json.scam_score }}",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1440,
+        520
+      ],
+      "id": "8de60eeb-9daf-4cb3-83f6-f26982712f39"
+    },
+    {
+      "name": "Return Scam",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('Scam Scorer').first().json.row_id }}"
+            },
+            {
+              "id": "s2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('Scam Scorer').first().json.company }}"
+            },
+            {
+              "id": "s3",
+              "name": "recipient",
+              "type": "string",
+              "value": "={{ $('Scam Scorer').first().json.recipient }}"
+            },
+            {
+              "id": "s4",
+              "name": "status",
+              "type": "string",
+              "value": "={{ $('Scam Scorer').first().json.scam_decision === 'blocked' ? 'blocked_scam' : 'flagged_for_review' }}"
+            },
+            {
+              "id": "s5",
+              "name": "scam_score",
+              "type": "number",
+              "value": "={{ $('Scam Scorer').first().json.scam_score }}"
+            },
+            {
+              "id": "s6",
+              "name": "messageId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "s7",
+              "name": "sender_used",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "s8",
+              "name": "cv_agent",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "s9",
+              "name": "cover_agent",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        1660,
+        420
+      ],
+      "id": "7ef0d447-50f4-4e04-982c-e20614136709"
+    },
+    {
+      "name": "PII Scrubber",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $input.first().json || {};\nvar cv = String(j.tailored_cv || '');\nvar cover = String(j.cover_letter || '');\nvar warnings = [];\nvar redacted = false;\nvar reNid = /\\b[12]\\d{9}\\b/g;\nvar reIban = /\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b/g;\nvar rePass = /\\b[A-Z]{1,2}\\d{6,8}\\b/g;\nvar reBank = /\\b\\d{12,}\\b/g;\nfunction scrub(text, label) {\n  var t = text;\n  var patterns = [ ['national_id', reNid], ['iban', reIban], ['passport', rePass], ['bank_account', reBank] ];\n  for (var i = 0; i < patterns.length; i++) {\n    var name = patterns[i][0]; var re = patterns[i][1];\n    if (re.test(t)) { warnings.push(name + ' pattern found in ' + label); redacted = true; }\n    t = t.replace(re, '[REDACTED]');\n  }\n  return t;\n}\ncv = scrub(cv, 'CV');\ncover = scrub(cover, 'cover letter');\nvar stopLine = 'If you\\u2019d prefer not to receive future applications from this platform, reply STOP.';\nif (cover.indexOf('reply STOP') === -1) { cover = cover + '\\n\\n' + stopLine; }\nreturn [{ json: { row_id: j.row_id, company: j.company, recipient: j.recipient, tailored_cv: cv, cover_letter: cover, cv_agent: j.cv_agent || '', cover_agent: j.cover_agent || '', tone_score: j.tone_score, tone_flagged: j.tone_flagged, pii_redacted: redacted, pii_warnings: warnings.join('; ') } }];"
+      },
+      "position": [
+        5264,
+        96
+      ],
+      "id": "83712261-5662-444e-b46d-68f7ad38e385"
+    },
+    {
+      "name": "PII Redacted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pr",
+              "leftValue": "={{ $json.pii_redacted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "position": [
+        5264,
+        300
+      ],
+      "id": "4ea95cca-5ebd-4828-bb8f-59b1d4a5d665"
+    },
+    {
+      "name": "Log PII Warn",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Qh3DXLSbV0aaLSxS"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "event_type": "pii_redaction",
+            "log_timestamp": "={{ $now.toISO() }}",
+            "message": "={{ 'PII redacted for row ' + $('PII Scrubber').first().json.row_id + ' (' + $('PII Scrubber').first().json.company + '): ' + $('PII Scrubber').first().json.pii_warnings }}",
+            "node_name": "PII Scrubber",
+            "payload": "={{ $('PII Scrubber').first().json.recipient }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        5488,
+        300
+      ],
+      "id": "0471854e-eb66-4d92-ae07-be9535b92afb"
+    },
+    {
+      "name": "Compliance Audit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Ouk2wIkJvBrXv2L7"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "related_row_id": "={{ Number($('Build Upsert').first().json.row_id) }}",
+            "company": "={{ $('Build Upsert').first().json.company }}",
+            "recipient": "={{ $('Build Upsert').first().json.recipient }}",
+            "cv_version": "={{ ($('Build Upsert').first().json.cv_agent || '') + ' | ' + ($('Build Upsert').first().json.tailored_cv || '').slice(0, 1800) }}",
+            "cover_version": "={{ ($('Build Upsert').first().json.cover_agent || '') + ' | ' + ($('Build Upsert').first().json.cover_letter || '').slice(0, 1800) }}",
+            "approval_action": "auto_approved",
+            "pii_redacted": "={{ $('PII Scrubber').first().json.pii_redacted === true }}",
+            "sent_ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        8848,
+        96
+      ],
+      "id": "0c63d565-f15a-4ed4-a01a-868c8e2b55b7"
+    },
+    {
+      "name": "Get Send Limit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "daily_send_limit"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "position": [
+        120,
+        300
+      ],
+      "id": "e13c142f-05eb-4ec9-8ae2-edd80565e1a2"
+    },
+    {
+      "name": "Get Sent Today",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "sent"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "position": [
+        240,
+        300
+      ],
+      "id": "5af5361b-eb96-499f-bf09-3d8264af7578"
+    },
+    {
+      "name": "Volume Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var limitRaw = 15;\ntry { var c = $('Get Send Limit').first().json; if (c && c.config_value !== undefined && c.config_value !== null && String(c.config_value).length) { var pv = parseInt(String(c.config_value), 10); if (!isNaN(pv)) limitRaw = pv; } } catch (e) {}\nvar enabled = false;\ntry { var g = $('Get Guard Flag').first().json; if (g && String(g.config_value).toLowerCase() === 'true') enabled = true; } catch (e) {}\nvar rows = [];\ntry { rows = $('Get Sent Today').all(); } catch (e) { rows = []; }\nvar now = new Date();\nvar startToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0);\nvar endToday = startToday + (24 * 60 * 60 * 1000);\nvar sentToday = 0;\nfor (var i = 0; i < rows.length; i++) {\n  var r = rows[i].json || {};\n  if (!r || Object.keys(r).length === 0) continue;\n  var pa = r.processed_at ? Date.parse(r.processed_at) : NaN;\n  if (!isNaN(pa) && pa >= startToday && pa < endToday) sentToday++;\n}\nvar limitReached = enabled && (sentToday >= limitRaw);\nreturn [{ json: { guard_enabled: enabled, daily_limit: limitRaw, sent_today: sentToday, limit_reached: limitReached } }];"
+      },
+      "position": [
+        360,
+        300
+      ],
+      "id": "6fe5bc43-cedc-4351-8a92-fed21ee690e7"
+    },
+    {
+      "name": "Limit Reached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "lr",
+              "leftValue": "={{ $json.limit_reached }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "position": [
+        480,
+        300
+      ],
+      "id": "dd311208-ce3b-4414-8024-e428d9b65fb4"
+    },
+    {
+      "name": "Mark Deferred",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('When Called').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "deferred"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        600,
+        180
+      ],
+      "id": "17b20e10-6fd1-436a-8691-a6747f8f555f"
+    },
+    {
+      "name": "Telegram Deferred",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ ($('Get Chat ID').first().json && $('Get Chat ID').first().json.telegram_chat_id) ? $('Get Chat ID').first().json.telegram_chat_id : '8890901423' }}",
+        "text": "={{ 'Daily limit reached (' + $('Volume Guard').first().json.sent_today + '/' + $('Volume Guard').first().json.daily_limit + '). Deferred: ' + $('When Called').first().json.company + ' — will retry tomorrow.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "position": [
+        820,
+        180
+      ],
+      "webhookId": "vol-deferred-tg-0001",
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "id": "efcf446b-7a3d-40bf-bca4-79c499576ce2"
+    },
+    {
+      "name": "Return Deferred",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('When Called').first().json.row_id }}"
+            },
+            {
+              "id": "d2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('When Called').first().json.company }}"
+            },
+            {
+              "id": "d3",
+              "name": "status",
+              "type": "string",
+              "value": "deferred"
+            },
+            {
+              "id": "d4",
+              "name": "messageId",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        1040,
+        180
+      ],
+      "id": "c479fa11-0da7-42ca-9a8c-4387786b3642"
+    },
+    {
+      "name": "Get Guard Flag",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "volume_guard_enabled"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "position": [
+        180,
+        300
+      ],
+      "id": "3deb58ee-90ed-44aa-82f9-b1234db08d9e"
+    },
+    {
+      "name": "Prep RTF Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nvar j = $input.first().json || {};\nvar cv = String(j.tailored_cv || '');\n\nfunction section(text, headers, stops) {\n  var lc = text.toLowerCase();\n  var start = -1, hlen = 0;\n  for (var i = 0; i < headers.length; i++) {\n    var idx = lc.indexOf(headers[i]);\n    if (idx !== -1) { start = idx; hlen = headers[i].length; break; }\n  }\n  if (start === -1) return '';\n  var from = start + hlen;\n  var end = text.length;\n  for (var s = 0; s < stops.length; s++) {\n    var si = lc.indexOf(stops[s], from);\n    if (si !== -1 && si < end) end = si;\n  }\n  return text.slice(from, end).replace(/^[\\s:.-]+/, '').replace(/\\s+$/, '').replace(/\\n{2,}/g, '\\n').trim();\n}\n\nvar gSummary = 'Industrial Engineer specializing in process optimization, supply chain logistics, and operations management. Proven ability to streamline workflows, coordinate cross-functional teams, and leverage Lean methodologies to drive measurable efficiency improvements and operational compliance.';\nvar gComp = 'Lean Manufacturing | Process Optimization | Supply Chain Logistics | Inventory Management | Vendor Relations | Risk Management | Cross-Functional Leadership | Data Analysis';\n\nvar stops = ['core competencies','competencies','skills','education','professional experience','experience','certifications','languages'];\nvar summary = section(cv, ['professional summary','summary'], stops);\nif (!summary || summary.length < 40) summary = gSummary;\nvar comp = section(cv, ['core competencies','competencies','skills'], ['education','professional experience','experience','certifications','languages','summary']);\nif (!comp || comp.length < 20) comp = gComp;\n\nvar d = {\n  name: 'Hassan Ahmed Adam Mohammad',\n  contact: 'Industrial Engineer \\u2014 Jeddah, Saudi Arabia | hasanadam506@gmail.com | +966 57 144 8656',\n  summary: summary,\n  competencies: comp,\n  education: [\n    { degree: 'BSc Industrial Engineering', school: 'University of Business and Technology (UBT), Jeddah', dates: 'March 2022 - Present' },\n    { degree: 'STEM Diploma', school: 'International Philippine School in Jeddah (IPSJ)', dates: 'January 2014 - November 2019' }\n  ],\n  experience: [\n    { title: 'Senior Project: Process Optimization Using Lean Management, KAIA', dates: 'Academic', bullets: [ 'Applied DMAIC and Value Stream Mapping to optimize passenger check-in workflows.', 'Reduced average check-in time from 15.5 to 9.2 minutes (40% acceleration); cut passenger waiting time 50% and manual verification 57%.' ] },\n    { title: 'Logistics & Operations Coordinator, UBT, Jeddah', dates: 'June 2022 - December 2025', bullets: [ 'Orchestrated travel, accommodation, and logistics frameworks for international athletic contingents.', 'Recruited and directed large-scale volunteer workforces for high-profile events including the Jeddah Marathon.' ] },\n    { title: 'Purchasing Assistant, Aljabr, Dammam', dates: 'March 2024 - August 2024', bullets: [ 'Directed procurement operations to guarantee uninterrupted supply chain flow and timely material delivery.', 'Optimized vendor relationships to establish cost-effective communication channels.' ] },\n    { title: 'Production Management Secretary, Piece of Fabric Est., Jeddah', dates: 'February 2021 - November 2022', bullets: [ 'Engineered standardized production schedules to maximize operational output and minimize downtime.' ] },\n    { title: 'Educational Operations Assistant, AGS Advanced Generations School, Jeddah', dates: 'January 2019 - December 2019', bullets: [ 'Streamlined communication channels between staff and external stakeholders.' ] }\n  ],\n  certs: [ 'OSHA 30-Hour General Industry', 'ISO 9001:2015 & Risk Management', 'Business Analysis Virtual Work Experience (BCG & Misk)', 'Professional Certificate in Productivity (PCP)' ]\n};\n\nvar esc = function (s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };\nvar LF = String.fromCharCode(10);\nvar coverHtml = esc(j.cover_letter).split(LF).join('<br>');\nd.row_id = j.row_id;\nd.company = j.company;\nd.recipient = j.recipient;\nd.cv_agent = j.cv_agent || '';\nd.cover_agent = j.cover_agent || '';\nd.tailored_cv = j.tailored_cv || '';\nd.cover_letter = j.cover_letter || '';\nd.cover_html = coverHtml;\nreturn [{ json: d }];\n"
+      },
+      "position": [
+        5600,
+        96
+      ],
+      "id": "90878854-e11e-42e4-b13b-b4a12c28ea38"
+    },
+    {
+      "name": "Build RTF CV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "function rtfEscape(text) {\n  let out = '';\n  for (const ch of String(text || '')) {\n    const code = ch.codePointAt(0);\n    if (ch === '\\\\') out += '\\\\\\\\';\n    else if (ch === '{') out += '\\\\{';\n    else if (ch === '}') out += '\\\\}';\n    else if (ch === '\\n') out += '\\\\par\\n';\n    else if (code > 126) {\n      const signed = code > 32767 ? code - 65536 : code;\n      out += `\\\\u${signed}?`;\n    } else {\n      out += ch;\n    }\n  }\n  return out;\n}\n\nconst d = $input.item.json;\nlet rtf = `{\\\\rtf1\\\\ansi\\\\deff0\\n{\\\\fonttbl{\\\\f0 Calibri;}}\\n\\\\f0\\n{\\\\b\\\\fs32 ${rtfEscape(d.name)}\\\\par}\\n\\\\fs18 ${rtfEscape(d.contact)}\\\\par\\n\\\\par\\n{\\\\b\\\\fs24 Professional Summary\\\\par}\\n\\\\fs20 ${rtfEscape(d.summary)}\\\\par\\n\\\\par\\n{\\\\b\\\\fs24 Core Competencies\\\\par}\\n\\\\fs20 ${rtfEscape(d.competencies)}\\\\par\\n\\\\par\\n{\\\\b\\\\fs24 Education\\\\par}\\n`;\nfor (const e of d.education) {\n  rtf += `{\\\\b ${rtfEscape(e.degree)}} — ${rtfEscape(e.school)}, ${rtfEscape(e.dates)}\\\\par\\n`;\n}\nrtf += `\\\\par\\n{\\\\b\\\\fs24 Professional Experience\\\\par}\\n`;\nfor (const job of d.experience) {\n  rtf += `{\\\\b ${rtfEscape(job.title)}} — ${rtfEscape(job.dates)}\\\\par\\n`;\n  for (const bullet of job.bullets) {\n    rtf += `\\\\bullet  ${rtfEscape(bullet)}\\\\par\\n`;\n  }\n  rtf += `\\\\par\\n`;\n}\nrtf += `{\\\\b\\\\fs24 Certifications\\\\par}\\n`;\nfor (const c of d.certs) {\n  rtf += `\\\\bullet  ${rtfEscape(c)}\\\\par\\n`;\n}\nrtf += `}`;\nconst base64 = Buffer.from(rtf, 'utf8').toString('base64');\nreturn { json: { rtf_base64: base64, filename: `${d.name.replace(/\\s+/g, '_')}_CV.rtf` } };\n"
+      },
+      "position": [
+        5824,
+        96
+      ],
+      "id": "0ecb748a-75f0-4c95-9ddc-97f5e7f909b8"
+    },
+    {
+      "name": "Build Brevo Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nvar p = $('Prep RTF Data').first().json || {};\nvar r = $('Build RTF CV').first().json || {};\nvar b64 = r.rtf_base64 || '';\nvar filename = r.filename || 'CV_Hassan_Adam.rtf';\nvar subject = 'Application for Industrial Engineering Position - Hassan Adam';\nvar htmlContent = '<html><body style=\"font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#222;\">' + (p.cover_html || '') + '</body></html>';\nvar att = b64 ? [{ name: filename, content: b64 }] : [];\nfunction body(fromEmail) { return { sender: { name: 'Hassan Ahmed Adam Mohammad', email: fromEmail }, to: [{ email: p.recipient }], subject: subject, htmlContent: htmlContent, attachment: att }; }\nreturn [{ json: { row_id: p.row_id, recipient: p.recipient, company: p.company, cv_agent: p.cv_agent, cover_agent: p.cover_agent, tailored_cv: p.tailored_cv, cover_letter: p.cover_letter, cover_html: p.cover_html, rtf_filename: filename, rtf_bytes: b64.length, brevoPrimary: body('jobapplier@agentmail.to'), brevoFallback: body('hasanadam506@gmail.com') } }];\n"
+      },
+      "position": [
+        6048,
+        96
+      ],
+      "id": "317f80f1-1109-4eb5-81fa-ceb512d29c4d"
+    },
+    {
+      "name": "Get Chat ID",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "uPnK3OyUu309bcEH"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "user_id",
+              "condition": "eq",
+              "keyValue": "={{ $('When Called').first().json.user_id ? $('When Called').first().json.user_id : 'hassan-adam' }}"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "position": [
+        -220,
+        300
+      ],
+      "id": "844086f2-ddc2-4892-b945-652890f32fb5"
+    },
+    {
+      "name": "Get DeepSeek Flag",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "deepseek_enabled"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "position": [
+        -100,
+        300
+      ],
+      "id": "03c89004-2df2-49b2-bda1-18a9a1dc5966"
+    },
+    {
+      "name": "DeepSeek Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dse",
+              "leftValue": "={{ ($('Get DeepSeek Flag').first().json && $('Get DeepSeek Flag').first().json.config_value) ? $('Get DeepSeek Flag').first().json.config_value : 'false' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "position": [
+        5152,
+        480
+      ],
+      "id": "0cd88f39-b49a-4c84-bea0-cc8d6c11ad1e"
+    },
+    {
+      "name": "Build DeepSeek Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar mq = $('Merge Quality').first().json || {};\nvar baseFacts = String(prep.cv_text || '');\nvar jd = String(prep.job_description || '');\nvar draftCv = String(mq.tailored_cv || '');\nvar draftCover = String(mq.cover_letter || '');\nvar sys = \"You are the final approval judge for a job application. Respond ONLY in JSON: { \\\"hallucinations\\\": [...], \\\"tone_match_score\\\": 0-100, \\\"confidence_score\\\": 0-100, \\\"decision\\\": \\\"approve\\\"|\\\"rewrite\\\"|\\\"block\\\", \\\"rewrite_instructions\\\": \\\"string or null\\\", \\\"reasoning\\\": \\\"one paragraph\\\" }\";\nvar usr = 'BASE_CV_FACTS:\\n' + baseFacts + '\\n\\nJOB_DESCRIPTION:\\n' + jd + '\\n\\nDRAFT_CV:\\n' + draftCv + '\\n\\nDRAFT_COVER_LETTER:\\n' + draftCover;\nvar deepseekBody = { model: 'deepseek-chat', temperature: 0.2, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: sys }, { role: 'user', content: usr } ] };\nreturn [{ json: { row_id: mq.row_id, company: mq.company, recipient: mq.recipient, tailored_cv: draftCv, cover_letter: draftCover, cv_agent: mq.cv_agent || '', cover_agent: mq.cover_agent || '', tone_score: mq.tone_score, tone_flagged: mq.tone_flagged, base_facts: baseFacts, job_description: jd, deepseekBody: deepseekBody } }];"
+      },
+      "position": [
+        5376,
+        560
+      ],
+      "id": "a7fcf2fd-d709-4444-a725-2c74ec08feed"
+    },
+    {
+      "name": "DeepSeek Judge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "deepSeekApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.deepseekBody) }}",
+        "options": {}
+      },
+      "position": [
+        5600,
+        560
+      ],
+      "credentials": {
+        "deepSeekApi": {
+          "id": "JcfeGmtChFdDrNbF",
+          "name": "DeepSeek account"
+        }
+      },
+      "id": "53a4a643-8ab9-4be5-89b4-241a98646555"
+    },
+    {
+      "name": "Parse DeepSeek",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var req = $('Build DeepSeek Req').first().json || {};\nvar resp = $input.first().json || {};\nvar raw = '';\ntry { raw = resp.choices[0].message.content || ''; } catch (e) { raw = ''; }\nvar parsed = {};\ntry { parsed = JSON.parse(raw); } catch (e) { parsed = {}; }\nvar decision = String(parsed.decision || 'approve').toLowerCase();\nif (decision !== 'approve' && decision !== 'rewrite' && decision !== 'block') decision = 'approve';\nvar halluc = Array.isArray(parsed.hallucinations) ? parsed.hallucinations : [];\nreturn [{ json: { row_id: req.row_id, company: req.company, recipient: req.recipient, tailored_cv: req.tailored_cv, cover_letter: req.cover_letter, cv_agent: req.cv_agent, cover_agent: req.cover_agent, tone_score: req.tone_score, tone_flagged: req.tone_flagged, base_facts: req.base_facts, job_description: req.job_description, deepseek_decision: decision, deepseek_confidence: (parsed.confidence_score !== undefined ? parsed.confidence_score : null), deepseek_tone_match: (parsed.tone_match_score !== undefined ? parsed.tone_match_score : null), deepseek_hallucinations: halluc, rewrite_instructions: (parsed.rewrite_instructions || ''), deepseek_reasoning: String(parsed.reasoning || '') } }];"
+      },
+      "position": [
+        5824,
+        560
+      ],
+      "id": "a5541d97-aa5b-43b3-9ac3-8ec57abb3e9d"
+    },
+    {
+      "name": "DeepSeek Decision",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.deepseek_decision }}",
+                    "rightValue": "approve",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "approve"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.deepseek_decision }}",
+                    "rightValue": "rewrite",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "rewrite"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.deepseek_decision }}",
+                    "rightValue": "block",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "block"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "proceed"
+        }
+      },
+      "position": [
+        6048,
+        560
+      ],
+      "id": "ecd15040-687e-4310-a8ef-a38611a19ee3"
+    },
+    {
+      "name": "Build Rewrite Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var d = $input.first().json || {};\nvar sys = 'You are a cover letter writer for Hassan Ahmed Adam Mohammad, an Industrial Engineer in Jeddah. Rewrite the cover letter to address the reviewer feedback WITHOUT fabricating anything not in the base facts. Return ONLY the cover letter as plain text.';\nvar usr = 'Base facts: ' + String(d.base_facts || '').slice(0, 1500) + '\\n\\nJob description: ' + String(d.job_description || '').slice(0, 1500) + '\\n\\nCurrent cover letter: ' + String(d.cover_letter || '') + '\\n\\nReviewer rewrite instructions: ' + String(d.rewrite_instructions || 'Improve tone match and completeness.');\nreturn [{ json: Object.assign({}, d, { rewrite_system: sys, rewrite_user: usr }) }];"
+      },
+      "position": [
+        6272,
+        480
+      ],
+      "id": "8950470d-d889-48ce-967c-6ebe55b4ccf4"
+    },
+    {
+      "name": "Parse Rewrite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var d = $('Build Rewrite Req').first().json || {};\nvar resp = $input.first().json || {};\nvar txt = String(resp.text || '').trim();\nvar newCover = txt.length > 40 ? txt : (d.cover_letter || '');\nreturn [{ json: { row_id: d.row_id, company: d.company, recipient: d.recipient, tailored_cv: d.tailored_cv, cover_letter: newCover, cv_agent: d.cv_agent, cover_agent: (d.cover_agent || '') + '+hub_rewrite', tone_score: d.tone_score, tone_flagged: d.tone_flagged, deepseek_decision: 'rewrite', deepseek_reasoning: d.deepseek_reasoning } }];"
+      },
+      "position": [
+        6720,
+        480
+      ],
+      "id": "a930fdca-916a-410b-8e37-2b32c9d0b007"
+    },
+    {
+      "name": "Log DeepSeek Block",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Qh3DXLSbV0aaLSxS"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "event_type": "deepseek_block",
+            "log_timestamp": "={{ $now.toISO() }}",
+            "message": "={{ 'DeepSeek BLOCKED row ' + $('Parse DeepSeek').first().json.row_id + ' (' + $('Parse DeepSeek').first().json.company + '): ' + $('Parse DeepSeek').first().json.deepseek_reasoning }}",
+            "node_name": "DeepSeek Judge",
+            "payload": "={{ $('Parse DeepSeek').first().json.recipient }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        6272,
+        680
+      ],
+      "id": "c53208d8-a1ff-4bde-9564-3ec80130a32f"
+    },
+    {
+      "name": "Return DeepSeek Blocked",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('Parse DeepSeek').first().json.row_id }}"
+            },
+            {
+              "id": "b2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('Parse DeepSeek').first().json.company }}"
+            },
+            {
+              "id": "b3",
+              "name": "status",
+              "type": "string",
+              "value": "blocked_by_judge"
+            },
+            {
+              "id": "b4",
+              "name": "messageId",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        6496,
+        680
+      ],
+      "id": "d8017cef-f343-46fb-8cee-bfcd0ed020b7"
+    },
+    {
+      "name": "Prep Sheets Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var bu = $('Build Upsert').first().json || {};\nvar uid = 'hassan-adam';\ntry { var wc = $('When Called').first().json; if (wc && wc.user_id) uid = wc.user_id; } catch (e) {}\nvar decision = 'auto_approved';\ntry { var pj = $('Parse DeepSeek').first().json; if (pj && pj.deepseek_decision) decision = pj.deepseek_decision; } catch (e) {}\nvar fit = '';\ntry { var gf = $('Get Fit Score').first().json; if (gf && gf.fit_score !== undefined && gf.fit_score !== null) fit = gf.fit_score; } catch (e) {}\nvar jobTitle = '';\ntry { var gf2 = $('Get Fit Score').first().json; if (gf2 && gf2.job_title) jobTitle = gf2.job_title; } catch (e) {}\nreturn [{ json: { timestamp: new Date().toISOString(), user_id: uid, company: bu.company || '', job_title: jobTitle, fit_score: fit, decision: decision, status: bu.status || '' } }];"
+      },
+      "position": [
+        9184,
+        300
+      ],
+      "id": "c877050d-5b65-4f60-bec5-72759da204a3"
+    },
+    {
+      "name": "Sheets Backup",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1rivD5luGlZqq6MCEUVvlT263OfUKXrzH6cr9cf0nG3A",
+          "cachedResultName": "Job Applications Log"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Job Applications Log"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fit_score",
+              "displayName": "fit_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision",
+              "displayName": "decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        9408,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "FMoT5bOW2uTzGb0F",
+          "name": "Google Sheets account"
+        }
+      },
+      "id": "14ea331f-80db-4dd5-b12c-17beac387cc9"
+    },
+    {
+      "name": "CV via Hub",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Provider Hub"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Prep Row').first().json.cvSys }}",
+            "user": "={{ $('Prep Row').first().json.cvUsr }}",
+            "max_tokens": "={{ 1800 }}",
+            "temperature": "={{ 0.6 }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        1120,
+        96
+      ],
+      "onError": "continueRegularOutput",
+      "id": "c3620adf-9b97-472f-9778-1c1411fad472"
+    },
+    {
+      "name": "Cover via Hub",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Provider Hub"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Prep Row').first().json.clSys }}",
+            "user": "={{ $('Prep Row').first().json.clUsr }}",
+            "max_tokens": "={{ 900 }}",
+            "temperature": "={{ 0.6 }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        2912,
+        96
+      ],
+      "onError": "continueRegularOutput",
+      "id": "e66925b6-73aa-43cf-842e-0c686faaa5dc"
+    },
+    {
+      "name": "Rewrite via Hub",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Provider Hub"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Build Rewrite Req').first().json.rewrite_system }}",
+            "user": "={{ $('Build Rewrite Req').first().json.rewrite_user }}",
+            "max_tokens": "={{ 900 }}",
+            "temperature": "={{ 0.6 }}"
+          }
+        },
+        "options": {}
+      },
+      "position": [
+        6496,
+        480
+      ],
+      "onError": "continueRegularOutput",
+      "id": "08c927c4-2ded-4f1d-b0b0-08e8c048786f"
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Get Chat ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Source": {
+      "main": [
+        [
+          {
+            "node": "Prep Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Row": {
+      "main": [
+        [
+          {
+            "node": "Scam Scorer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scam Scorer": {
+      "main": [
+        [
+          {
+            "node": "Is Scam Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Scam Blocked": {
+      "main": [
+        [
+          {
+            "node": "Mark Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Scam Flagged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Blocked": {
+      "main": [
+        [
+          {
+            "node": "Return Scam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Scam Flagged": {
+      "main": [
+        [
+          {
+            "node": "Telegram Scam Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HF Embed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Scam Alert": {
+      "main": [
+        [
+          {
+            "node": "Mark Flagged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Flagged": {
+      "main": [
+        [
+          {
+            "node": "Return Scam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HF Embed": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Embedding": {
+      "main": [
+        [
+          {
+            "node": "CV via Hub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge CV": {
+      "main": [
+        [
+          {
+            "node": "Cover via Hub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Cover": {
+      "main": [
+        [
+          {
+            "node": "HF Quality Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HF Quality Gate": {
+      "main": [
+        [
+          {
+            "node": "Check Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Simple Tone Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Merge Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Quality": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Tone Check": {
+      "main": [
+        [
+          {
+            "node": "Merge Quality",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Brevo Primary": {
+      "main": [
+        [
+          {
+            "node": "Parse Brevo Primary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ensure Fallback Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Brevo Primary": {
+      "main": [
+        [
+          {
+            "node": "Merge Brevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Brevo": {
+      "main": [
+        [
+          {
+            "node": "Build Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brevo Fallback (Gmail sender)": {
+      "main": [
+        [
+          {
+            "node": "Parse Brevo Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Brevo Fallback": {
+      "main": [
+        [
+          {
+            "node": "Merge Brevo",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Upsert": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Upsert": {
+      "main": [
+        [
+          {
+            "node": "Drive Upload Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Upload Cover": {
+      "main": [
+        [
+          {
+            "node": "S3 Backup Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S3 Backup Cover": {
+      "main": [
+        [
+          {
+            "node": "Update Row Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Row Status": {
+      "main": [
+        [
+          {
+            "node": "Compliance Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Progress": {
+      "main": [
+        [
+          {
+            "node": "Every 10?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 10?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Progress": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PII Scrubber": {
+      "main": [
+        [
+          {
+            "node": "Prep RTF Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PII Redacted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PII Redacted?": {
+      "main": [
+        [
+          {
+            "node": "Log PII Warn",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Compliance Audit": {
+      "main": [
+        [
+          {
+            "node": "Prep Sheets Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Send Limit": {
+      "main": [
+        [
+          {
+            "node": "Get Guard Flag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sent Today": {
+      "main": [
+        [
+          {
+            "node": "Volume Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Volume Guard": {
+      "main": [
+        [
+          {
+            "node": "Limit Reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Reached?": {
+      "main": [
+        [
+          {
+            "node": "Mark Deferred",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CV Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Deferred": {
+      "main": [
+        [
+          {
+            "node": "Telegram Deferred",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Deferred": {
+      "main": [
+        [
+          {
+            "node": "Return Deferred",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Guard Flag": {
+      "main": [
+        [
+          {
+            "node": "Get Sent Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep RTF Data": {
+      "main": [
+        [
+          {
+            "node": "Build RTF CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build RTF CV": {
+      "main": [
+        [
+          {
+            "node": "Build Brevo Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Brevo Body": {
+      "main": [
+        [
+          {
+            "node": "Brevo Primary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Chat ID": {
+      "main": [
+        [
+          {
+            "node": "Get DeepSeek Flag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get DeepSeek Flag": {
+      "main": [
+        [
+          {
+            "node": "Get Send Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Build DeepSeek Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PII Scrubber",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build DeepSeek Req": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Judge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Judge": {
+      "main": [
+        [
+          {
+            "node": "Parse DeepSeek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse DeepSeek": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Decision": {
+      "main": [
+        [
+          {
+            "node": "PII Scrubber",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Rewrite Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log DeepSeek Block",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PII Scrubber",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Rewrite Req": {
+      "main": [
+        [
+          {
+            "node": "Rewrite via Hub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Rewrite": {
+      "main": [
+        [
+          {
+            "node": "PII Scrubber",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log DeepSeek Block": {
+      "main": [
+        [
+          {
+            "node": "Return DeepSeek Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Sheets Row": {
+      "main": [
+        [
+          {
+            "node": "Sheets Backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sheets Backup": {
+      "main": [
+        [
+          {
+            "node": "Loop Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV via Hub": {
+      "main": [
+        [
+          {
+            "node": "Merge CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover via Hub": {
+      "main": [
+        [
+          {
+            "node": "Merge Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rewrite via Hub": {
+      "main": [
+        [
+          {
+            "node": "Parse Rewrite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Fallback Fields": {
+      "main": [
+        [
+          {
+            "node": "Brevo Fallback (Gmail sender)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

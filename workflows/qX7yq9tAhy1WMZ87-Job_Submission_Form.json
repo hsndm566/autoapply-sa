@@ -1,0 +1,200 @@
+{
+  "name": "Job Submission Form",
+  "nodes": [
+    {
+      "id": "c7fb4080-8f70-421d-a82a-bdf125139a70",
+      "name": "Job Submission Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "authentication": "none",
+        "formTitle": "Submit a Job",
+        "formDescription": "Add a job to your tracker. It will be scored and a tailored cover letter drafted on the next daily run. Fill in a Contact Email only if you want the application to be auto-sent when it is a strong match.",
+        "responseMode": "onReceived",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "job_title",
+              "fieldLabel": "Job Title",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldName": "company",
+              "fieldLabel": "Company",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldName": "location",
+              "fieldLabel": "Location",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldName": "job_description",
+              "fieldLabel": "Job Description (paste the full posting)",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldName": "job_url",
+              "fieldLabel": "Job URL",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldName": "contact_email",
+              "fieldLabel": "Contact Email (leave blank to only draft, not auto-send)",
+              "fieldType": "email",
+              "requiredField": false
+            }
+          ]
+        },
+        "options": {
+          "path": "submit-job",
+          "buttonLabel": "Add Job",
+          "respondWithOptions": {
+            "values": {
+              "respondWith": "text",
+              "formSubmittedText": "Job added to your tracker. It will be scored and a cover letter drafted on the next daily run."
+            }
+          }
+        }
+      },
+      "webhookId": "ebc87e9c-65cc-4c6b-a306-55d32c0449b0"
+    },
+    {
+      "id": "c31f4a8a-42fb-4529-848a-a9ab00822ebf",
+      "name": "Add Job To Tracker",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_title": "={{ $json.job_title }}",
+            "company": "={{ $json.company }}",
+            "location": "={{ $json.location }}",
+            "job_description": "={{ $json.job_description }}",
+            "job_url": "={{ $json.job_url }}",
+            "contact_email": "={{ $json.contact_email }}",
+            "status": "new",
+            "applied": false
+          },
+          "schema": [
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_description",
+              "displayName": "job_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_url",
+              "displayName": "job_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contact_email",
+              "displayName": "contact_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "applied",
+              "displayName": "applied",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Job Submission Form": {
+      "main": [
+        [
+          {
+            "node": "Add Job To Tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "errorWorkflow": "zN6y0EneCaQyQwci",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": null
+}

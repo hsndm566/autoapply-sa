@@ -1,0 +1,513 @@
+{
+  "name": "Brevo Webhook Listener",
+  "nodes": [
+    {
+      "id": "brevo000-0000-0000-0000-000000000001",
+      "name": "Brevo Event In",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "brevo-events",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "brevo-events-listener-0001"
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000002",
+      "name": "Classify Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var body = ($input.first().json && $input.first().json.body) ? $input.first().json.body : ($input.first().json || {});\nvar ev = String(body.event || body.Event || '').toLowerCase();\nvar email = String(body.email || body.From || body.from || body.sender || '').toLowerCase().trim();\nvar m = email.match(/<([^>]+)>/); if (m) email = m[1];\nvar text = String(body.RawTextBody || body.text || body.rawTextBody || body.subject || body.Subject || body.message || '').toLowerCase();\nvar domain = '';\nvar at = email.indexOf('@'); if (at !== -1) domain = email.slice(at + 1);\nvar bounceEvents = ['hard_bounce','soft_bounce','hardbounce','softbounce','bounce','blocked','invalid_email','error'];\nvar isBounce = false; for (var i = 0; i < bounceEvents.length; i++) { if (ev.indexOf(bounceEvents[i]) !== -1) { isBounce = true; break; } }\nvar bounceType = ev.indexOf('soft') !== -1 ? 'soft_bounce' : 'hard_bounce';\nvar autoMarkers = ['out of office','auto-generated','auto generated','automatic reply','autoreply','do not reply','do-not-reply','no longer employed','no longer with','away from my','vacation','thank you for your application','we have received your application','application received'];\nvar interviewKw = ['schedule a call','available for an interview','next steps','interview','set up a meeting','book a time','phone screen','let us talk','let’s talk','arrange a call'];\nvar isAuto = false; for (var a = 0; a < autoMarkers.length; a++) { if (text.indexOf(autoMarkers[a]) !== -1) { isAuto = true; break; } }\nvar isInterview = false; for (var k = 0; k < interviewKw.length; k++) { if (text.indexOf(interviewKw[k]) !== -1) { isInterview = true; break; } }\n// scheduling keyword overrides generic 'thank you' auto marker\nif (isInterview) isAuto = false;\nvar cls = 'ignored';\nif (isBounce) cls = 'bounced';\nelse if (isInterview) cls = 'interview_invite';\nelse if (isAuto) cls = 'auto_reply';\nelse if (email) cls = 'replied';\nvar tgText = '';\nif (cls === 'interview_invite') { tgText = '🎉 Interview invite from ' + (domain || email) + '! Reply to schedule. Tip: use the mock interview feature to prep.'; }\nreturn [{ json: { event_raw: ev, email: email, domain: domain, classification: cls, is_bounce: isBounce, is_interview: (cls === 'interview_invite'), bounce_type: bounceType, tg_text: tgText } }];"
+      }
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000003",
+      "name": "Update Job By Email",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "contact_email",
+              "condition": "eq",
+              "keyValue": "={{ $('Classify Event').first().json.email }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "contact_email"
+          ],
+          "value": {
+            "status": "={{ $('Classify Event').first().json.classification === 'bounced' ? 'bounced' : $('Classify Event').first().json.classification }}",
+            "feedback_status": "={{ $('Classify Event').first().json.classification }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000004",
+      "name": "Get Domain Rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "contact_email",
+              "condition": "like",
+              "keyValue": "={{ '%@' + $('Classify Event').first().json.domain }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000005",
+      "name": "Compute Employer Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var rows = $input.all();\nvar domain = $('Classify Event').first().json.domain || '';\nvar now = Date.now();\nvar cutoff = now - (90 * 24 * 60 * 60 * 1000);\nvar sent = 0, replies = 0, interviews = 0;\nfor (var i = 0; i < rows.length; i++) {\n  var r = rows[i].json || {};\n  if (!r || Object.keys(r).length === 0) continue;\n  var pa = r.processed_at ? Date.parse(r.processed_at) : now;\n  if (isNaN(pa)) pa = now;\n  if (pa < cutoff) continue;\n  var st = String(r.status || '').toLowerCase();\n  var fb = String(r.feedback_status || '').toLowerCase();\n  var wasSent = (st === 'sent' || st === 'replied' || st === 'auto_reply' || st === 'interview_invite' || st === 'bounced' || r.applied === true);\n  if (wasSent) sent++;\n  if (fb === 'replied' || st === 'replied') replies++;\n  if (fb === 'interview_invite' || st === 'interview_invite') { replies++; interviews++; }\n}\nvar responses = replies;\nvar rate = sent > 0 ? Math.round((responses / sent) * 1000) / 1000 : 0;\nreturn [{ json: { domain: domain, total_sent: sent, total_replies: replies, total_interviews: interviews, response_rate: rate, updated_ts: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000006",
+      "name": "Get Employer Score",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qiCYAUDufGwHhP4o"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "domain",
+              "condition": "eq",
+              "keyValue": "={{ $('Compute Employer Score').first().json.domain }}"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000007",
+      "name": "Score Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        180
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ex",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000008",
+      "name": "Update Employer Score",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        80
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qiCYAUDufGwHhP4o"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "domain",
+              "condition": "eq",
+              "keyValue": "={{ $('Compute Employer Score').first().json.domain }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "domain"
+          ],
+          "value": {
+            "total_sent": "={{ $('Compute Employer Score').first().json.total_sent }}",
+            "total_replies": "={{ $('Compute Employer Score').first().json.total_replies }}",
+            "total_interviews": "={{ $('Compute Employer Score').first().json.total_interviews }}",
+            "response_rate": "={{ $('Compute Employer Score').first().json.response_rate }}",
+            "updated_ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "brevo000-0000-0000-0000-000000000009",
+      "name": "Insert Employer Score",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        280
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "qiCYAUDufGwHhP4o"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "domain": "={{ $('Compute Employer Score').first().json.domain }}",
+            "total_sent": "={{ $('Compute Employer Score').first().json.total_sent }}",
+            "total_replies": "={{ $('Compute Employer Score').first().json.total_replies }}",
+            "total_interviews": "={{ $('Compute Employer Score').first().json.total_interviews }}",
+            "response_rate": "={{ $('Compute Employer Score').first().json.response_rate }}",
+            "updated_ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "brevo000-0000-0000-0000-00000000000a",
+      "name": "Is Bounce?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "bnc",
+              "leftValue": "={{ $json.is_bounce }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "brevo000-0000-0000-0000-00000000000b",
+      "name": "Insert Bounced Domain",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        420
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "iZkczV43KPolOETM"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "domain": "={{ $('Classify Event').first().json.domain }}",
+            "bounce_type": "={{ $('Classify Event').first().json.bounce_type }}",
+            "first_seen": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "brevo000-0000-0000-0000-00000000000c",
+      "name": "Is Interview?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        560
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "itv",
+              "leftValue": "={{ $json.is_interview }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "brevo000-0000-0000-0000-00000000000d",
+      "name": "Interview Congrats",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        560
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ $('Classify Event').first().json.tg_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "brevo-interview-congrats-0001",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Brevo Event In": {
+      "main": [
+        [
+          {
+            "node": "Classify Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Event": {
+      "main": [
+        [
+          {
+            "node": "Update Job By Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Bounce?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Interview?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Job By Email": {
+      "main": [
+        [
+          {
+            "node": "Get Domain Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Domain Rows": {
+      "main": [
+        [
+          {
+            "node": "Compute Employer Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Employer Score": {
+      "main": [
+        [
+          {
+            "node": "Get Employer Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Employer Score": {
+      "main": [
+        [
+          {
+            "node": "Score Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Exists?": {
+      "main": [
+        [
+          {
+            "node": "Update Employer Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert Employer Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Bounce?": {
+      "main": [
+        [
+          {
+            "node": "Insert Bounced Domain",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Is Interview?": {
+      "main": [
+        [
+          {
+            "node": "Interview Congrats",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

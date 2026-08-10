@@ -1,0 +1,714 @@
+{
+  "name": "Restyle hsndm.tech dashboard & cv (multi-AI, one-time)",
+  "nodes": [
+    {
+      "id": "2788e300-c14c-4861-951f-e7a595f93ece",
+      "name": "Start Restyle",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        272
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2c07045a-bf9a-4277-8120-97869d461397",
+      "name": "Build File List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        272
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst owner = 'hsndm566';\nconst repo = 'hsndm.tech';\nconst branch = 'main';\n// index.html is already the premium dark theme - leave it untouched.\nreturn ['dashboard.html', 'cv.html'].map(fp => ({ json: { owner, repo, branch, filePath: fp } }));\n"
+      }
+    },
+    {
+      "id": "89fbdbf9-131c-4988-9a7b-6e6634f9ae7b",
+      "name": "All Files Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7d5a1134-ef3f-4928-bc10-b2825b20db77",
+      "name": "Fetch Current File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "={{ $json.branch }}"
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "ea9e2428-cd10-4829-a317-7efcb5fc15e3"
+    },
+    {
+      "id": "f57984c7-102a-4421-9d85-077e4c49f7e2",
+      "name": "Decode Current File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst meta = $('Loop Over Files').first().json;\nconst resp = $input.first().json;\nconst raw = resp.content || '';\nlet html;\nif ((resp.encoding || 'base64') === 'base64') { try { html = Buffer.from(raw, 'base64').toString('utf8'); } catch (e) { html = raw; } } else { html = raw; }\n// Collect tokens the AI MUST preserve (working endpoints + sheet id).\nconst preserve = [];\nconst urls = html.match(/https?:\\/\\/[^\\s\"'<>]+/g) || [];\nfor (const u of urls) { if (u.indexOf('app.n8n.cloud/webhook') !== -1 && preserve.indexOf(u) === -1) preserve.push(u); }\nconst sid = html.match(/SHEET_ID\\s*=\\s*\"([^\"]+)\"/);\nif (sid) preserve.push(sid[1]);\nconst systemPrompt = 'You are a world-class web designer. You are given a COMPLETE working HTML file. Restyle it to match a premium dark glassmorphism theme using accent color #2563eb: dark background, translucent frosted-glass cards with backdrop-filter blur, subtle light borders, soft shadows, smooth hover and focus micro-interactions, stronger visual hierarchy and full mobile responsiveness. You MUST preserve ALL existing functionality and JavaScript exactly: do not change any element id or name attribute, do not change SHEET_ID or SHEET_NAME values, do not change any webhook or API endpoint URL, keep the Google Sheets gviz fetch logic, the Chart.js chart, the form field names, the Julie chatbot, and the Google Translate widget fully working. You may rewrite Tailwind classes, CSS and layout markup, but every script tag content must keep working. Output ONLY the complete valid HTML file, starting with <!DOCTYPE html> and ending with the closing html tag. No preamble, no explanation, no markdown fences.';\nreturn [{ json: { owner: meta.owner, repo: meta.repo, branch: meta.branch, filePath: meta.filePath, html, preserve, systemPrompt } }];\n"
+      }
+    },
+    {
+      "id": "669c5b19-c38a-488c-b53b-cced0847934a",
+      "name": "Groq Restyle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"moonshotai/kimi-k2-instruct-0905\", temperature: 0.4, max_tokens: 16000, messages: [ { role: \"system\", content: $(\"Decode Current File\").item.json.systemPrompt }, { role: \"user\", content: $(\"Decode Current File\").item.json.html } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "id": "29c04e1b-2362-4ad7-ab00-870888cd21b6",
+      "name": "Validate Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Decode Current File').item.json;\nconst resp = $input.first().json;\nlet content = '';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch (e) { content = ''; }\ncontent = (content || '').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060') === 0) { content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nconst di2 = di === -1 ? 0 : di;\nif (hi !== -1) content = content.substring(di2, hi + 7).trim();\nconst startsOk = content.indexOf('<!DOCTYPE html>') === 0;\nconst endsOk = content.slice(-7) === '</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (content.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (content.match(/<\\/script>/gi) || []).length;\nconst preserve = d.preserve || [];\nconst missing = [];\nfor (const t of preserve) { if (content.indexOf(t) === -1) missing.push(t); }\nconst themeOk = content.indexOf('#2563eb') !== -1 && /backdrop-filter/i.test(content);\nconst structOk = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst isValid = structOk && missing.length === 0 && themeOk;\nconst reason = 'GROQ start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' theme=' + themeOk + ' missing=' + missing.length + ' len=' + content.length;\nreturn [{ json: { owner: d.owner, repo: d.repo, branch: d.branch, filePath: d.filePath, finalHtml: content, isValid, reason, provider: 'GROQ' } }];\n"
+      }
+    },
+    {
+      "id": "83678fdd-cd30-43aa-8101-dae1703b4337",
+      "name": "Groq Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "g",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "8f412e7a-4476-48c9-8219-a788c8159f90",
+      "name": "Push (Groq)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Restyle {{ $json.filePath }} to dark glassmorphism theme (via {{ $json.provider }})",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "d8a61c99-77ab-4a91-88e0-79e88e73aeca"
+    },
+    {
+      "id": "9ee602b6-4310-4279-92a7-2530ac6232ae",
+      "name": "Loop Over Files",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        272
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "a130d361-11f9-4c82-92d5-38948926d511",
+      "name": "NVIDIA Restyle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"qwen/qwen2.5-coder-32b-instruct\", temperature: 0.4, max_tokens: 16000, messages: [ { role: \"system\", content: $(\"Decode Current File\").item.json.systemPrompt }, { role: \"user\", content: $(\"Decode Current File\").item.json.html } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      }
+    },
+    {
+      "id": "d9fbd4fb-a629-41e2-9b6c-a500e65fd6c5",
+      "name": "Validate NVIDIA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Decode Current File').item.json;\nconst resp = $input.first().json;\nlet content = '';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch (e) { content = ''; }\ncontent = (content || '').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060') === 0) { content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nconst di2 = di === -1 ? 0 : di;\nif (hi !== -1) content = content.substring(di2, hi + 7).trim();\nconst startsOk = content.indexOf('<!DOCTYPE html>') === 0;\nconst endsOk = content.slice(-7) === '</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (content.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (content.match(/<\\/script>/gi) || []).length;\nconst preserve = d.preserve || [];\nconst missing = [];\nfor (const t of preserve) { if (content.indexOf(t) === -1) missing.push(t); }\nconst themeOk = content.indexOf('#2563eb') !== -1 && /backdrop-filter/i.test(content);\nconst structOk = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst isValid = structOk && missing.length === 0 && themeOk;\nconst reason = 'NVIDIA start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' theme=' + themeOk + ' missing=' + missing.length + ' len=' + content.length;\nreturn [{ json: { owner: d.owner, repo: d.repo, branch: d.branch, filePath: d.filePath, finalHtml: content, isValid, reason, provider: 'NVIDIA' } }];\n"
+      }
+    },
+    {
+      "id": "07f78dd3-6e50-415c-994e-eb941b47a399",
+      "name": "NVIDIA Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2240,
+        288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "n",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4d962641-a24f-4a75-820d-56d70b12877a",
+      "name": "Push (NVIDIA)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2464,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Restyle {{ $json.filePath }} to dark glassmorphism theme (via {{ $json.provider }})",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "ad2cef5b-0209-421d-9f04-69970b8d145c"
+    },
+    {
+      "id": "3207ce16-1083-4266-8754-e4856082bfd9",
+      "name": "ZAI Restyle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2464,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"z-ai/glm-4.6\", temperature: 0.4, max_tokens: 16000, messages: [ { role: \"system\", content: $(\"Decode Current File\").item.json.systemPrompt }, { role: \"user\", content: $(\"Decode Current File\").item.json.html } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "id": "f5040db7-90b3-4171-b05c-ce689c89a697",
+      "name": "Validate ZAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Decode Current File').item.json;\nconst resp = $input.first().json;\nlet content = '';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch (e) { content = ''; }\ncontent = (content || '').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060') === 0) { content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nconst di2 = di === -1 ? 0 : di;\nif (hi !== -1) content = content.substring(di2, hi + 7).trim();\nconst startsOk = content.indexOf('<!DOCTYPE html>') === 0;\nconst endsOk = content.slice(-7) === '</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (content.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (content.match(/<\\/script>/gi) || []).length;\nconst preserve = d.preserve || [];\nconst missing = [];\nfor (const t of preserve) { if (content.indexOf(t) === -1) missing.push(t); }\nconst themeOk = content.indexOf('#2563eb') !== -1 && /backdrop-filter/i.test(content);\nconst structOk = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst isValid = structOk && missing.length === 0 && themeOk;\nconst reason = 'ZAI start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' theme=' + themeOk + ' missing=' + missing.length + ' len=' + content.length;\nreturn [{ json: { owner: d.owner, repo: d.repo, branch: d.branch, filePath: d.filePath, finalHtml: content, isValid, reason, provider: 'ZAI' } }];\n"
+      }
+    },
+    {
+      "id": "b5a79710-7502-4c99-9e9e-6ca4c38c90e6",
+      "name": "ZAI Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2912,
+        384
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "z",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cbd16cab-3e65-46a1-91e9-103eba5361dd",
+      "name": "Push (ZAI)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        3136,
+        464
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Restyle {{ $json.filePath }} to dark glassmorphism theme (via {{ $json.provider }})",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "b46f2f7b-024f-421e-8072-3eafeabd9a91"
+    },
+    {
+      "id": "a8ce074d-e88f-4ad0-b44c-9d7b7fb95340",
+      "name": "Stop - All Providers Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        3136,
+        656
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=All AI providers failed validation for {{ $json.filePath }} ({{ $json.reason }}). Halted before pushing."
+      }
+    }
+  ],
+  "connections": {
+    "Start Restyle": {
+      "main": [
+        [
+          {
+            "node": "Build File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build File List": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Current File": {
+      "main": [
+        [
+          {
+            "node": "Decode Current File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode Current File": {
+      "main": [
+        [
+          {
+            "node": "Groq Restyle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Restyle": {
+      "main": [
+        [
+          {
+            "node": "Validate Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Groq": {
+      "main": [
+        [
+          {
+            "node": "Groq Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NVIDIA Restyle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Files": {
+      "main": [
+        [
+          {
+            "node": "All Files Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Current File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA Restyle": {
+      "main": [
+        [
+          {
+            "node": "Validate NVIDIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate NVIDIA": {
+      "main": [
+        [
+          {
+            "node": "NVIDIA Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (NVIDIA)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ZAI Restyle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (NVIDIA)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZAI Restyle": {
+      "main": [
+        [
+          {
+            "node": "Validate ZAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate ZAI": {
+      "main": [
+        [
+          {
+            "node": "ZAI Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZAI Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (ZAI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop - All Providers Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (ZAI)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

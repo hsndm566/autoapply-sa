@@ -1,0 +1,142 @@
+{
+  "name": "Kimi — Weekly Report Card",
+  "nodes": [
+    {
+      "id": "wk000001-0000-0000-0000-000000000001",
+      "name": "Sunday 19:00 Riyadh",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 19 * * 0"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wk000001-0000-0000-0000-000000000002",
+      "name": "Get Recent Apps",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "processed_at",
+              "condition": "gt",
+              "keyValue": "={{ $now.minus(7, 'days').toISO() }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "wk000001-0000-0000-0000-000000000003",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var rows = $input.all();\nvar sent = 0, replied = 0, interviews = 0;\nvar topScore = -1, topCompany = '', topTitle = '';\nfor (var i = 0; i < rows.length; i++) {\n  var r = rows[i].json || {};\n  if (!r || Object.keys(r).length === 0) continue;\n  var st = String(r.status || '').toLowerCase();\n  var fb = String(r.feedback_status || '').toLowerCase();\n  var wasSent = (st === 'sent' || st === 'replied' || st === 'auto_reply' || st === 'interview_invite' || st === 'bounced' || r.applied === true);\n  if (wasSent) sent++;\n  if (fb === 'replied' || st === 'replied') replied++;\n  if (fb === 'interview_invite' || st === 'interview_invite') { replied++; interviews++; }\n  var fs = (r.fit_score !== null && r.fit_score !== undefined && !isNaN(Number(r.fit_score))) ? Number(r.fit_score) : -1;\n  if (fs > topScore) { topScore = fs; topCompany = r.company || ''; topTitle = r.job_title || 'Industrial Engineer'; }\n}\nvar rate = sent > 0 ? Math.round((replied / sent) * 100) : 0;\nvar topLine = (topScore >= 0) ? ('Top Match: ' + topTitle + ' @ ' + topCompany + ' (' + topScore + '%)') : 'Top Match: N/A (fit scoring not yet enabled)';\nvar style = 'Best Cover Letter Style: N/A (style tagging not yet enabled)';\nvar LF = String.fromCharCode(10);\nvar text = '\\ud83d\\udcca Weekly Job Search Report' + LF +\n  'Applied: ' + sent + ' | Replies: ' + replied + ' | Response Rate: ' + rate + '%' + LF +\n  'Interviews: ' + interviews + LF +\n  topLine + LF +\n  style;\nreturn [{ json: { sent: sent, replied: replied, interviews: interviews, response_rate: rate, report_text: text } }];"
+      }
+    },
+    {
+      "id": "wk000001-0000-0000-0000-000000000004",
+      "name": "Send Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ $json.report_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "weekly-report-tg-0001",
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Sunday 19:00 Riyadh": {
+      "main": [
+        [
+          {
+            "node": "Get Recent Apps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Apps": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Send Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Riyadh",
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

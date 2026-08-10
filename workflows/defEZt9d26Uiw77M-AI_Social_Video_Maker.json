@@ -1,0 +1,967 @@
+{
+  "name": "AI Social Video Maker",
+  "nodes": [
+    {
+      "id": "d897f75c-81a5-4d3f-af86-ffe74fb0233c",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        272
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-social-video-maker",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "cc25e7de-219c-48d4-af94-1f41b1d5e966"
+    },
+    {
+      "id": "4e7f9e21-c3bf-4c92-ba15-2c506c0ffd0a",
+      "name": "Has Topic?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        272
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-topic",
+              "leftValue": "={{ $json.body.topic }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "34b43195-b99c-4f7d-b75f-beb31271fafc",
+      "name": "Groq Script",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        176
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"llama-3.3-70b-versatile\", \"temperature\": 0.7, \"response_format\": { \"type\": \"json_object\" }, \"messages\": [ { \"role\": \"system\", \"content\": \"You create 30-second social video scripts with 3-4 short scenes. Respond ONLY with JSON of the form { \\\"scenes\\\": [ { \\\"text\\\": \\\"on-screen caption line\\\", \\\"keyword\\\": \\\"stock video search term\\\" } ] }\" }, { \"role\": \"user\", \"content\": \"Create a short video script about: \" + $json.body.topic + \". Style: \" + ($json.body.style || \"educational\") } ] } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "a10187cf-e239-41db-b7d3-ad187caefe2a",
+      "name": "Respond No Topic",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        448,
+        368
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "={{ { \"error\": \"Missing required field: topic\" } }}"
+      }
+    },
+    {
+      "id": "1aa01103-5017-46e0-bef8-e599f24886fd",
+      "name": "Parse & Split Scenes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const item = $input.first() ? $input.first().json : {};\nlet content = '';\ntry { content = item.choices[0].message.content || ''; } catch (e) { content = ''; }\nlet scenes = [];\ntry {\n  const parsed = JSON.parse(content);\n  if (parsed && Array.isArray(parsed.scenes)) scenes = parsed.scenes;\n} catch (e) { scenes = []; }\nconst body = ($('Webhook').first().json.body) || {};\nif (!scenes.length) {\n  scenes = [{ text: body.topic || '', keyword: body.topic || '' }];\n}\nreturn scenes.map((s, i) => ({ json: {\n  index: i + 1,\n  text: (s && s.text) ? String(s.text) : '',\n  keyword: (s && s.keyword) ? String(s.keyword) : (body.topic || ''),\n  topic: body.topic || '',\n  style: body.style || ''\n} }));"
+      }
+    },
+    {
+      "id": "01deee48-7474-44de-9f40-dfb4596cd1c6",
+      "name": "OpenAI Script (fallback)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"gpt-4o-mini\", \"temperature\": 0.7, \"response_format\": { \"type\": \"json_object\" }, \"messages\": [ { \"role\": \"system\", \"content\": \"You create 30-second social video scripts with 3-4 short scenes. Respond ONLY with JSON of the form { \\\"scenes\\\": [ { \\\"text\\\": \\\"on-screen caption line\\\", \\\"keyword\\\": \\\"stock video search term\\\" } ] }\" }, { \"role\": \"user\", \"content\": \"Create a short video script about: \" + $('Webhook').first().json.body.topic + \". Style: \" + ($('Webhook').first().json.body.style || \"educational\") } ] } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "989f853c-22dc-4f23-970b-d8a739ef035f",
+      "name": "Respond Script Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        288
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 502,
+        "responseBody": "={{ { \"error\": \"All script providers failed (Groq and OpenAI).\" } }}"
+      }
+    },
+    {
+      "id": "62cff968-fef8-45ea-abcb-b382d70471fb",
+      "name": "Pexels Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        80
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.pexels.com/videos/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.keyword }}"
+            },
+            {
+              "name": "per_page",
+              "value": "1"
+            },
+            {
+              "name": "orientation",
+              "value": "portrait"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "xjf7MOiIv4WpdtTj",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "af1647f8-2b20-4104-8afd-259e2fd0e916",
+      "name": "Extract Clip",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        80
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const scene = $('Parse & Split Scenes').item.json;\nconst resp = $json || {};\nlet url = '';\ntry {\n  const videos = Array.isArray(resp.videos) ? resp.videos : [];\n  if (videos.length && Array.isArray(videos[0].video_files) && videos[0].video_files.length) {\n    const files = videos[0].video_files.slice().sort((a, b) => (a.width || 999999) - (b.width || 999999));\n    // prefer a portrait file around 720 wide if available, else smallest\n    let chosen = files[0];\n    for (const f of files) { if ((f.height || 0) >= (f.width || 0) && (f.width || 0) >= 540) { chosen = f; break; } }\n    url = chosen.link || files[0].link || '';\n  }\n} catch (e) { url = ''; }\nreturn { json: {\n  index: scene.index,\n  text: scene.text,\n  keyword: scene.keyword,\n  topic: scene.topic,\n  style: scene.style,\n  clip_url: url\n} };"
+      }
+    },
+    {
+      "id": "f818317f-cc23-41d4-b4eb-e61ce46be335",
+      "name": "Build Edit Specs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const items = $input.all();\nconst LF = String.fromCharCode(10);\nconst SCENE_LEN = 3;\nconst W = 720, H = 1280;\nconst clips = [];\nconst lines = [];\nlet first = {};\nitems.forEach((it, i) => {\n  const j = it.json || {};\n  if (i === 0) first = j;\n  lines.push(j.text || '');\n  if (j.clip_url) { clips.push({ src: j.clip_url, text: j.text || '', index: i }); }\n});\nconst topic = first.topic || '';\nconst style = first.style || '';\n\n// ---- Shotstack edit (POST /edit/v1/render) ----\nconst ssVideoClips = [];\nconst ssTitleClips = [];\nclips.forEach((c, i) => {\n  const start = i * SCENE_LEN;\n  ssVideoClips.push({ asset: { type: 'video', src: c.src, volume: 0 }, start: start, length: SCENE_LEN, fit: 'cover' });\n  ssTitleClips.push({ asset: { type: 'title', text: c.text, style: 'subtitle', size: 'medium', position: 'bottom' }, start: start, length: SCENE_LEN, transition: { in: 'fade', out: 'fade' } });\n});\nconst shotstack = {\n  timeline: { background: '#000000', tracks: [ { clips: ssTitleClips }, { clips: ssVideoClips } ] },\n  output: { format: 'mp4', fps: 25, size: { width: W, height: H } }\n};\n\n// ---- JSON2Video movie (POST /v2/movies) ----\nconst j2vScenes = clips.map((c) => ({ elements: [\n  { type: 'video', src: c.src, duration: SCENE_LEN, resize: 'cover' },\n  { type: 'text', text: c.text, duration: SCENE_LEN, position: 'bottom-center', 'font-size': 48, color: '#ffffff' }\n] }));\nconst json2video = { resolution: 'custom', width: W, height: H, quality: 'high', scenes: j2vScenes };\n\nreturn [{ json: {\n  shotstack: shotstack,\n  json2video: json2video,\n  topic: topic,\n  style: style,\n  script: lines.map((l, i) => (i + 1) + '. ' + l).join(LF),\n  clip_count: clips.length\n} }];"
+      }
+    },
+    {
+      "id": "aa100001-0000-4000-8000-000000000001",
+      "name": "Shotstack Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.shotstack.io/edit/v1/render",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.shotstack }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "0GChFzhx4BLAlzo2",
+          "name": "Header Auth account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aa100002-0000-4000-8000-000000000002",
+      "name": "Shotstack Queued?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2016,
+        80
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ss-ok",
+              "leftValue": "={{ $json.response && $json.response.id ? $json.response.id : '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "aa100003-0000-4000-8000-000000000003",
+      "name": "Wait Shotstack",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        -40
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "webhookId": "c836809c-7dd6-4eba-aadf-1000c5c2aaaa"
+    },
+    {
+      "id": "aa100004-0000-4000-8000-000000000004",
+      "name": "Check Shotstack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2464,
+        -40
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.shotstack.io/edit/v1/render/{{ $('Shotstack Render').item.json.response.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "0GChFzhx4BLAlzo2",
+          "name": "Header Auth account 3"
+        }
+      }
+    },
+    {
+      "id": "aa100005-0000-4000-8000-000000000005",
+      "name": "Shotstack Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2688,
+        -40
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ss-done",
+              "leftValue": "={{ $json.response.status }}",
+              "rightValue": "done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "aa100006-0000-4000-8000-000000000006",
+      "name": "Save Video (SS)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2912,
+        -120
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "LxZrWOdNhLrPwwHk",
+          "cachedResultName": "social_videos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $('Build Edit Specs').item.json.topic }}",
+            "style": "={{ $('Build Edit Specs').item.json.style }}",
+            "script": "={{ $('Build Edit Specs').item.json.script }}",
+            "video_url": "={{ $json.response.url }}",
+            "render_id": "={{ $('Shotstack Render').item.json.response.id }}",
+            "status": "=shotstack:{{ $json.response.status }}",
+            "created_ts": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "style",
+              "displayName": "style",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "script",
+              "displayName": "script",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "video_url",
+              "displayName": "video_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "render_id",
+              "displayName": "render_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_ts",
+              "displayName": "created_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "aa100007-0000-4000-8000-000000000007",
+      "name": "Respond SS",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3136,
+        -120
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"provider\": \"shotstack\", \"video_url\": $('Check Shotstack').item.json.response.url, \"render_id\": $('Shotstack Render').item.json.response.id, \"status\": $('Check Shotstack').item.json.response.status } }}"
+      }
+    },
+    {
+      "id": "aa100010-0000-4000-8000-000000000010",
+      "name": "JSON2Video Render",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2240,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.json2video.com/v2/movies",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Build Edit Specs').item.json.json2video }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pjPsmdo0E5sPnHlT",
+          "name": "Header Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aa100011-0000-4000-8000-000000000011",
+      "name": "Wait JSON2Video",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2464,
+        240
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "webhookId": "c836809c-7dd6-4eba-aadf-1000c5c2bbbb"
+    },
+    {
+      "id": "aa100012-0000-4000-8000-000000000012",
+      "name": "Check JSON2Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2688,
+        240
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.json2video.com/v2/movies?project={{ $('JSON2Video Render').item.json.project }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pjPsmdo0E5sPnHlT",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "id": "aa100013-0000-4000-8000-000000000013",
+      "name": "JSON2Video Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2912,
+        240
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "j2v-done",
+              "leftValue": "={{ $json.movie ? $json.movie.status : ($json.movies && $json.movies[0] ? $json.movies[0].status : '') }}",
+              "rightValue": "done",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "aa100014-0000-4000-8000-000000000014",
+      "name": "Save Video (J2V)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3136,
+        160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "LxZrWOdNhLrPwwHk",
+          "cachedResultName": "social_videos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $('Build Edit Specs').item.json.topic }}",
+            "style": "={{ $('Build Edit Specs').item.json.style }}",
+            "script": "={{ $('Build Edit Specs').item.json.script }}",
+            "video_url": "={{ $json.movie ? $json.movie.url : $json.movies[0].url }}",
+            "render_id": "={{ $('JSON2Video Render').item.json.project }}",
+            "status": "=json2video:{{ $json.movie ? $json.movie.status : $json.movies[0].status }}",
+            "created_ts": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "style",
+              "displayName": "style",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "script",
+              "displayName": "script",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "video_url",
+              "displayName": "video_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "render_id",
+              "displayName": "render_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_ts",
+              "displayName": "created_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "aa100015-0000-4000-8000-000000000015",
+      "name": "Respond J2V",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        3360,
+        160
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"provider\": \"json2video\", \"video_url\": ($('Check JSON2Video').item.json.movie ? $('Check JSON2Video').item.json.movie.url : $('Check JSON2Video').item.json.movies[0].url), \"render_id\": $('JSON2Video Render').item.json.project, \"status\": \"done\" } }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Has Topic?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Topic?": {
+      "main": [
+        [
+          {
+            "node": "Groq Script",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond No Topic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Script": {
+      "main": [
+        [
+          {
+            "node": "Parse & Split Scenes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI Script (fallback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Split Scenes": {
+      "main": [
+        [
+          {
+            "node": "Pexels Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Script (fallback)": {
+      "main": [
+        [
+          {
+            "node": "Parse & Split Scenes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Script Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pexels Search": {
+      "main": [
+        [
+          {
+            "node": "Extract Clip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Clip": {
+      "main": [
+        [
+          {
+            "node": "Build Edit Specs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Edit Specs": {
+      "main": [
+        [
+          {
+            "node": "Shotstack Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shotstack Render": {
+      "main": [
+        [
+          {
+            "node": "Shotstack Queued?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shotstack Queued?": {
+      "main": [
+        [
+          {
+            "node": "Wait Shotstack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "JSON2Video Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait Shotstack": {
+      "main": [
+        [
+          {
+            "node": "Check Shotstack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Shotstack": {
+      "main": [
+        [
+          {
+            "node": "Shotstack Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Shotstack Done?": {
+      "main": [
+        [
+          {
+            "node": "Save Video (SS)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait Shotstack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Video (SS)": {
+      "main": [
+        [
+          {
+            "node": "Respond SS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON2Video Render": {
+      "main": [
+        [
+          {
+            "node": "Wait JSON2Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait JSON2Video": {
+      "main": [
+        [
+          {
+            "node": "Check JSON2Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check JSON2Video": {
+      "main": [
+        [
+          {
+            "node": "JSON2Video Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON2Video Done?": {
+      "main": [
+        [
+          {
+            "node": "Save Video (J2V)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait JSON2Video",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Video (J2V)": {
+      "main": [
+        [
+          {
+            "node": "Respond J2V",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

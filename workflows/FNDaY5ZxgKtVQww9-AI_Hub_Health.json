@@ -1,0 +1,1832 @@
+{
+  "name": "AI Hub & Health",
+  "nodes": [
+    {
+      "id": "e4de704e-427b-4099-a9f4-439d3ff767d0",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "system",
+              "type": "string"
+            },
+            {
+              "name": "user",
+              "type": "string"
+            },
+            {
+              "name": "max_tokens",
+              "type": "number"
+            },
+            {
+              "name": "temperature",
+              "type": "number"
+            },
+            {
+              "name": "task_type",
+              "type": "string"
+            },
+            {
+              "name": "provider",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "0671a56f-501b-4cb3-a89e-7cf359813b98",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const j = $json || {};\nconst body = (j.body && typeof j.body === 'object') ? j.body : null;\nconst src = body || j;\nconst system = String(src.system || 'You are a helpful assistant.');\nconst user = String(src.user || '');\nlet mt = src.max_tokens;\nconst maxTokens = (mt !== undefined && mt !== null && String(mt).length) ? Number(mt) : 1200;\nlet tp = src.temperature;\nconst temperature = (tp !== undefined && tp !== null && String(tp).length) ? Number(tp) : 0.6;\nconst task_type = String(src.task_type || 'chat').toLowerCase();\nconst provider = String(src.provider || '');\nreturn [{ json: { system: system, user: user, max_tokens: maxTokens, temperature: temperature, task_type: task_type, provider: provider } }];"
+      }
+    },
+    {
+      "id": "9cbd7920-e0ea-4ed0-a82b-4df98ca5f5b1",
+      "name": "Is Reorder?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r",
+              "leftValue": "={{ $json.task_type }}",
+              "rightValue": "reorder",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "9a43b68c-3dd9-4f23-ae4e-fbf6d6adf004",
+      "name": "Demote Provider",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "wUmwC3JKsTHVdrsm",
+          "cachedResultName": "provider_health"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "provider",
+              "condition": "eq",
+              "keyValue": "={{ $json.provider.toLowerCase() }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "provider": "={{ $json.provider.toLowerCase() }}",
+            "status": "demoted",
+            "demoted": true,
+            "last_checked": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "provider",
+              "displayName": "provider",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "demoted",
+              "displayName": "demoted",
+              "type": "boolean",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_checked",
+              "displayName": "last_checked",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "matchingColumns": [
+            "provider"
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "7e656c32-a715-45ab-9890-42a3b19e80ca",
+      "name": "Reorder Done",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const j = $('Normalize Input').first().json || {};\nconst p = String(j.provider || '').toLowerCase();\nconst known = ['groq', 'openrouter', 'zai'];\nconst ok = known.indexOf(p) !== -1;\nreturn [{ json: { ok: true, action: 'reorder', provider: p, applied: ok, note: ok ? (p + ' demoted to end of fallback order') : ('unknown provider: ' + p + ' - no-op'), text: '', provider_used: 'none' } }];"
+      }
+    },
+    {
+      "id": "1871c541-d51e-46e6-88f3-d8b7a98454bd",
+      "name": "Get Recent Usage",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VQmCEJ6AnSP1fmDY",
+          "cachedResultName": "ai_usage_log"
+        },
+        "returnAll": false,
+        "limit": 200,
+        "orderBy": true,
+        "orderByColumn": "log_timestamp",
+        "orderByDirection": "DESC"
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b1ffaf28-1521-44c9-a6dc-a25b13f5095d",
+      "name": "Get Provider Health",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "wUmwC3JKsTHVdrsm",
+          "cachedResultName": "provider_health"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c284285e-9617-4722-ae57-d5c3ffd12f40",
+      "name": "Compute Order",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const inp = $('Normalize Input').first().json || {};\nlet usage = [];\ntry { usage = $('Get Recent Usage').all(); } catch (e) { usage = []; }\nlet health = [];\ntry { health = $('Get Provider Health').all(); } catch (e) { health = []; }\nconst now = Date.now();\nconst DAY = 24 * 60 * 60 * 1000;\nfunction fails(prov) {\n  let c = 0;\n  for (let i = 0; i < usage.length; i++) {\n    const r = usage[i].json || {};\n    if (String(r.provider || '').toLowerCase() === prov && r.success === false) {\n      let t = now;\n      if (r.log_timestamp) { const parsed = new Date(r.log_timestamp).getTime(); if (!isNaN(parsed)) t = parsed; }\n      if (now - t <= DAY) c++;\n    }\n  }\n  return c;\n}\nfunction healthDemoted(prov) {\n  for (let i = 0; i < health.length; i++) {\n    const r = health[i].json || {};\n    if (String(r.provider || '').toLowerCase() === prov && r.demoted === true) return true;\n  }\n  return false;\n}\nconst base = ['groq', 'openrouter', 'zai'];\nconst messages = [{ role: 'system', content: inp.system }, { role: 'user', content: inp.user }];\nconst groqBody = { model: 'llama-3.3-70b-versatile', temperature: inp.temperature, max_tokens: inp.max_tokens, messages: messages };\nconst openrouterBody = { model: 'meta-llama/llama-3.3-70b-instruct', temperature: inp.temperature, max_tokens: inp.max_tokens, messages: messages };\nconst zaiBody = { model: 'glm-4.5-flash', temperature: inp.temperature, max_tokens: inp.max_tokens, messages: messages };\nconst deepseekBody = { model: 'deepseek-chat', temperature: inp.temperature, max_tokens: inp.max_tokens, messages: messages };\nconst userStr = String(inp.user || '').trim();\nif (!userStr) {\n  return [{ json: { system: inp.system, user: inp.user, max_tokens: inp.max_tokens, temperature: inp.temperature, task_type: inp.task_type, order: [], demoted: {}, empty_input: true, attempt_groq: false, attempt_openrouter: false, attempt_zai: false, groqBody: groqBody, openrouterBody: openrouterBody, zaiBody: zaiBody, deepseekBody: deepseekBody } }];\n}\nconst demoted = {};\nfor (let k = 0; k < base.length; k++) { const p = base[k]; demoted[p] = (fails(p) > 5) || healthDemoted(p); }\nconst active = base.filter(function (p) { return !demoted[p]; });\nconst inactive = base.filter(function (p) { return demoted[p]; });\nlet order = active.concat(inactive);\nconst allDemoted = active.length === 0;\nif (allDemoted) { order = base.slice(); }\nconst attempt = {};\nfor (let m = 0; m < base.length; m++) { const p = base[m]; attempt[p] = allDemoted ? true : !demoted[p]; }\nreturn [{ json: { system: inp.system, user: inp.user, max_tokens: inp.max_tokens, temperature: inp.temperature, task_type: inp.task_type, order: order, demoted: demoted, empty_input: false, attempt_groq: attempt.groq, attempt_openrouter: attempt.openrouter, attempt_zai: attempt.zai, groqBody: groqBody, openrouterBody: openrouterBody, zaiBody: zaiBody, deepseekBody: deepseekBody } }];"
+      }
+    },
+    {
+      "id": "27a28291-adb8-4ab1-8a16-b707856aa855",
+      "name": "Use Groq?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a",
+              "leftValue": "={{ $json.attempt_groq }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "2f042d4e-9e7b-4ac6-9a06-9f335ec28951",
+      "name": "Call Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        128
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Compute Order').first().json.groqBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "20ea1fac-6b7a-4716-85d7-60a5d8683db2",
+      "name": "Parse Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        128
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const src = $input.first().json || {};\nlet txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\ntxt = String(txt).trim();\nreturn [{ json: { text: txt, provider: 'groq', ok: txt.length > 0 } }];"
+      }
+    },
+    {
+      "id": "28aeb26c-f9dd-4f02-8d43-18c0c8607552",
+      "name": "Log Groq",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VQmCEJ6AnSP1fmDY",
+          "cachedResultName": "ai_usage_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "provider": "={{ $json.provider }}",
+            "model": "llama-3.3-70b-versatile",
+            "task_type": "={{ $('Compute Order').first().json.task_type }}",
+            "success": "={{ $json.ok }}",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "log_timestamp": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "provider",
+              "displayName": "provider",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "success",
+              "displayName": "success",
+              "type": "boolean",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prompt_tokens",
+              "displayName": "prompt_tokens",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "completion_tokens",
+              "displayName": "completion_tokens",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "log_timestamp",
+              "displayName": "log_timestamp",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ae92699d-c156-4244-9bd2-6555901b5622",
+      "name": "Groq OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2016,
+        288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "g",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "1638cd4d-a9ec-4e69-83c8-fa7c7c49fc03",
+      "name": "Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4928,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const j = $json || {};\nreturn [{ json: { text: String(j.text || ''), provider_used: String(j.provider || j.provider_used || 'none'), ok: !!j.ok } }];"
+      }
+    },
+    {
+      "id": "72801f64-0fe3-469d-a5e5-4b55a7b7c05e",
+      "name": "Use OpenRouter?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        432
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a",
+              "leftValue": "={{ $('Compute Order').first().json.attempt_openrouter }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "7cece156-776a-4e17-96ef-c49c44c18788",
+      "name": "Call OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2464,
+        336
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Compute Order').first().json.openrouterBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a37d4850-c335-4ff9-a35f-63c906f7e69f",
+      "name": "Parse OpenRouter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        336
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const src = $input.first().json || {};\nlet txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\ntxt = String(txt).trim();\nreturn [{ json: { text: txt, provider: 'openrouter', ok: txt.length > 0 } }];"
+      }
+    },
+    {
+      "id": "338922d9-d83a-478d-9e55-8d6b3970f709",
+      "name": "Log OpenRouter",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2912,
+        240
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VQmCEJ6AnSP1fmDY",
+          "cachedResultName": "ai_usage_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "provider": "={{ $json.provider }}",
+            "model": "meta-llama/llama-3.3-70b-instruct",
+            "task_type": "={{ $('Compute Order').first().json.task_type }}",
+            "success": "={{ $json.ok }}",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "log_timestamp": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "provider",
+              "displayName": "provider",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "success",
+              "displayName": "success",
+              "type": "boolean",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prompt_tokens",
+              "displayName": "prompt_tokens",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "completion_tokens",
+              "displayName": "completion_tokens",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "log_timestamp",
+              "displayName": "log_timestamp",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "e155ee9d-50d3-4a7b-ae57-328d205d0ecb",
+      "name": "OpenRouter OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2912,
+        432
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "o",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "17918d7b-c01a-45cc-a75d-10c3d75263d1",
+      "name": "Use Z.ai?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3136,
+        624
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "a",
+              "leftValue": "={{ $('Compute Order').first().json.attempt_zai }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "dbd274bf-27dc-46d4-a487-1c8cec2cf195",
+      "name": "Call Z.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3360,
+        560
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Compute Order').first().json.zaiBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Ff0G1ve73IkZFnLh",
+          "name": "Bearer Auth account 3"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0a1c5441-00ef-48cb-89f4-334058dd1990",
+      "name": "Parse Z.ai",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        560
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const src = $input.first().json || {};\nlet txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\nif (!txt) { try { txt = src.choices[0].message.reasoning_content || ''; } catch (e) {} }\ntxt = String(txt).trim();\nreturn [{ json: { text: txt, provider: 'zai', ok: txt.length > 0 } }];"
+      }
+    },
+    {
+      "id": "75821849-957c-4dd9-9c6b-af82dc6d2360",
+      "name": "Log Z.ai",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3808,
+        464
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VQmCEJ6AnSP1fmDY",
+          "cachedResultName": "ai_usage_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "provider": "={{ $json.provider }}",
+            "model": "glm-4.5-flash",
+            "task_type": "={{ $('Compute Order').first().json.task_type }}",
+            "success": "={{ $json.ok }}",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "log_timestamp": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "provider",
+              "displayName": "provider",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "success",
+              "displayName": "success",
+              "type": "boolean",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prompt_tokens",
+              "displayName": "prompt_tokens",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "completion_tokens",
+              "displayName": "completion_tokens",
+              "type": "number",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "log_timestamp",
+              "displayName": "log_timestamp",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a6cd1871-a63a-4545-a5a5-cf534813dc7b",
+      "name": "Z.ai OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3808,
+        656
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "z",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "dc4bf4a7-56c1-41f8-8865-923d2b9a1d44",
+      "name": "Call DeepSeek (disabled)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4032,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "deepSeekApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Compute Order').first().json.deepseekBody) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "credentials": {
+        "deepSeekApi": {
+          "id": "JcfeGmtChFdDrNbF",
+          "name": "DeepSeek account"
+        }
+      },
+      "disabled": true,
+      "notes": "Activate when DeepSeek API key is added",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a7b4039d-50a3-4219-a328-e9da55e9e79e",
+      "name": "Parse DeepSeek",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4256,
+        800
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const src = $input.first().json || {};\nlet txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\ntxt = String(txt).trim();\nreturn [{ json: { text: txt, provider: 'deepseek', ok: txt.length > 0 } }];"
+      }
+    },
+    {
+      "id": "9f124d6f-26c0-4c4c-ab25-6c581b53e8b9",
+      "name": "DeepSeek OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4480,
+        800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "e319cce6-46e7-49e0-8831-008fb5b47c44",
+      "name": "All Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        864
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { text: '', provider_used: 'none', ok: false, error: 'all providers failed or invalid input' } }];"
+      }
+    },
+    {
+      "id": "26e773d9-46bb-4ead-891b-978ec059f7a2",
+      "name": "Log Providers Error",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4928,
+        864
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2FTvApTPXPCPA95N",
+          "cachedResultName": "provider_errors"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "last_error": "={{ $json.error }}",
+            "providers_tried": "groq,openrouter,zai",
+            "task_type": "={{ $('Compute Order').first().json.task_type }}",
+            "request_summary": "={{ ($('Normalize Input').first().json.user || '').slice(0, 180) }}",
+            "occurred_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "last_error",
+              "displayName": "last_error",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "providers_tried",
+              "displayName": "providers_tried",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_summary",
+              "displayName": "request_summary",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "occurred_at",
+              "displayName": "occurred_at",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "998651d5-eb9e-4eca-8539-dab24c03f963",
+      "name": "AI Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-hub",
+        "responseMode": "lastNode",
+        "responseData": "firstEntryJson",
+        "options": {}
+      },
+      "webhookId": "b0333252-7887-4781-bcaa-a30ba5cd4b7a"
+    },
+    {
+      "id": "7c9732af-60eb-41a7-8297-fc8a0039b9dc",
+      "name": "Health Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        1184
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "00cae5af-94b0-48e3-80fa-d175addb2ec4",
+      "name": "Ping Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        1184
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\"model\":\"llama-3.3-70b-versatile\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"Ping\"}]}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1f2d7bca-6c54-41ef-b0e1-7744f85ace3b",
+      "name": "Ping OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        1184
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\"model\":\"meta-llama/llama-3.3-70b-instruct\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"Ping\"}]}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "7588eeee-fffc-4e02-98a4-491393e4fa93",
+      "name": "Ping Z.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        1184
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\"model\":\"glm-4.5-flash\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"Ping\"}]}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Ff0G1ve73IkZFnLh",
+          "name": "Bearer Auth account 3"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c7d0ea7a-9abb-4cd1-b627-e85fd9c55d20",
+      "name": "Aggregate Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        1184
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "function ev(label, key, j) {\n  const r = j || {};\n  const hasChoices = r.choices && r.choices.length > 0;\n  let alive = false, detail = '';\n  if (r.id || hasChoices) { alive = true; detail = 'OK'; }\n  else {\n    const err = r.error || r.message || r;\n    if (err && typeof err === 'object') { detail = String(err.message || err.error || JSON.stringify(err)).slice(0, 160); }\n    else { detail = String(err || 'No valid response').slice(0, 160); }\n  }\n  return { provider: key, label: label, alive: alive, detail: detail };\n}\nconst results = [];\ntry { results.push(ev('Groq', 'groq', $('Ping Groq').first().json)); } catch (e) { results.push({ provider: 'groq', label: 'Groq', alive: false, detail: 'No output' }); }\ntry { results.push(ev('OpenRouter', 'openrouter', $('Ping OpenRouter').first().json)); } catch (e) { results.push({ provider: 'openrouter', label: 'OpenRouter', alive: false, detail: 'No output' }); }\ntry { results.push(ev('Z.ai', 'zai', $('Ping Z.ai').first().json)); } catch (e) { results.push({ provider: 'zai', label: 'Z.ai', alive: false, detail: 'No output' }); }\nconst iso = new Date().toISOString();\nlet aliveCount = 0;\nconst rows = [];\nconst dead = [];\nconst lines = ['AI Provider Health - ' + iso.slice(0, 16).replace('T', ' ') + ' UTC', ''];\nfor (let i = 0; i < results.length; i++) {\n  const r = results[i];\n  if (r.alive) aliveCount++; else dead.push(r.label);\n  rows.push({ provider: r.provider, status: r.alive ? 'alive' : 'dead', demoted: !r.alive, last_checked: iso, last_success: r.alive ? iso : null });\n  lines.push((r.alive ? 'OK ' : 'DEAD ') + r.label + (r.alive ? '' : ' - ' + r.detail));\n}\nlines.push('');\nlines.push(aliveCount + '/' + results.length + ' providers alive.');\nreturn [{ json: { summary: lines.join('\\n'), dead_count: dead.length, dead_list: dead.join(', '), rows: rows } }];"
+      }
+    },
+    {
+      "id": "088993ec-0ffc-4ca1-97ab-e12743fa4ce5",
+      "name": "Split Health Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        1088
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = ($('Aggregate Health').first().json.rows) || [];\nreturn rows.map(function (r) { return { json: r }; });"
+      }
+    },
+    {
+      "id": "b214a3df-6f7a-4bb1-a650-c6aa981bf892",
+      "name": "Upsert Health",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        1088
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "upsert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "wUmwC3JKsTHVdrsm",
+          "cachedResultName": "provider_health"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "provider",
+              "condition": "eq",
+              "keyValue": "={{ $json.provider }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "provider": "={{ $json.provider }}",
+            "status": "={{ $json.status }}",
+            "demoted": "={{ $json.demoted }}",
+            "last_checked": "={{ $json.last_checked }}",
+            "last_success": "={{ $json.last_success }}"
+          },
+          "schema": [
+            {
+              "id": "provider",
+              "displayName": "provider",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "type": "string",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "demoted",
+              "displayName": "demoted",
+              "type": "boolean",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_checked",
+              "displayName": "last_checked",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_success",
+              "displayName": "last_success",
+              "type": "dateTime",
+              "required": false,
+              "display": true,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ],
+          "matchingColumns": [
+            "provider"
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6cbef351-cb81-4581-b32e-7526359de921",
+      "name": "Any Dead?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        1280
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dead",
+              "leftValue": "={{ $json.dead_count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "02c81a77-140f-4eab-b761-3ee28c7d52cd",
+      "name": "Telegram Health Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1344,
+        1280
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "=AI Provider ALERT\n\nDead: {{ $json.dead_list }}\n\n{{ $json.summary }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "86672dc7-65a3-4a3c-bdcd-4fc1a1ab77aa"
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Is Reorder?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Reorder?": {
+      "main": [
+        [
+          {
+            "node": "Demote Provider",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Recent Usage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demote Provider": {
+      "main": [
+        [
+          {
+            "node": "Reorder Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Recent Usage": {
+      "main": [
+        [
+          {
+            "node": "Get Provider Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Provider Health": {
+      "main": [
+        [
+          {
+            "node": "Compute Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Order": {
+      "main": [
+        [
+          {
+            "node": "Use Groq?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Groq?": {
+      "main": [
+        [
+          {
+            "node": "Call Groq",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OpenRouter?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Groq": {
+      "main": [
+        [
+          {
+            "node": "Parse Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Groq": {
+      "main": [
+        [
+          {
+            "node": "Log Groq",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Groq OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq OK?": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use OpenRouter?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use OpenRouter?": {
+      "main": [
+        [
+          {
+            "node": "Call OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Z.ai?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Log OpenRouter",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "OpenRouter OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter OK?": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Use Z.ai?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Z.ai?": {
+      "main": [
+        [
+          {
+            "node": "Call Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call DeepSeek (disabled)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Parse Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Log Z.ai",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Z.ai OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Z.ai OK?": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call DeepSeek (disabled)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call DeepSeek (disabled)": {
+      "main": [
+        [
+          {
+            "node": "Parse DeepSeek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse DeepSeek": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek OK?": {
+      "main": [
+        [
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Failed": {
+      "main": [
+        [
+          {
+            "node": "Log Providers Error",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Schedule": {
+      "main": [
+        [
+          {
+            "node": "Ping Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping Groq": {
+      "main": [
+        [
+          {
+            "node": "Ping OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Ping Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Health": {
+      "main": [
+        [
+          {
+            "node": "Split Health Rows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Any Dead?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Health Rows": {
+      "main": [
+        [
+          {
+            "node": "Upsert Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Dead?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Health Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": {
+    "node:Health Schedule": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 2,
+  "meta": null
+}

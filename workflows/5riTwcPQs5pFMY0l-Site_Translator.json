@@ -1,0 +1,239 @@
+{
+  "name": "Site Translator",
+  "nodes": [
+    {
+      "id": "25c47380-701c-4223-88af-d74371ea5e66",
+      "name": "On Translation Request",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "formTitle": "Site Translator",
+        "formDescription": "Paste any content and choose a target language. The AI Provider Hub returns the translated copy.",
+        "responseMode": "lastNode",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Text to translate",
+              "fieldName": "content",
+              "fieldType": "textarea",
+              "placeholder": "Paste the website/page content you want translated",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Target language",
+              "fieldName": "target_language",
+              "fieldType": "text",
+              "placeholder": "e.g. Arabic, Spanish, French",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "webhookId": "0404eae5-332f-49d3-882b-05a762797eb9"
+    },
+    {
+      "id": "3e2d8bbc-f5de-4d58-8319-8e057d1f3524",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $json || {};\nvar content = String(j.content || j['Text to translate'] || j.text || '').trim();\nvar target = String(j.target_language || j['Target language'] || j.language || '').trim();\nvar valid = content.length > 0 && target.length > 0;\nvar system = 'You are a professional translator. Translate the user-provided text into ' + (target || 'the requested language') + '. Preserve the original meaning, tone, formatting and line breaks. Return ONLY the translated text with no preamble, notes, or explanation.';\nvar user = content;\nreturn [{ json: { valid: valid, content: content, target_language: target, system: system, user: user } }];"
+      }
+    },
+    {
+      "id": "d9ce42d5-8535-4c28-865a-629796b0a413",
+      "name": "Has Content?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "2191f274-4c58-4902-ba74-d3f0d80b0b5b",
+      "name": "Translate (AI Hub)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Provider Hub"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Validate Input').first().json.system }}",
+            "user": "={{ $('Validate Input').first().json.user }}",
+            "max_tokens": "={{ 2000 }}",
+            "temperature": "={{ 0.3 }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1381a242-2bbf-4b8a-8e13-33cc3ebcaa18",
+      "name": "Format Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var hub = $input.first().json || {};\nvar v = $('Validate Input').first().json || {};\nvar text = String(hub.text || '').trim();\nvar ok = hub.ok === true && text.length > 0;\nvar provider = hub.provider_used || 'none';\nvar title, message;\nif (ok) {\n  title = 'Translation complete (' + v.target_language + ')';\n  message = text;\n} else {\n  title = 'Translation failed';\n  message = 'Sorry, the translation could not be completed right now (provider: ' + provider + '). Please try again in a moment.';\n}\nreturn [{ json: { ok: ok, provider_used: provider, target_language: v.target_language, original_content: v.content, text: text, title: title, message: message } }];"
+      }
+    },
+    {
+      "id": "78236431-838d-41aa-914a-7295701bd675",
+      "name": "Show Result",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "={{ $json.title }}",
+        "completionMessage": "={{ $json.message }}"
+      },
+      "webhookId": "8fc1ec9d-e1b8-424f-a79c-a75ec5289658"
+    },
+    {
+      "id": "2125f8a8-ca26-4921-ab11-cffba02e790d",
+      "name": "Invalid Input",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "Missing input",
+        "completionMessage": "Please provide both the text to translate and a target language, then submit again."
+      },
+      "webhookId": "cc58e0dd-630e-4658-8b7e-ad217f861f2a"
+    }
+  ],
+  "connections": {
+    "On Translation Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Has Content?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Content?": {
+      "main": [
+        [
+          {
+            "node": "Translate (AI Hub)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate (AI Hub)": {
+      "main": [
+        [
+          {
+            "node": "Format Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Result": {
+      "main": [
+        [
+          {
+            "node": "Show Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": null
+}

@@ -1,0 +1,3264 @@
+{
+  "name": "the new one",
+  "nodes": [
+    {
+      "id": "178e7f27-3a42-44eb-9cfb-464d0cd519bd",
+      "name": "Test: Send Brevo Email",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c8956d11-c15f-4c65-bdb0-f2dbfa6e9fcd",
+      "name": "Test Email Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "te",
+              "name": "client_email",
+              "type": "string",
+              "value": "hasanadam506@gmail.com"
+            },
+            {
+              "id": "tn",
+              "name": "client_name",
+              "type": "string",
+              "value": "Hassan Adam"
+            },
+            {
+              "id": "tc",
+              "name": "cover_letter",
+              "type": "string",
+              "value": "<p>This is a Brevo test email from your n8n workflow. If you received this, the HTTP Request node and your verified sender are working.</p>"
+            },
+            {
+              "id": "ts",
+              "name": "sender_email",
+              "type": "string",
+              "value": "hasanadam506@gmail.com"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d8224262-cb06-442d-b243-4211bb747d37",
+      "name": "Send Test Email (Brevo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { email: $json.sender_email, name: 'Hassan Adam' }, to: [{ email: $json.client_email, name: $json.client_name }], subject: 'Your Job Application Has Been Sent', htmlContent: $json.cover_letter }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      }
+    },
+    {
+      "id": "fe8038e5-df0f-45a2-83da-c10ac137f806",
+      "name": "Daily 6AM, 12PM, 6PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        336
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 6,12,18 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "73509ca7-c1c8-49a8-8c0d-0b2d79020787",
+      "name": "Client Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        432
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cname",
+              "name": "client_name",
+              "type": "string",
+              "value": "={{ ($('Prep Pipeline Input').first().json.body || {}).client_name || 'Hassan Ahmed Adam Mohammad' }}"
+            },
+            {
+              "id": "cemail",
+              "name": "client_email",
+              "type": "string",
+              "value": "={{ ($('Prep Pipeline Input').first().json.body || {}).client_email || 'hasanadam506@gmail.com' }}"
+            },
+            {
+              "id": "cv",
+              "name": "cv_url",
+              "type": "string",
+              "value": "={{ ($('Prep Pipeline Input').first().json.body || {}).cv_file || ($('Prep Pipeline Input').first().json.body || {}).cv_url || '' }}"
+            },
+            {
+              "id": "jtype",
+              "name": "job_type",
+              "type": "string",
+              "value": "={{ (($('Prep Pipeline Input').first().json.body || {}).job_type || 'full-time').toLowerCase() }}"
+            },
+            {
+              "id": "ind",
+              "name": "industry_preference",
+              "type": "string",
+              "value": "={{ ($('Prep Pipeline Input').first().json.body || {}).industry_preference || '' }}"
+            },
+            {
+              "id": "tvol",
+              "name": "target_volume",
+              "type": "number",
+              "value": "={{ ($('Prep Pipeline Input').first().json.body || {}).target_volume || 100 }}"
+            },
+            {
+              "id": "sender",
+              "name": "sender_email",
+              "type": "string",
+              "value": "hasanadam506@gmail.com"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b1bd39f0-f66c-49af-9076-79ad70925e21",
+      "name": "Manual Trigger (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        528
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "applier-run-v2",
+        "options": {}
+      },
+      "webhookId": "e7f2c1a9-applier-run-v2-4b6d8e0a2c1f"
+    },
+    {
+      "id": "f6f142dd-fe64-4f04-bfea-f216bad61c54",
+      "name": "Candidate Profile",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        432
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "profile",
+              "name": "candidate_profile",
+              "type": "string",
+              "value": "Industrial Engineer based in Jeddah specializing in process optimization, supply chain logistics, and operations management. Proven ability to streamline workflows and apply Lean methodologies, including DMAIC frameworks and Value Stream Mapping. Achieved a 40% process acceleration and 50% reduction in passenger waiting time during a senior project at King AbdulAziz International Airport. Professional background includes roles in logistics coordination, purchasing, and production management scheduling. Certified in OSHA 30-Hour General Industry and ISO 9001:2015 Risk Management. Fluent in English, Arabic, Somali, and Filipino."
+            },
+            {
+              "id": "name",
+              "name": "candidate_name",
+              "type": "string",
+              "value": "={{ $('Client Input').item.json.client_name }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "880b4a69-60a4-41c6-bdd8-0a9c0757615a",
+      "name": "Get New Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        432
+      ],
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "keyValue": "new"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "dacbb63b-1862-4351-8b25-457f31b9cc6c",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        432
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/distilbert/distilbert-base-uncased-finetuned-sst-2-english",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "huggingFaceApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={{ $json.job_title }} {{ $json.job_description }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "7HjlGl9dK3pF9sed",
+          "name": "Hugging Face account"
+        }
+      }
+    },
+    {
+      "id": "46a5d5a6-92b7-4615-b80e-94a339a459a7",
+      "name": "Score & Draft",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1120,
+        432
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=This candidate is applying for {{ $('Client Input').item.json.job_type }} roles. Adjust your scoring accordingly.\n\nEvaluate this job against the candidate and write a tailored cover letter.\n\nJOB TITLE: {{ $('Get New Jobs').item.json.job_title }}\nCOMPANY: {{ $('Get New Jobs').item.json.company }}\nLOCATION: {{ $('Get New Jobs').item.json.location }}\nJOB DESCRIPTION:\n{{ $('Get New Jobs').item.json.job_description }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "=You are an expert career assistant helping a job seeker apply to roles.\n\nCANDIDATE NAME: {{ $('Candidate Profile').item.json.candidate_name }}\nCANDIDATE PROFILE:\n{{ $('Candidate Profile').item.json.candidate_profile }}\n\nThe candidate is applying for {{ $('Client Input').item.json.job_type }} roles. Calibrate your fit_score to that level: for internships, weight potential and transferable skills; for full-time roles, weight direct experience.\n\nFor the job provided, return JSON with:\n- fit_score: integer 0-100 for how well the candidate matches the role.\n- fit_reason: 1-2 sentence justification.\n- cover_letter: a concise, professional, tailored cover letter (no placeholders like [Company]; use the real values), signed with the candidate name.\nBe honest with the score. Only strong matches should score high."
+        }
+      }
+    },
+    {
+      "id": "94283bb7-1f74-45cd-9809-41376fc05238",
+      "name": "OpenAI Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        656
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "0c5420c9-78e2-413d-bd49-19668a73f3e8",
+      "name": "Fit & Letter Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1264,
+        656
+      ],
+      "parameters": {
+        "jsonSchemaExample": "{\"fit_score\":82,\"fit_reason\":\"Short explanation of why this candidate is or is not a strong fit.\",\"cover_letter\":\"Full tailored cover letter text, ready to send.\"}",
+        "autoFix": true
+      }
+    },
+    {
+      "id": "cf946731-cb12-4f18-8908-dc56f49949cf",
+      "name": "Parser Fix Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1264,
+        864
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "1fd03e17-a77a-4ad5-bc0d-cd5423576ae4",
+      "name": "Second Opinion",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1472,
+        432
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=This candidate is applying for {{ $('Client Input').item.json.job_type }} roles. Adjust your scoring accordingly.\n\nA candidate is considering applying to this job. An initial AI already scored the fit. As an INDEPENDENT second reviewer, judge whether the candidate should actually auto-apply.\n\nCANDIDATE:\n{{ $('Candidate Profile').item.json.candidate_profile }}\n\nJOB TITLE: {{ $('Get New Jobs').item.json.job_title }}\nCOMPANY: {{ $('Get New Jobs').item.json.company }}\nLOCATION: {{ $('Get New Jobs').item.json.location }}\nJOB DESCRIPTION:\n{{ $('Get New Jobs').item.json.job_description }}\n\nINITIAL AI SCORE: {{ $('Score & Draft').item.json.output.fit_score }}/100\nINITIAL AI REASONING: {{ $('Score & Draft').item.json.output.fit_reason }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an independent hiring reviewer. Approve candidates who are a reasonable, relevant match — not only perfect ones. The candidate is applying for either internship or full-time roles; for internships apply a more lenient bar (weight potential and transferable skills), for full-time roles weight direct experience. Return JSON with: approved (boolean), score (integer 0-100, your own independent fit assessment), note (one concise sentence explaining your verdict).\n\nApproval guidelines:\n- Approve (approved: true) when the candidate has AT LEAST a 60% skill match to the role's core requirements. A perfect (90%+) match is NOT required.\n- Approve when the candidate has relevant experience in the same industry or function, EVEN IF the job title is not an exact match (e.g. an industrial/operations engineer applying to quality, HSE, supply chain, auditing, or process roles).\n- Do NOT reject a candidate merely for being \"overqualified\" or having more experience/certifications than the role requires. Overqualification is not a disqualifier.\n- Only reject (approved: false) when the role is genuinely irrelevant to the candidate's industrial-engineering / operations background, or the skill match is clearly below 60%."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "fbfc19ff-630f-4293-ae29-e85449fe7794",
+      "name": "Groq Reviewer Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        656
+      ],
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "maxTokensToSample": 1024,
+          "temperature": 0.2
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "id": "10e60b1c-4f30-42e2-af80-ae2fb9f554cd",
+      "name": "Reviewer Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1616,
+        656
+      ],
+      "parameters": {
+        "jsonSchemaExample": "{\"approved\":true,\"score\":78,\"note\":\"One-sentence independent verdict on whether the candidate should apply.\"}",
+        "autoFix": true
+      }
+    },
+    {
+      "id": "67705481-5e95-4754-bde6-45ae72f8ac75",
+      "name": "Reviewer Parser Fix Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1616,
+        864
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "aac9fc29-bf43-42d1-8c2c-f2971600ea12",
+      "name": "Normalize Groq Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        336
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = ($json && $json.output) ? $json.output : {};\nconst jobs = $('Get New Jobs').all();\nconst src = jobs[$itemIndex] || jobs[0];\nconst jobId = (src && src.json) ? src.json.id : null;\nreturn {\n  json: {\n    job_id: jobId,\n    approved: r.approved === true,\n    score: (r.score !== undefined && r.score !== null) ? r.score : null,\n    note: r.note || \"\",\n    source: \"groq\",\n  }\n};"
+      }
+    },
+    {
+      "id": "824dc6cd-e5c9-4f59-834e-3c2d4de3cd6e",
+      "name": "Merge Reviews",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2496,
+        432
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c72b7222-4b66-4609-9f1e-5f5f539ef2fd",
+      "name": "Build NVIDIA Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        528
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const jobs = $('Get New Jobs').all();\nconst job = (jobs[$itemIndex] || jobs[0] || {}).json || {};\nconst cand = $('Candidate Profile').first().json;\nconst scored = ($json && $json.output) ? $json.output : {};\n\nconst input = [\n  \"You are an INDEPENDENT hiring reviewer judging whether a candidate should auto-apply to a job.\",\n  \"Return ONLY valid JSON, no markdown, in exactly this shape:\",\n  '{\"approved\": true, \"score\": 78, \"note\": \"one concise sentence\"}',\n  \"\",\n  \"Approval guidelines:\",\n  \"- Approve (approved:true) when the candidate has AT LEAST a 60% skill match to the role's core requirements. A perfect match is NOT required.\",\n  \"- Approve when the candidate has relevant same-industry/function experience even if the job title differs (e.g. an industrial/operations engineer applying to quality, HSE, supply chain, auditing, or process roles).\",\n  \"- Do NOT reject merely for being overqualified.\",\n  \"- Reject (approved:false) only when the role is genuinely irrelevant to the candidate's industrial-engineering/operations background, or the match is clearly below 60%.\",\n  \"\",\n  \"CANDIDATE PROFILE:\",\n  cand.candidate_profile || \"\",\n  \"\",\n  \"JOB TITLE: \" + (job.job_title || \"\"),\n  \"COMPANY: \" + (job.company || \"\"),\n  \"LOCATION: \" + (job.location || \"\"),\n  \"JOB DESCRIPTION:\",\n  job.job_description || \"\",\n  \"\",\n  \"INITIAL AI SCORE: \" + (scored.fit_score !== undefined ? scored.fit_score : \"N/A\") + \"/100\",\n  \"INITIAL AI REASONING: \" + (scored.fit_reason || \"\"),\n].join(\"\\n\");\n\nreturn { json: { input, job_id: job.id } };"
+      }
+    },
+    {
+      "id": "18800938-d2a5-43ff-9faf-c08a4c72db88",
+      "name": "NVIDIA NIM Reviewer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2048,
+        528
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'meta/llama-3.1-70b-instruct', messages: [{ role: 'user', content: $json.input }], temperature: 0.2, max_tokens: 500 }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      },
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "34e6531d-6c53-407b-b557-825de8edaae2",
+      "name": "Parse NVIDIA Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2272,
+        528
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $json || {};\nlet content = \"\";\ntry { content = body.choices[0].message.content || \"\"; } catch (e) { content = \"\"; }\n\nlet parsed = {};\nlet ok = false;\nif (content) {\n  try {\n    let c = String(content).trim();\n    const m = c.match(/\\{[\\s\\S]*\\}/);\n    if (m) { c = m[0]; }\n    parsed = JSON.parse(c);\n    ok = true;\n  } catch (e) { ok = false; }\n}\n\nconst jobId = $('Build NVIDIA Prompt').item.json.job_id;\n\nreturn {\n  json: {\n    job_id: jobId,\n    approved: ok ? (parsed.approved === true) : false,\n    score: (ok && parsed.score !== undefined && parsed.score !== null) ? parsed.score : null,\n    note: ok\n      ? ((parsed.note || \"Backup review\") + \" [NVIDIA fallback]\")\n      : \"Both reviewers unavailable (Groq failed, NVIDIA fallback could not parse) — saved for manual review.\",\n    source: \"nvidia\",\n  }\n};"
+      }
+    },
+    {
+      "id": "3b3ec9af-cb8d-4046-a124-c4c623d6bb69",
+      "name": "Assemble Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        432
+      ],
+      "parameters": {
+        "jsCode": "const jobs = $('Get New Jobs').all();\nconst scored = $('Score & Draft').all();\nconst reviews = $input.all();\nconst candidateName = $('Candidate Profile').first().json.candidate_name;\nconst client = $('Client Input').first().json || {};\nconst jobType = client.job_type || 'full-time';\nconst threshold = String(jobType).toLowerCase().indexOf('intern') !== -1 ? 35 : 50;\nconst clientEmail = client.client_email || \"\";\nconst cvUrl = client.cv_url || \"\";\n\nconst reviewsById = {};\nfor (const it of reviews) {\n  const rv = (it && it.json) ? it.json : {};\n  if (rv.job_id !== undefined && rv.job_id !== null) {\n    reviewsById[String(rv.job_id)] = rv;\n  }\n}\n\nconst out = [];\nfor (let i = 0; i < jobs.length; i++) {\n  const job = jobs[i].json || {};\n  const s = (scored[i] && scored[i].json && scored[i].json.output) ? scored[i].json.output : {};\n  const rv = reviewsById[String(job.id)] || {};\n  const hasReview = Object.keys(rv).length > 0;\n  const coverLetter = s.cover_letter || \"\";\n\n  out.push({\n    json: {\n      id: job.id,\n      job_title: job.job_title,\n      company: job.company,\n      location: job.location,\n      job_description: job.job_description,\n      job_url: job.job_url,\n      contact_email: job.contact_email || \"\",\n      candidate_name: candidateName,\n      client_name: client.client_name || candidateName,\n      client_email: clientEmail,\n      cv_url: cvUrl,\n      job_type: jobType,\n      fit_threshold: threshold,\n      fit_score: (s.fit_score !== undefined && s.fit_score !== null) ? s.fit_score : null,\n      fit_reason: s.fit_reason || \"\",\n      cover_letter: coverLetter,\n      cover_letter_html: coverLetter.split(\"\\n\").join(\"<br>\"),\n      approved: hasReview ? (rv.approved === true) : false,\n      review_score: hasReview ? ((rv.score !== undefined && rv.score !== null) ? rv.score : null) : null,\n      review_note: hasReview ? (rv.note || \"\") : \"Second-opinion reviewer unavailable — saved for manual review.\",\n      review_source: hasReview ? (rv.source || \"groq\") : \"none\",\n    },\n    pairedItem: { item: i },\n  });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "7d63a9d6-ee34-4245-b79d-d05132d11a21",
+      "name": "Good Fit & Has Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2944,
+        432
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "score",
+              "leftValue": "={{ $json.fit_score }}",
+              "rightValue": "={{ $json.fit_threshold }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            },
+            {
+              "id": "approved",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "email",
+              "leftValue": "={{ $json.contact_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0a28c3e8-72b3-4061-afec-a604d325bf97",
+      "name": "Send Application (Brevo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3168,
+        336
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { email: $('Client Input').item.json.sender_email }, to: [{ email: $json.contact_email }], subject: 'Application: ' + $json.job_title + ' — ' + $json.candidate_name, htmlContent: $json.cover_letter_html, attachment: ($json.cv_url ? [{ url: $json.cv_url, name: 'CV.pdf' }] : undefined) }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      }
+    },
+    {
+      "id": "dfcb3369-ca63-4541-b17d-9f1bf155286c",
+      "name": "Confirm to Client (Brevo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3392,
+        336
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { email: $('Client Input').item.json.sender_email }, to: [{ email: $('Assemble Results').item.json.client_email }], subject: 'Your Job Application has been sent', htmlContent: 'Hi ' + $('Assemble Results').item.json.client_name + ',<br><br>Your job application for <b>' + $('Assemble Results').item.json.job_title + '</b> at <b>' + $('Assemble Results').item.json.company + '</b> has been sent.<br><br>--- Cover letter sent on your behalf ---<br><br>' + $('Assemble Results').item.json.cover_letter_html, attachment: ($('Assemble Results').item.json.cv_url ? [{ url: $('Assemble Results').item.json.cv_url, name: 'CV.pdf' }] : undefined) }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      }
+    },
+    {
+      "id": "93958fe2-e0d0-4bc2-975e-ec166a0cf958",
+      "name": "Mark Applied",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3616,
+        336
+      ],
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $('Assemble Results').item.json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "applied",
+            "applied": true,
+            "fit_score": "={{ $('Assemble Results').item.json.fit_score }}",
+            "fit_reason": "={{ $('Assemble Results').item.json.fit_reason }} | Reviewer: {{ $('Assemble Results').item.json.review_score }}/100 — {{ $('Assemble Results').item.json.review_note }}",
+            "cover_letter": "={{ $('Assemble Results').item.json.cover_letter }}",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "61cf2904-6ad4-4608-847c-be4a62a2b581",
+      "name": "Collect Processed",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3840,
+        432
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "d8966fee-8031-43ec-a861-3993dcf697ca",
+      "name": "Mark For Review",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3616,
+        528
+      ],
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "reviewed",
+            "applied": false,
+            "fit_score": "={{ $json.fit_score }}",
+            "fit_reason": "={{ $json.fit_reason }} | Reviewer: {{ $json.review_score }}/100 — {{ $json.review_note }}",
+            "cover_letter": "={{ $json.cover_letter }}",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "2e3e5673-fa2c-4776-a1c9-fb2f64092a8d",
+      "name": "Build Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4064,
+        432
+      ],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst rows = [];\nfor (const it of items) {\n  const r = it.json || {};\n  if (r.job_title || r.company) { rows.push(r); }\n}\nconst total = rows.length;\nlet appliedCount = 0;\nlet reviewedCount = 0;\nlet errorCount = 0;\nconst lines = [];\nfor (const r of rows) {\n  const status = r.status || \"processed\";\n  if (status === \"applied\") { appliedCount++; } else { reviewedCount++; }\n  if (r.fit_score === null || r.fit_score === undefined) { errorCount++; }\n  const score = (r.fit_score === 0 || r.fit_score) ? r.fit_score : \"N/A\";\n  const reason = r.fit_reason || \"\";\n  lines.push(\"• \" + (r.job_title || \"Untitled\") + \" @ \" + (r.company || \"Unknown\") + \" — fit \" + score + \" — \" + status);\n  if (reason) { lines.push(\"    \" + reason); }\n}\nconst client = $('Client Input').first().json || {};\nconst clientsProcessed = 1;\nconst date = $now.toFormat(\"yyyy-LL-dd\");\nconst nextSteps = reviewedCount > 0\n  ? (reviewedCount + \" application(s) saved for manual review — check the job_applications table.\")\n  : \"No pending reviews. System will continue on the next scheduled run.\";\nconst subject = \"Delivery Report \" + date + \": \" + appliedCount + \" sent / \" + total + \" processed\";\nconst bodyLines = [\n  \"Delivery Report — \" + date,\n  \"Client: \" + (client.client_name || \"N/A\") + \" (\" + (client.client_email || \"N/A\") + \") — \" + (client.job_type || \"N/A\"),\n  \"Target volume: \" + (client.target_volume !== undefined ? client.target_volume : \"N/A\"),\n  \"\",\n  \"Clients processed: \" + clientsProcessed,\n  \"Applications sent: \" + appliedCount,\n  \"Errors logged: \" + errorCount,\n  \"Saved for review: \" + reviewedCount,\n  \"\",\n  \"Next steps:\",\n  nextSteps,\n  \"\",\n  \"Details:\",\n].concat(lines);\nconst body = bodyLines.join(\"\\n\");\nconst htmlBody = bodyLines.join(\"<br>\");\nreturn [{ json: { subject, body, htmlBody, total, applications_sent: appliedCount, clients_processed: clientsProcessed, errors_logged: errorCount, saved_for_review: reviewedCount, next_steps: nextSteps } }];"
+      }
+    },
+    {
+      "id": "a1111111-1111-4111-8111-111111111111",
+      "name": "Add Job Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        800
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "add-job",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "c4e6a8b0-add-job-1f3d5b7c9e2a"
+    },
+    {
+      "id": "a1a1a1a1-0001-4001-8001-000000000001",
+      "name": "Check Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        800
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a1a1a1a1-0002-4002-8002-000000000002",
+      "name": "Is Locked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        800
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lk",
+              "leftValue": "={{ $json.is_locked }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a1a1a1-0003-4003-8003-000000000003",
+      "name": "Respond Locked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        640
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, message: 'Workflow is locked. Please try again later.' }) }}",
+        "options": {
+          "responseCode": 429
+        }
+      }
+    },
+    {
+      "id": "a1a1a1a1-0004-4004-8004-000000000004",
+      "name": "Set Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        800
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": true,
+            "locked_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a2222222-2222-4222-8222-222222222222",
+      "name": "Map Job Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        800
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = ($('Add Job Webhook').item.json && $('Add Job Webhook').item.json.body) ? $('Add Job Webhook').item.json.body : {};\n\nreturn {\n  json: {\n    company: body.company || \"\",\n    email: body.email || \"\",\n    cv_url: body.cv_url || \"\",\n    job_type: body.job_type || \"\",\n    industry: body.industry_preference || \"\",\n    target_volume: (body.target_volume !== undefined && body.target_volume !== null && body.target_volume !== \"\") ? Number(body.target_volume) : null,\n    status: \"new\",\n    date_added: new Date().toISOString(),\n  }\n};"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "a3333333-3333-4333-8333-333333333333",
+      "name": "Insert Job Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        800
+      ],
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "company": "={{ $json.company }}",
+            "email": "={{ $json.email }}",
+            "cv_url": "={{ $json.cv_url }}",
+            "job_type": "={{ $json.job_type }}",
+            "industry": "={{ $json.industry }}",
+            "target_volume": "={{ $json.target_volume }}",
+            "status": "={{ $json.status }}",
+            "date_added": "={{ $json.date_added }}"
+          },
+          "schema": [
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cv_url",
+              "displayName": "cv_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_type",
+              "displayName": "job_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "industry",
+              "displayName": "industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target_volume",
+              "displayName": "target_volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_added",
+              "displayName": "date_added",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a1a1a1-0005-4005-8005-000000000005",
+      "name": "Release Lock (Success)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        800
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a4444444-4444-4444-8444-444444444444",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1568,
+        800
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: 'Job added successfully', id: $('Insert Job Row').item.json.id }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "a1a1a1a1-0006-4006-8006-000000000006",
+      "name": "Release Lock (Error)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        1000
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a1a1a1a1-0007-4007-8007-000000000007",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1568,
+        1000
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, message: 'Failed to add job. The lock has been released.' }) }}",
+        "options": {
+          "responseCode": 500
+        }
+      }
+    },
+    {
+      "id": "9eb93b67-f763-445e-87d3-5a4fe8c2eeea",
+      "name": "Send Delivery Report (Brevo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4288,
+        432
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { email: $('Client Input').first().json.sender_email }, to: [{ email: 'hasanadam506@gmail.com' }], subject: $json.subject, htmlContent: $json.htmlBody }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "b1b1b1b1-0001-4001-8001-000000000001",
+      "name": "Prep Pipeline Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        432
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const b = ($json && $json.body) ? $json.body : {};\nreturn { json: { body: b } };"
+      }
+    },
+    {
+      "id": "b1b1b1b1-0002-4002-8002-000000000002",
+      "name": "Pipeline Check Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -224,
+        336
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "b1b1b1b1-0003-4003-8003-000000000003",
+      "name": "Pipeline Is Locked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -112,
+        336
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lk",
+              "leftValue": "={{ $json.is_locked }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b1b1b1b1-0004-4004-8004-000000000004",
+      "name": "Pipeline Locked NoOp",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        180
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b1b1b1b1-0005-4005-8005-000000000005",
+      "name": "Pipeline Set Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        112,
+        336
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": true,
+            "locked_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b1b1b1b1-0006-4006-8006-000000000006",
+      "name": "Has New Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        432
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "hj",
+              "leftValue": "={{ $json.job_title }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b1b1b1b1-0007-4007-8007-000000000007",
+      "name": "Pipeline Release (Empty)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1008,
+        640
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "b1b1b1b1-0008-4008-8008-000000000008",
+      "name": "Pipeline Release (Success)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4512,
+        432
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "b2b2b2b2-0001-4001-8001-000000000001",
+      "name": "Test Check Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        112,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "b2b2b2b2-0002-4002-8002-000000000002",
+      "name": "Test Is Locked?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "lk",
+              "leftValue": "={{ $json.is_locked }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b2b2b2b2-0003-4003-8003-000000000003",
+      "name": "Test Locked NoOp",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        336,
+        -160
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b2b2b2b2-0004-4004-8004-000000000004",
+      "name": "Test Set Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        336,
+        160
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": true,
+            "locked_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "locked_at",
+              "displayName": "locked_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b2b2b2b2-0005-4005-8005-000000000005",
+      "name": "Test Release Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "executeOnce": true
+    },
+    {
+      "id": "d1d1d1d1-0001-4001-8001-000000000101",
+      "name": "Dup Check Query",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        900
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.email }}"
+            },
+            {
+              "keyName": "job_type",
+              "condition": "eq",
+              "keyValue": "={{ $json.job_type }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "d1d1d1d1-0001-4001-8001-000000000102",
+      "name": "Evaluate Duplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        900
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && Object.keys(r).length > 0);\nconst ACTIVE = ['new','pending','sent'];\nconst active = rows.filter(r => ACTIVE.includes(String(r.status || '').toLowerCase().trim()));\nconst mapped = $('Map Job Fields').first().json;\nreturn [{ json: Object.assign({}, mapped, { is_duplicate: active.length > 0, duplicate_count: active.length }) }];"
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "d1d1d1d1-0001-4001-8001-000000000103",
+      "name": "Is Duplicate?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1340,
+        900
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "dup",
+              "leftValue": "={{ $json.is_duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d1d1d1d1-0001-4001-8001-000000000104",
+      "name": "Release Lock (Duplicate)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        820
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d1d1d1d1-0001-4001-8001-000000000105",
+      "name": "Respond Duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1780,
+        820
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, message: 'Duplicate active submission – retry later.' }) }}",
+        "options": {
+          "responseCode": 409
+        }
+      }
+    },
+    {
+      "id": "c2c2c2c2-0002-4002-8002-000000000201",
+      "name": "Route by Job Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1900,
+        300
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.job_type }}",
+                    "rightValue": "audit",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "audit"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "standard"
+        }
+      }
+    },
+    {
+      "id": "c2c2c2c2-0002-4002-8002-000000000202",
+      "name": "Format Audit Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2120,
+        180
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const r = $json;\nconst score = (r.fit_score === 0 || r.fit_score) ? r.fit_score : 'N/A';\nconst threshold = (r.fit_threshold === 0 || r.fit_threshold) ? r.fit_threshold : 'N/A';\nconst reason = r.fit_reason || 'No detailed reasoning available.';\nconst reviewNote = r.review_note || '';\nconst reviewScore = (r.review_score === 0 || r.review_score) ? r.review_score : null;\nconst html = [\n  '<h2>Your CV Match Report</h2>',\n  '<p>Hello ' + (r.client_name || 'there') + ',</p>',\n  '<p>Here is how your CV matches against <strong>' + (r.job_title || 'the role') + '</strong>' + (r.company ? ' at <strong>' + r.company + '</strong>' : '') + '.</p>',\n  '<h3>Match Score: ' + score + ' / 100</h3>',\n  '<p><em>Suggested threshold for this job type: ' + threshold + '</em></p>',\n  '<h3>Assessment</h3>',\n  '<p>' + String(reason).split('\\n').join('<br>') + '</p>',\n  (reviewScore !== null ? ('<h3>Second Opinion: ' + reviewScore + ' / 100</h3><p>' + String(reviewNote).split('\\n').join('<br>') + '</p>') : ''),\n  '<hr><p style=\"color:#888;font-size:12px\">This is an automated CV match report. No application was submitted.</p>'\n].join('');\nreturn { json: Object.assign({}, r, { audit_report_html: html, status: 'audit_completed' }) };"
+      }
+    },
+    {
+      "id": "c2c2c2c2-0002-4002-8002-000000000203",
+      "name": "Send Audit Report (Brevo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2340,
+        180
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { email: $('Client Input').item.json.sender_email }, to: [{ email: $json.client_email }], subject: 'Your CV Match Report', htmlContent: $json.audit_report_html }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      }
+    },
+    {
+      "id": "c2c2c2c2-0002-4002-8002-000000000204",
+      "name": "Mark Audit Completed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2560,
+        180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $json.id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "audit_completed",
+            "applied": false,
+            "fit_score": "={{ $json.fit_score }}",
+            "fit_reason": "={{ $json.fit_reason }}",
+            "audit_report": "={{ $json.audit_report_html }}",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "c3c3c3c3-0003-4003-8003-000000000301",
+      "name": "Get Summary Chat ID",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3200,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx",
+          "cachedResultName": "bot_config"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "telegram_alert_chat_id"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "id": "c3c3c3c3-0003-4003-8003-000000000302",
+      "name": "Send Batch Summary (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3420,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.config_value }}",
+        "text": "={{ 'Daily Run Summary\\n\\nClients processed: ' + $('Build Digest').first().json.clients_processed + '\\nApplications sent: ' + $('Build Digest').first().json.applications_sent + '\\nErrors logged: ' + $('Build Digest').first().json.errors_logged + '\\nSaved for review: ' + $('Build Digest').first().json.saved_for_review + '\\n\\nNext steps:\\n' + $('Build Digest').first().json.next_steps }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "executeOnce": true,
+      "onError": "continueRegularOutput",
+      "webhookId": "a79c0a7a-09dd-46d4-825f-e79f25c183fa"
+    },
+    {
+      "id": "e4e4e4e4-0004-4004-8004-000000000401",
+      "name": "Rate Query",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        1050
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Rq6tJiAA1ne1gUDS",
+          "cachedResultName": "submission_rates"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "client_email",
+              "condition": "eq",
+              "keyValue": "={{ $json.body.email }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "e4e4e4e4-0004-4004-8004-000000000402",
+      "name": "Check Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        1050
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && Object.keys(r).length > 0);\nconst body = ($('Add Job Webhook').first().json.body) || {};\nconst clientEmail = body.email || body.client_email || '';\nconst now = Date.now();\nconst windowMs = 60 * 60 * 1000;\nconst recent = rows.filter(r => {\n  if (!r.submitted_at) return false;\n  const t = new Date(r.submitted_at).getTime();\n  return !isNaN(t) && (now - t) <= windowMs;\n});\nconst exceeded = recent.length > 5;\nreturn [{ json: { client_email: clientEmail, recent_count: recent.length, exceeded, submitted_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "e4e4e4e4-0004-4004-8004-000000000403",
+      "name": "Rate Limit Exceeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        1050
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "rl",
+              "leftValue": "={{ $json.exceeded }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "e4e4e4e4-0004-4004-8004-000000000404",
+      "name": "Respond Rate Limited",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        660,
+        960
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, message: 'Rate limit exceeded – max 5 submissions per hour. Try again later.' }) }}",
+        "options": {
+          "responseCode": 429
+        }
+      }
+    },
+    {
+      "id": "e4e4e4e4-0004-4004-8004-000000000405",
+      "name": "Log Submission",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        1140
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Rq6tJiAA1ne1gUDS",
+          "cachedResultName": "submission_rates"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "client_email": "={{ $json.client_email }}",
+            "submitted_at": "={{ $json.submitted_at }}"
+          },
+          "schema": [
+            {
+              "id": "client_email",
+              "displayName": "client_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "submitted_at",
+              "displayName": "submitted_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000501",
+      "name": "Stale Read Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -460,
+        600
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000502",
+      "name": "Compute Stale",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        600
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && Object.keys(r).length > 0);\nconst r = rows[0] || {};\nlet stale = false;\nif (r.is_locked === true && r.locked_at) {\n  const t = new Date(r.locked_at).getTime();\n  if (!isNaN(t) && (Date.now() - t) > 30*60*1000) stale = true;\n}\nreturn [{ json: { is_stale: stale, is_locked: r.is_locked === true, locked_at: r.locked_at || null } }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000503",
+      "name": "Is Stale Lock?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -20,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "st",
+              "leftValue": "={{ $json.is_stale }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000504",
+      "name": "Reset Stale Lock",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        500
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000505",
+      "name": "Notify Stale Reset",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        420,
+        500
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "Stale lock auto-reset after 30min",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "d16525b4-8478-47ee-9c81-ad6670bc2ff8"
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000510",
+      "name": "Client Status Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -460,
+        1400
+      ],
+      "webhookId": "c17a55e0-0005-4005-8005-clientstatus1",
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "client-status",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000511",
+      "name": "Client Status Query",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -240,
+        1400
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "email",
+              "condition": "eq",
+              "keyValue": "={{ $json.query.client_id }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000512",
+      "name": "Format Client Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        1400
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && Object.keys(r).length > 0);\nconst out = rows.map(r => ({ job_title: r.job_title || '', company: r.company || '', status: r.status || '' }));\nreturn [{ json: { client_id: ($('Client Status Webhook').first().json.query || {}).client_id || '', count: out.length, applications: out } }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000513",
+      "name": "Respond Client Status",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        200,
+        1400
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ client_id: $json.client_id, count: $json.count, applications: $json.applications }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f5f5f5f5-0005-4005-8005-000000000600",
+      "name": "Architecture Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1200,
+        -200
+      ],
+      "parameters": {
+        "width": 720,
+        "height": 560,
+        "color": 4,
+        "content": "## Job Application Automation — Architecture\n\n### Triggers\n- **Schedule** Daily 6AM / 12PM / 6PM — runs the full pipeline\n- **Webhook POST /applier-run-v2** — manual pipeline run\n- **Webhook POST /add-job** — add a job row (rate-limited + locked)\n- **Webhook GET /client-status** — read-only status lookup by client_id\n- **Manual test trigger** — Brevo email test\n\n### AI Routing\nScore & Draft (scorer) → Second Opinion (Groq) / NVIDIA reviewer →\nMerge Reviews → Assemble Results → **Route by Job Type**:\nfull-time/internship → application send path; low fit → audit report path.\n\n### Error Handling & Concurrency\n- **Global lock** (workflow_lock) shared by schedule, webhook, test triggers\n- **Self-healing**: stale lock (>30min) auto-reset + Telegram note\n- **Error handler workflow** (Telegram alerts) + retry_count on rows\n- Rate limiter (submission_rates) on /add-job; duplicate guard\n\n### Data Tables\njob_applications, workflow_lock, bot_config, submission_rates,\nsystem_logs, audit_report, feedback_loop, revenue, recovery_state\n\n### Notifications\nBrevo (application / client confirm / delivery report) + Telegram daily summary."
+      }
+    }
+  ],
+  "connections": {
+    "Test: Send Brevo Email": {
+      "main": [
+        [
+          {
+            "node": "Test Check Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Check Lock": {
+      "main": [
+        [
+          {
+            "node": "Test Is Locked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Is Locked?": {
+      "main": [
+        [
+          {
+            "node": "Test Locked NoOp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Test Set Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Set Lock": {
+      "main": [
+        [
+          {
+            "node": "Test Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Email Data": {
+      "main": [
+        [
+          {
+            "node": "Send Test Email (Brevo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Test Email (Brevo)": {
+      "main": [
+        [
+          {
+            "node": "Test Release Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 6AM, 12PM, 6PM": {
+      "main": [
+        [
+          {
+            "node": "Stale Read Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Stale Read Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline Check Lock": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Is Locked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline Is Locked?": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Locked NoOp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pipeline Set Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pipeline Set Lock": {
+      "main": [
+        [
+          {
+            "node": "Prep Pipeline Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Pipeline Input": {
+      "main": [
+        [
+          {
+            "node": "Client Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Input": {
+      "main": [
+        [
+          {
+            "node": "Candidate Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Candidate Profile": {
+      "main": [
+        [
+          {
+            "node": "Get New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get New Jobs": {
+      "main": [
+        [
+          {
+            "node": "Has New Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Jobs?": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pipeline Release (Empty)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Score & Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score & Draft": {
+      "main": [
+        [
+          {
+            "node": "Second Opinion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Score & Draft",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fit & Letter Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Score & Draft",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Fix Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Fit & Letter Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Second Opinion": {
+      "main": [
+        [
+          {
+            "node": "Normalize Groq Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build NVIDIA Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Reviewer Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Second Opinion",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reviewer Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Second Opinion",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reviewer Parser Fix Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Reviewer Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Groq Review": {
+      "main": [
+        [
+          {
+            "node": "Merge Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Reviews": {
+      "main": [
+        [
+          {
+            "node": "Assemble Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build NVIDIA Prompt": {
+      "main": [
+        [
+          {
+            "node": "NVIDIA NIM Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA NIM Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Parse NVIDIA Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse NVIDIA Review": {
+      "main": [
+        [
+          {
+            "node": "Merge Reviews",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Assemble Results": {
+      "main": [
+        [
+          {
+            "node": "Route by Job Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Good Fit & Has Email?": {
+      "main": [
+        [
+          {
+            "node": "Send Application (Brevo)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark For Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Application (Brevo)": {
+      "main": [
+        [
+          {
+            "node": "Confirm to Client (Brevo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm to Client (Brevo)": {
+      "main": [
+        [
+          {
+            "node": "Mark Applied",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Applied": {
+      "main": [
+        [
+          {
+            "node": "Collect Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Processed": {
+      "main": [
+        [
+          {
+            "node": "Build Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark For Review": {
+      "main": [
+        [
+          {
+            "node": "Collect Processed",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Digest": {
+      "main": [
+        [
+          {
+            "node": "Send Delivery Report (Brevo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Delivery Report (Brevo)": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Release (Success)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Summary Chat ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Job Webhook": {
+      "main": [
+        [
+          {
+            "node": "Rate Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Lock": {
+      "main": [
+        [
+          {
+            "node": "Is Locked?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Locked?": {
+      "main": [
+        [
+          {
+            "node": "Respond Locked",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Set Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Lock": {
+      "main": [
+        [
+          {
+            "node": "Map Job Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Job Fields": {
+      "main": [
+        [
+          {
+            "node": "Dup Check Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lock (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Job Row": {
+      "main": [
+        [
+          {
+            "node": "Release Lock (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lock (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lock (Success)": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lock (Error)": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dup Check Query": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lock (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Duplicate": {
+      "main": [
+        [
+          {
+            "node": "Is Duplicate?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lock (Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Duplicate?": {
+      "main": [
+        [
+          {
+            "node": "Release Lock (Duplicate)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert Job Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lock (Duplicate)": {
+      "main": [
+        [
+          {
+            "node": "Respond Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Job Type": {
+      "main": [
+        [
+          {
+            "node": "Format Audit Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Good Fit & Has Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Audit Report": {
+      "main": [
+        [
+          {
+            "node": "Send Audit Report (Brevo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Audit Report (Brevo)": {
+      "main": [
+        [
+          {
+            "node": "Mark Audit Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Audit Completed": {
+      "main": [
+        [
+          {
+            "node": "Collect Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Summary Chat ID": {
+      "main": [
+        [
+          {
+            "node": "Send Batch Summary (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Query": {
+      "main": [
+        [
+          {
+            "node": "Check Rate Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Rate Limit": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Exceeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Exceeded?": {
+      "main": [
+        [
+          {
+            "node": "Respond Rate Limited",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Submission",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Submission": {
+      "main": [
+        [
+          {
+            "node": "Check Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stale Read Lock": {
+      "main": [
+        [
+          {
+            "node": "Compute Stale",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Stale": {
+      "main": [
+        [
+          {
+            "node": "Is Stale Lock?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Stale Lock?": {
+      "main": [
+        [
+          {
+            "node": "Reset Stale Lock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pipeline Check Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reset Stale Lock": {
+      "main": [
+        [
+          {
+            "node": "Notify Stale Reset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Stale Reset": {
+      "main": [
+        [
+          {
+            "node": "Pipeline Check Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Status Webhook": {
+      "main": [
+        [
+          {
+            "node": "Client Status Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Status Query": {
+      "main": [
+        [
+          {
+            "node": "Format Client Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Client Status": {
+      "main": [
+        [
+          {
+            "node": "Respond Client Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "errorWorkflow": "skvWlvwlL0sPIvSv"
+  },
+  "staticData": {
+    "node:Daily 6AM, 12PM, 6PM": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 4,
+  "meta": null
+}

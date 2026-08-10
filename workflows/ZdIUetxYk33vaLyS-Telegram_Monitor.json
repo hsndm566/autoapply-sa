@@ -1,0 +1,295 @@
+{
+  "name": "Telegram Monitor",
+  "nodes": [
+    {
+      "id": "47a1ad46-cf5e-43a2-b93c-3773dda44609",
+      "name": "Telegram Command",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "updates": [
+          "message"
+        ]
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "eea68bb0-0ede-46d2-9cc5-73677e1f131c"
+    },
+    {
+      "id": "564b930f-5e85-4dde-ada1-3ad813aae15f",
+      "name": "Route Command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.text }}",
+                    "rightValue": "/logs",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "logs"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "76d6ce6e-55fe-4057-9f24-cc9be8e98727",
+      "name": "Get Jobs For Status",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "9b44a118-5753-4b96-9cc2-41c8b1b40a8f",
+      "name": "Count Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && Object.keys(r).length > 0);\nconst norm = s => String(s || '').toLowerCase().trim();\nconst newCount = rows.filter(r => norm(r.status) === 'new').length;\nconst pendingCount = rows.filter(r => norm(r.status) === 'pending').length;\nconst chatId = $('Telegram Command').first().json.message.chat.id;\nconst text = ['Job Applications Status', '', 'New: ' + newCount, 'Pending: ' + pendingCount, 'Total tracked: ' + rows.length].join('\\n');\nreturn [{ json: { chatId, text } }];"
+      }
+    },
+    {
+      "id": "95a6b30d-6f44-446b-819c-25aa159a7ede",
+      "name": "Send Status Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "acf3cb8d-b187-47f6-9724-30d62c1b5136"
+    },
+    {
+      "id": "189d7b52-7b81-44fa-a020-6ce418496d72",
+      "name": "Get Error Logs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FfrKA9GDdaCKszXW",
+          "cachedResultName": "error_log"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "77c07282-4a80-493e-a049-f84b1cc23b19",
+      "name": "Format Last 5 Errors",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const rows = $input.all().map(i => i.json).filter(r => r && Object.keys(r).length > 0);\nrows.sort((a, b) => new Date(b.occurred_at || 0).getTime() - new Date(a.occurred_at || 0).getTime());\nconst last5 = rows.slice(0, 5);\nconst chatId = $('Telegram Command').first().json.message.chat.id;\nlet text;\nif (last5.length === 0) {\n  text = 'No errors logged.';\n} else {\n  const lines = ['Last ' + last5.length + ' error(s):', ''];\n  for (const r of last5) {\n    const when = r.occurred_at ? String(r.occurred_at) : 'unknown time';\n    lines.push('• [' + when + '] ' + (r.workflow_name || 'Unknown') + ' @ ' + (r.node_name || 'unknown node'));\n    lines.push('   ' + (r.error_message || 'No message'));\n  }\n  text = lines.join('\\n');\n}\nreturn [{ json: { chatId, text } }];"
+      }
+    },
+    {
+      "id": "18385198-58d8-42b0-b749-b2d24583b781",
+      "name": "Send Logs Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "f94375f1-b7d5-45e2-a312-27357dffa5c6"
+    }
+  ],
+  "connections": {
+    "Telegram Command": {
+      "main": [
+        [
+          {
+            "node": "Route Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Command": {
+      "main": [
+        [
+          {
+            "node": "Get Jobs For Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Error Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Jobs For Status": {
+      "main": [
+        [
+          {
+            "node": "Count Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Count Status": {
+      "main": [
+        [
+          {
+            "node": "Send Status Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Error Logs": {
+      "main": [
+        [
+          {
+            "node": "Format Last 5 Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Last 5 Errors": {
+      "main": [
+        [
+          {
+            "node": "Send Logs Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": null
+}

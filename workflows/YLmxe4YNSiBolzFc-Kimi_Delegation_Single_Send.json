@@ -1,0 +1,1480 @@
+{
+  "name": "Kimi Delegation — Single Send",
+  "nodes": [
+    {
+      "id": "48a06153-20b6-440a-8f43-42178b75cc39",
+      "name": "Run Single (Row 22)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "cd2f5254-58ec-487b-a7e7-3d51082defa9",
+      "name": "CV Source",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cv",
+              "name": "cv_text",
+              "type": "string",
+              "value": "HASSAN AHMED ADAM MOHAMMAD\nIndustrial Engineer — Jeddah, Saudi Arabia\nEmail: hasanadam506@gmail.com | Phone: +966 57 144 8656\n\nProfessional Summary\nIndustrial Engineer specializing in process optimization, supply chain logistics, and operations management. Proven ability to streamline workflows, coordinate cross-functional teams, and leverage Lean methodologies to drive measurable efficiency improvements and operational compliance.\n\nCore Competencies\nLean Manufacturing | Process Optimization | Supply Chain Logistics | Inventory Management | Vendor Relations | Risk Management | Cross-Functional Leadership | Data Analysis\n\nEducation\nMarch 2022 - Present — Bachelor of Science in Industrial Engineering, University of Business and Technology (UBT), Jeddah\nJanuary 2014 - November 2019 — STEM Diploma, International Philippine School in Jeddah (IPSJ), Jeddah\n\nAcademic Projects\nSenior Project: Process Optimization Using Lean Management, King AbdulAziz International Airport (KAIA)\n- Applied DMAIC framework and Value Stream Mapping (VSM) to analyze and optimize passenger check-in workflows.\n- Reduced average check-in time from 15.5 minutes to 9.2 minutes (a 40% process acceleration).\n- Decreased passenger waiting time by 50% and manual verification time by 57% through bottleneck identification and resource balancing.\n\nProfessional Experience\nJune 2022 - December 2025 — Logistics & Operations Coordinator, UBT, Jeddah\n- Orchestrated comprehensive travel, accommodation, and logistics frameworks for international athletic contingents.\n- Recruited and directed large-scale volunteer workforces for high-profile events including the Jeddah Marathon.\n- Administered critical liaison operations to guarantee seamless operational continuity and elite guest experiences.\n\nMarch 2024 - August 2024 — Purchasing Assistant, Aljabr, Dammam\n- Directed procurement operations to guarantee uninterrupted supply chain flow and timely material delivery.\n- Optimized vendor relationships to establish collaborative and cost-effective communication channels.\n- Executed purchase orders and conducted market research to negotiate advantageous product offerings.\n\nFebruary 2021 - November 2022 — Production Management Secretary, Piece of Fabric Est., Jeddah\n- Engineered standardized production schedules to maximize operational output and minimize facility downtime.\n- Administered systematic inventory audits and localized supply chain replenishment to sustain continuous manufacturing.\n\nJanuary 2019 - December 2019 — Educational Operations Assistant, AGS Advanced Generations School, Jeddah\n- Administered structured environments through behavioral reinforcement and individualized support mechanisms.\n- Streamlined communication channels between staff and external stakeholders to foster operational cohesion.\n\nCertifications\nOSHA 30-Hour General Industry (Occupational Safety and Health)\nISO 9001:2015 & Risk Management Certificate (Quality Management Systems)\nBusiness Analysis Virtual Work Experience (BCG & Misk)\nProfessional Certificate in Productivity (PCP)\n\nLanguages\nEnglish, Arabic, Somali, Filipino"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "0b292ea7-2405-41b1-acf7-f700ad7f34ec",
+      "name": "Get Row 22",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "22"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      }
+    },
+    {
+      "id": "16a3d53e-261a-4a0b-b3dd-417efc009eb8",
+      "name": "Prep Inputs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var row = $input.first().json || {};\nvar cv = '';\ntry { cv = $('CV Source').first().json.cv_text || ''; } catch (e) { cv = ''; }\nvar company = row.company || 'the company';\nvar industry = row.industry || 'Engineering';\nvar recipient = row.contact_email || row.email || '';\nvar hasJd = row.job_description && String(row.job_description).trim().length > 0;\nvar jd = hasJd ? String(row.job_description) : ('General open application to ' + company + ', a Saudi Arabia-based ' + industry + ' company. Target role: Industrial Engineer focused on process optimization, supply chain logistics, operations management, quality and safety compliance.');\nvar analystSystem = 'You are a Job Analyzer. Extract structured data from the job/company context. Respond ONLY with compact JSON: {\"top_skills\":[5 strings],\"key_qualifications\":[3 strings],\"industry_keywords\":[strings],\"company_tone\":\"one word\"}.';\nvar analystUser = 'Company: ' + company + ' Industry: ' + industry + ' Context: ' + jd;\nvar groqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.3, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: analystSystem }, { role: 'user', content: analystUser } ] };\nvar nvidiaBody = { model: 'meta/llama-3.1-70b-instruct', temperature: 0.3, messages: [ { role: 'system', content: analystSystem }, { role: 'user', content: analystUser } ] };\nreturn [{ json: { row_id: row.id, company: company, industry: industry, recipient: recipient, job_description: jd, cv_text: cv, groqBody: groqBody, nvidiaBody: nvidiaBody } }];"
+      }
+    },
+    {
+      "id": "27f24a3b-6d93-4daf-bb85-f5003a1f6e1b",
+      "name": "HF Embed Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "huggingFaceApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ inputs: $('Prep Inputs').first().json.job_description }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "7HjlGl9dK3pF9sed",
+          "name": "Hugging Face account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c0b71411-4dc8-4868-9a48-43d107facb56",
+      "name": "Aggregate Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var all = $input.all();\nvar vec = [];\nfor (var i = 0; i < all.length; i++) {\n  var v = all[i].json;\n  if (typeof v === \"number\") { vec.push(v); }\n  else if (Array.isArray(v)) { for (var k = 0; k < v.length; k++) { if (typeof v[k] === \"number\") vec.push(v[k]); } }\n}\nreturn [{ json: { embedding: vec, dim: vec.length } }];"
+      }
+    },
+    {
+      "id": "c34a1c57-517c-4c55-a49a-54dbaefe5eb7",
+      "name": "Pinecone Describe Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.pinecone.io/indexes/job-agent-memory",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Pinecone-API-Version",
+              "value": "2024-07"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "ifABlu9PCWIqab6R",
+          "name": "Pinecone account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "6e18040d-109f-4d90-af05-eb98682b326b",
+      "name": "Pinecone Query",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $('Pinecone Describe Index').first().json.host }}/query",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Pinecone-API-Version",
+              "value": "2024-07"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vector: $('Aggregate Embedding').first().json.embedding, topK: 3, includeMetadata: true }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "ifABlu9PCWIqab6R",
+          "name": "Pinecone account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "3b188cb7-7a3c-45da-a0a5-3fc6fe52b5c8",
+      "name": "Build Memory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var LF = String.fromCharCode(10);\nvar prep = $('Prep Inputs').first().json || {};\nvar matches = [];\ntry { var q = $('Pinecone Query').first().json || {}; matches = q.matches || []; } catch (e) { matches = []; }\nvar lines = [];\nfor (var i = 0; i < matches.length; i++) { var m = matches[i] || {}; var md = m.metadata || {}; lines.push('- ' + (md.company || '?') + ': outcome ' + (md.status || 'n/a')); }\nvar memText = lines.length ? lines.join(LF) : 'No similar past jobs found in memory.';\nreturn [{ json: { row_id: prep.row_id, company: prep.company, memory_context: memText, groqBody: prep.groqBody } }];"
+      }
+    },
+    {
+      "id": "4cbc5d96-d281-4106-a26d-427d8d935802",
+      "name": "Pinecone Create Index",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.pinecone.io/indexes",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Pinecone-API-Version",
+              "value": "2024-07"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ name: 'job-agent-memory', dimension: 384, metric: 'cosine', spec: { serverless: { cloud: 'aws', region: 'us-east-1' } } }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "ifABlu9PCWIqab6R",
+          "name": "Pinecone account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "4c9f415b-3296-4510-abe3-4416bdfb2d5d",
+      "name": "Groq Job Analyzer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2016,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.groqBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "e559b77f-05fb-42fd-bcd0-f2f172b3baa9",
+      "name": "Merge Analysis",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2464,
+        192
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "9be32b05-0435-4535-b4a1-8ef371e413b4",
+      "name": "NVIDIA Fallback Analyzer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2240,
+        272
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Prep Inputs\").first().json.nvidiaBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      }
+    },
+    {
+      "id": "511e078e-850c-4c5d-b9ef-671714e9cd94",
+      "name": "Task Router",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar src = $input.first().json || {};\nvar prep = $('Prep Inputs').first().json || {};\nvar mem = '';\ntry { mem = $('Build Memory').first().json.memory_context || ''; } catch (e) { mem = ''; }\n// parse the merged analyzer output (Groq or NVIDIA, both OpenAI-compatible)\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar analysis = {};\nif (content) {\n  var clean = String(content).split(FENCE).join('').trim();\n  if (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\n  try { analysis = JSON.parse(clean); } catch (e) { analysis = { raw: content }; }\n}\n// deterministic task plan\nvar plan = { cv_agent: 'groq', cv_fallback: 'zai', cover_agent: 'groq', cover_fallback: 'zai', last_resort: 'openai', enrich_agent: 'gemini', quality_check: true };\nvar ctx = 'Company: ' + prep.company + ' Industry: ' + prep.industry + ' Job analysis JSON: ' + JSON.stringify(analysis) + ' Past memory: ' + mem;\n// CV tailoring prompt\nvar cvSys = 'You are the CV tailor for candidate Hassan Ahmed Adam Mohammad, an Industrial Engineer in Jeddah. Rewrite the base CV as plain text, emphasizing matching experience, reordering bullets, and inserting relevant keywords from the job analysis. Do not fabricate experience. Respond ONLY with compact JSON: {\"tailored_cv\":\"...plain text...\"}.';\nvar cvUsr = ctx + ' Base CV: ' + prep.cv_text;\nvar cvMsgs = [ { role: 'system', content: cvSys }, { role: 'user', content: cvUsr } ];\nvar cvGroqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.6, max_tokens: 1800, response_format: { type: 'json_object' }, messages: cvMsgs };\nvar cvZaiBody = { model: 'glm-4-flash', temperature: 0.6, max_tokens: 1800, messages: cvMsgs };\nvar cvOpenaiBody = { model: 'gpt-4o-mini', temperature: 0.6, max_tokens: 1800, response_format: { type: 'json_object' }, messages: cvMsgs };\n// Cover letter prompt\nvar clSys = 'You are the cover letter writer for candidate Hassan Ahmed Adam Mohammad, an Industrial Engineer in Jeddah. Write a cover letter under 200 words with three paragraphs: opening interest, middle mapping his experience to the role, closing call-to-action. Respond ONLY with compact JSON: {\"cover_letter\":\"...\"}.';\nvar clUsr = ctx + ' Candidate background: ' + String(prep.cv_text || '').slice(0, 1200);\nvar clMsgs = [ { role: 'system', content: clSys }, { role: 'user', content: clUsr } ];\nvar coverGroqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.6, max_tokens: 900, response_format: { type: 'json_object' }, messages: clMsgs };\nvar coverZaiBody = { model: 'glm-4-flash', temperature: 0.6, max_tokens: 900, messages: clMsgs };\nvar coverOpenaiBody = { model: 'gpt-4o-mini', temperature: 0.6, max_tokens: 900, response_format: { type: 'json_object' }, messages: clMsgs };\nreturn [{ json: { row_id: prep.row_id, company: prep.company, recipient: prep.recipient, analysis: analysis, plan: plan, cvGroqBody: cvGroqBody, cvZaiBody: cvZaiBody, cvOpenaiBody: cvOpenaiBody, coverGroqBody: coverGroqBody, coverZaiBody: coverZaiBody, coverOpenaiBody: coverOpenaiBody } }];"
+      }
+    },
+    {
+      "id": "de33f7ec-8c14-4d24-a81e-3814cf531f00",
+      "name": "CV Tailor (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2912,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Task Router\").first().json.cvGroqBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "75769949-391e-4fb6-ab97-2005d5ffca33",
+      "name": "Parse CV (Groq)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar tr = $('Task Router').first().json || {};\nvar src = $input.first().json || {};\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar clean = String(content).split(FENCE).join('').trim();\nif (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\nvar out = {};\ntry { out = JSON.parse(clean); } catch (e) { out = { tailored_cv: content }; }\nreturn [{ json: { row_id: tr.row_id, company: tr.company, recipient: tr.recipient, tailored_cv: out.tailored_cv || content || '', cv_agent: 'groq' } }];"
+      }
+    },
+    {
+      "id": "e6e6faf1-28db-4713-8ad8-64b4488f9aeb",
+      "name": "Merge CV",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3808,
+        176
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 3
+      }
+    },
+    {
+      "id": "23b047e2-66ad-402f-b654-7e91c5fb104b",
+      "name": "CV Tailor (Z.ai)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3136,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Task Router\").first().json.cvZaiBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "bN7hxfTJtLOuCUU1",
+          "name": "Bearer Auth account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "21e93360-84df-40a5-8e95-376ec05935e4",
+      "name": "CV Tailor (OpenAI last resort)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3360,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Task Router\").first().json.cvOpenaiBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "NKUNP03ZwwFzHkyE",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1b34c14a-c200-4556-be03-54f6f90863a7",
+      "name": "Parse CV (OpenAI)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar tr = $('Task Router').first().json || {};\nvar src = $input.first().json || {};\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar clean = String(content).split(FENCE).join('').trim();\nif (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\nvar out = {};\ntry { out = JSON.parse(clean); } catch (e) { out = { tailored_cv: content }; }\nreturn [{ json: { row_id: tr.row_id, company: tr.company, recipient: tr.recipient, tailored_cv: out.tailored_cv || content || '', cv_agent: 'openai' } }];"
+      }
+    },
+    {
+      "id": "2d21b4f5-cf90-4da6-b2d3-d1809c96caec",
+      "name": "Parse CV (Z.ai)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar tr = $('Task Router').first().json || {};\nvar src = $input.first().json || {};\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar clean = String(content).split(FENCE).join('').trim();\nif (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\nvar out = {};\ntry { out = JSON.parse(clean); } catch (e) { out = { tailored_cv: content }; }\nreturn [{ json: { row_id: tr.row_id, company: tr.company, recipient: tr.recipient, tailored_cv: out.tailored_cv || content || '', cv_agent: 'zai' } }];"
+      }
+    },
+    {
+      "id": "5dba6c96-ea31-45e6-ac97-6cfbb02d0ae6",
+      "name": "Cover Letter (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4032,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Task Router\").first().json.coverGroqBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "afede39a-ee88-438c-b926-2f77a6afd553",
+      "name": "Parse Cover (Groq)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar tr = $('Task Router').first().json || {};\nvar cvm = $('Merge CV').first().json || {};\nvar src = $input.first().json || {};\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar clean = String(content).split(FENCE).join('').trim();\nif (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\nvar out = {};\ntry { out = JSON.parse(clean); } catch (e) { out = { cover_letter: content }; }\nreturn [{ json: { row_id: tr.row_id, company: tr.company, recipient: tr.recipient, tailored_cv: cvm.tailored_cv || '', cv_agent: cvm.cv_agent || '', cover_letter: out.cover_letter || content || '', cover_agent: 'groq', enrich_agent: tr.plan.enrich_agent } }];"
+      }
+    },
+    {
+      "id": "432703fc-6f4a-422d-a598-17c909b82b61",
+      "name": "Merge Cover",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        4928,
+        176
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 3
+      }
+    },
+    {
+      "id": "cf8500a3-3fff-465b-9502-b0133e4fa25f",
+      "name": "Cover Letter (Z.ai)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4256,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Task Router\").first().json.coverZaiBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "bN7hxfTJtLOuCUU1",
+          "name": "Bearer Auth account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "d510264e-12b3-43b1-830e-f65892c84ae5",
+      "name": "Cover Letter (OpenAI last resort)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4480,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($(\"Task Router\").first().json.coverOpenaiBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": "NKUNP03ZwwFzHkyE",
+          "name": "OpenAI account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "3d8b5a8f-11cf-43ec-a095-f4e4c7dd9b61",
+      "name": "Parse Cover (OpenAI)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar tr = $('Task Router').first().json || {};\nvar cvm = $('Merge CV').first().json || {};\nvar src = $input.first().json || {};\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar clean = String(content).split(FENCE).join('').trim();\nif (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\nvar out = {};\ntry { out = JSON.parse(clean); } catch (e) { out = { cover_letter: content }; }\nreturn [{ json: { row_id: tr.row_id, company: tr.company, recipient: tr.recipient, tailored_cv: cvm.tailored_cv || '', cv_agent: cvm.cv_agent || '', cover_letter: out.cover_letter || content || '', cover_agent: 'openai', enrich_agent: tr.plan.enrich_agent } }];"
+      }
+    },
+    {
+      "id": "d729b4cf-e34e-4e98-980a-75e21e2935d0",
+      "name": "Parse Cover (Z.ai)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4704,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar tr = $('Task Router').first().json || {};\nvar cvm = $('Merge CV').first().json || {};\nvar src = $input.first().json || {};\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar clean = String(content).split(FENCE).join('').trim();\nif (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\nvar out = {};\ntry { out = JSON.parse(clean); } catch (e) { out = { cover_letter: content }; }\nreturn [{ json: { row_id: tr.row_id, company: tr.company, recipient: tr.recipient, tailored_cv: cvm.tailored_cv || '', cv_agent: cvm.cv_agent || '', cover_letter: out.cover_letter || content || '', cover_agent: 'zai', enrich_agent: tr.plan.enrich_agent } }];"
+      }
+    },
+    {
+      "id": "8e1be83b-6d03-4053-ad6b-ea08b725191c",
+      "name": "HF Quality Gate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5152,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/cardiffnlp/twitter-roberta-base-sentiment-latest",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "huggingFaceApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ inputs: (($(\"Merge Cover\").first().json.cover_letter || \"\") + \" \" + ($(\"Merge Cover\").first().json.tailored_cv || \"\")).slice(0, 480) }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "7HjlGl9dK3pF9sed",
+          "name": "Hugging Face account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "746aeca3-477e-4a34-a766-82d19c67e9fa",
+      "name": "Check Sentiment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5376,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var hf = $input.first().json;\nvar pk = $('Merge Cover').first().json || {};\nvar isNeg = false;\nvar score = 0.9;\ntry {\n  var arr = hf;\n  if (Array.isArray(arr) && Array.isArray(arr[0])) arr = arr[0];\n  if (Array.isArray(arr)) {\n    var top = arr[0];\n    for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].score > top.score) top = arr[i]; }\n    var lbl = String(top.label || '').toLowerCase();\n    if ((lbl === 'negative' || lbl === 'label_0') && top.score >= 0.6) { isNeg = true; score = 0.4; }\n    else { score = 0.9; }\n  }\n} catch (e) { isNeg = false; score = 0.9; }\nreturn [{ json: { row_id: pk.row_id, company: pk.company, recipient: pk.recipient, tailored_cv: pk.tailored_cv || '', cover_letter: pk.cover_letter || '', cv_agent: pk.cv_agent || '', cover_agent: pk.cover_agent || '', tone_score: score, tone_flagged: isNeg, tone_source: 'hf-roberta' } }];"
+      }
+    },
+    {
+      "id": "7f7d7375-9bba-4b37-bf22-d95387486938",
+      "name": "Merge Quality",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        5600,
+        192
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "67e1930e-8c8f-4d3b-abcf-a5140f0e9c46",
+      "name": "Simple Tone Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5376,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var pk = $('Merge Cover').first().json || {};\nvar text = ((pk.cover_letter || '') + ' ' + (pk.tailored_cv || '')).toLowerCase();\nvar negs = ['unfortunately','regret','sorry','cannot','can\\u2019t','unable','not qualified','lack of','no experience','weak','poor','fail','failed','problem','difficult','concern','worried','desperate','beg','pity'];\nvar flagged = false;\nfor (var i = 0; i < negs.length; i++) { if (text.indexOf(negs[i]) !== -1) { flagged = true; break; } }\nvar score = flagged ? 0.4 : 0.9;\nreturn [{ json: { row_id: pk.row_id, company: pk.company, recipient: pk.recipient, tailored_cv: pk.tailored_cv || '', cover_letter: pk.cover_letter || '', cv_agent: pk.cv_agent || '', cover_agent: pk.cover_agent || '', tone_score: score, tone_flagged: flagged, tone_source: 'simple-code' } }];"
+      }
+    },
+    {
+      "id": "62be1160-10ca-4a4a-8151-763a35fe19ca",
+      "name": "Build Review Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5824,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $input.first().json || {};\nvar sys = 'You are the final reviewer and polisher for a job application. Ensure the CV is clean plain text and the cover letter is confident, warm, professional, and under 200 words. Fix any tone issues. Do not fabricate experience. Respond ONLY with compact JSON: {\"tailored_cv\":\"...\",\"cover_letter\":\"...\"}.';\nvar usr = 'Company: ' + (j.company || '') + ' Tone score: ' + (j.tone_score) + ' (flagged=' + (j.tone_flagged) + '). CV: ' + (j.tailored_cv || '') + ' Cover letter: ' + (j.cover_letter || '');\nvar reviewBody = { model: 'llama-3.3-70b-versatile', temperature: 0.4, max_tokens: 1800, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: sys }, { role: 'user', content: usr } ] };\nreturn [{ json: { row_id: j.row_id, company: j.company, recipient: j.recipient, tailored_cv: j.tailored_cv || '', cover_letter: j.cover_letter || '', cv_agent: j.cv_agent || '', cover_agent: j.cover_agent || '', tone_score: j.tone_score, reviewBody: reviewBody } }];"
+      }
+    },
+    {
+      "id": "9d02c959-66e7-4f5a-b726-2159ccc43523",
+      "name": "Final Reviewer (Groq)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        6048,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.reviewBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "490edccc-068a-4e7c-b677-32c33976e8df",
+      "name": "Parse Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6272,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var FENCE = String.fromCharCode(96);\nvar src = $input.first().json || {};\nvar prev = $('Build Review Body').first().json || {};\nvar content = '';\ntry { content = src.choices[0].message.content; } catch (e) { content = ''; }\nvar out = {};\nif (content) {\n  var clean = String(content).split(FENCE).join('').trim();\n  if (clean.slice(0, 4).toLowerCase() === 'json') clean = clean.slice(4).trim();\n  try { out = JSON.parse(clean); } catch (e) { out = {}; }\n}\nreturn [{ json: { row_id: prev.row_id, company: prev.company, recipient: prev.recipient, tailored_cv: out.tailored_cv || prev.tailored_cv || '', cover_letter: out.cover_letter || prev.cover_letter || '', cv_agent: prev.cv_agent || '', cover_agent: prev.cover_agent || '' } }];"
+      }
+    },
+    {
+      "id": "245078d4-277a-46ac-811d-9f8d478ec7af",
+      "name": "Build CV HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $input.first().json || {};\nvar esc = function (s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };\nvar LF = String.fromCharCode(10);\nvar cvHtml = esc(j.tailored_cv).split(LF).join('<br>');\nvar coverHtml = esc(j.cover_letter).split(LF).join('<br>');\nvar html = '<html><head><meta charset=\"utf-8\"><style>body{font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#222;margin:40px;}</style></head><body>' + cvHtml + '</body></html>';\nreturn [{ json: { row_id: j.row_id, company: j.company, recipient: j.recipient, tailored_cv: j.tailored_cv || '', cover_letter: j.cover_letter || '', cv_agent: j.cv_agent || '', cover_agent: j.cover_agent || '', cover_html: coverHtml, html: html } }];"
+      }
+    },
+    {
+      "id": "e9f4723b-84bc-4ef7-abff-9cd268f43a6d",
+      "name": "PDFShift Convert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        6720,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.pdfshift.io/v3/convert/pdf",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.html, sandbox: false }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "MK4iVgw9hy0Rtbd0",
+          "name": "PDFShift API key"
+        }
+      }
+    },
+    {
+      "id": "8af7666e-2740-488c-a32f-1a92ab58f68f",
+      "name": "Encode PDF + Build Brevo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6944,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var bh = $('Build CV HTML').first().json || {};\nvar b64 = '';\ntry {\n  var buf = await this.helpers.getBinaryDataBuffer(0, 'data');\n  b64 = buf.toString('base64');\n} catch (e) { b64 = ''; }\nvar coverHtml = bh.cover_html || '';\nvar brevoBody = {\n  sender: { name: 'Hassan Ahmed Adam Mohammad', email: 'jobapplier@agentmail.to' },\n  to: [{ email: bh.recipient }],\n  subject: 'Application for Industrial Engineering Position - Hassan Adam',\n  htmlContent: '<html><body style=\"font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#222;\">' + coverHtml + '</body></html>',\n  attachment: [{ content: b64, name: 'CV_Hassan_Adam.pdf' }]\n};\nreturn [{ json: { row_id: bh.row_id, recipient: bh.recipient, company: bh.company, cv_agent: bh.cv_agent, cover_agent: bh.cover_agent, pdf_bytes: b64.length, brevoBody: brevoBody } }];"
+      }
+    },
+    {
+      "id": "25486e15-31d8-40ff-bb8a-4bf1451fa29e",
+      "name": "Send Application (Brevo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        7168,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.brevoBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      }
+    },
+    {
+      "id": "7b933846-ef29-4e50-ae56-fe9230c7aa82",
+      "name": "Parse Brevo Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7392,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar eb = $('Encode PDF + Build Brevo').first().json || {};\nvar bh = $('Build CV HTML').first().json || {};\nvar messageId = src.messageId || (src.messageIds && src.messageIds[0]) || '';\nvar status = messageId ? 'success' : 'failed';\nreturn [{ json: { row_id: eb.row_id, recipient: eb.recipient, company: bh.company, tailored_cv: bh.tailored_cv, cover_letter: bh.cover_letter, cv_agent: eb.cv_agent || '', cover_agent: eb.cover_agent || '', messageId: messageId, status: status } }];"
+      }
+    },
+    {
+      "id": "1065049e-84eb-4548-9d59-340eeb249e91",
+      "name": "Build Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7616,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var pb = $input.first().json || {};\nvar prep = $('Prep Inputs').first().json || {};\nvar vec = [];\ntry { vec = $('Aggregate Embedding').first().json.embedding || []; } catch (err) { vec = []; }\nvar host = '';\ntry { host = $('Pinecone Describe Index').first().json.host || ''; } catch (e) { host = ''; }\nif (!host) { try { host = $('Pinecone Create Index').first().json.host || ''; } catch (e) { host = ''; } }\nif (!host) { host = 'job-agent-memory-kwj37r9.svc.aped-4627-b74a.pinecone.io'; }\nvar ts = new Date().toISOString();\nvar upsertBody = { vectors: [{ id: 'job-' + (pb.row_id || Date.now()), values: vec, metadata: { company: pb.company || '', job_description: String(prep.job_description || '').slice(0, 1000), tailored_cv: String(pb.tailored_cv || '').slice(0, 2000), cover_letter: String(pb.cover_letter || '').slice(0, 1000), status: pb.status || '', cv_agent: pb.cv_agent || '', cover_agent: pb.cover_agent || '', timestamp: ts } }] };\nreturn [{ json: { host: host, has_host: host.length > 0, dim: vec.length, upsertBody: upsertBody } }];"
+      }
+    },
+    {
+      "id": "af685012-d3e3-4f79-b5f5-063aa02adc97",
+      "name": "Pinecone Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        7840,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $json.host }}/vectors/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Pinecone-API-Version",
+              "value": "2024-07"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.upsertBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "ifABlu9PCWIqab6R",
+          "name": "Pinecone account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "63994038-4e3d-4696-9ff2-ac194bf7b537",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8064,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var up = $input.first().json || {};\nvar pb = $('Parse Brevo Result').first().json || {};\nvar upserted = 0;\ntry { upserted = up.upsertedCount; } catch (e) { upserted = 0; }\nif (typeof upserted !== 'number') upserted = 0;\nvar pineStatus = upserted > 0 ? ('Pinecone upsert OK (' + upserted + ' vector)') : 'Pinecone upsert not confirmed';\nvar LF = String.fromCharCode(10);\nvar tgText = 'Application ' + (pb.status || 'unknown') + ' to ' + (pb.company || 'the company') + ' at ' + (pb.recipient || '') + LF + 'Brevo message ID: ' + (pb.messageId || 'n/a') + LF + 'CV agent: ' + (pb.cv_agent || '?') + ' | Cover agent: ' + (pb.cover_agent || '?') + LF + pineStatus;\nreturn [{ json: { messageId: pb.messageId, status: pb.status, company: pb.company, recipient: pb.recipient, cv_agent: pb.cv_agent, cover_agent: pb.cover_agent, pinecone_upserted: upserted, tgText: tgText } }];"
+      }
+    },
+    {
+      "id": "4aabed3c-a30f-427d-a2dc-46ebb1faf895",
+      "name": "Telegram Confirm",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        8288,
+        192
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ $json.tgText }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "0e0a77df-fb47-4b19-8f1b-8148d627854a"
+    }
+  ],
+  "connections": {
+    "Run Single (Row 22)": {
+      "main": [
+        [
+          {
+            "node": "CV Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Source": {
+      "main": [
+        [
+          {
+            "node": "Get Row 22",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Row 22": {
+      "main": [
+        [
+          {
+            "node": "Prep Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Inputs": {
+      "main": [
+        [
+          {
+            "node": "HF Embed Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HF Embed Job": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Embedding": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Describe Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Describe Index": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Pinecone Create Index",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Query": {
+      "main": [
+        [
+          {
+            "node": "Build Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Memory": {
+      "main": [
+        [
+          {
+            "node": "Groq Job Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Create Index": {
+      "main": [
+        [
+          {
+            "node": "Build Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Job Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Merge Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NVIDIA Fallback Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Analysis": {
+      "main": [
+        [
+          {
+            "node": "Task Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA Fallback Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Merge Analysis",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Task Router": {
+      "main": [
+        [
+          {
+            "node": "CV Tailor (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Tailor (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Parse CV (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CV Tailor (Z.ai)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CV (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Merge CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge CV": {
+      "main": [
+        [
+          {
+            "node": "Cover Letter (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Tailor (Z.ai)": {
+      "main": [
+        [
+          {
+            "node": "Parse CV (Z.ai)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CV Tailor (OpenAI last resort)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Tailor (OpenAI last resort)": {
+      "main": [
+        [
+          {
+            "node": "Parse CV (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CV (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Merge CV",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Parse CV (Z.ai)": {
+      "main": [
+        [
+          {
+            "node": "Merge CV",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Cover Letter (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Parse Cover (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cover Letter (Z.ai)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cover (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Merge Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Cover": {
+      "main": [
+        [
+          {
+            "node": "HF Quality Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover Letter (Z.ai)": {
+      "main": [
+        [
+          {
+            "node": "Parse Cover (Z.ai)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cover Letter (OpenAI last resort)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover Letter (OpenAI last resort)": {
+      "main": [
+        [
+          {
+            "node": "Parse Cover (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cover (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Merge Cover",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Parse Cover (Z.ai)": {
+      "main": [
+        [
+          {
+            "node": "Merge Cover",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HF Quality Gate": {
+      "main": [
+        [
+          {
+            "node": "Check Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Simple Tone Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Merge Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Quality": {
+      "main": [
+        [
+          {
+            "node": "Build Review Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Tone Check": {
+      "main": [
+        [
+          {
+            "node": "Merge Quality",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Review Body": {
+      "main": [
+        [
+          {
+            "node": "Final Reviewer (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Reviewer (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Parse Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Review": {
+      "main": [
+        [
+          {
+            "node": "Build CV HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CV HTML": {
+      "main": [
+        [
+          {
+            "node": "PDFShift Convert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDFShift Convert": {
+      "main": [
+        [
+          {
+            "node": "Encode PDF + Build Brevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode PDF + Build Brevo": {
+      "main": [
+        [
+          {
+            "node": "Send Application (Brevo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Application (Brevo)": {
+      "main": [
+        [
+          {
+            "node": "Parse Brevo Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Brevo Result": {
+      "main": [
+        [
+          {
+            "node": "Build Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Upsert": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Upsert": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Telegram Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

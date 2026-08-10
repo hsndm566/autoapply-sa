@@ -1,0 +1,935 @@
+{
+  "name": "Continue hsndm.tech from Opus drafts (multi-AI, one-time)",
+  "nodes": [
+    {
+      "id": "9613eea0-398b-447d-a029-fe8181a39e8a",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        320
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "e081c2c2-9e4a-47b6-aa30-dcf74b2b92e9",
+      "name": "Build File List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        320
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const owner='hsndm566', repo='hsndm.tech', branch='main';\n// Each item: the file + the exact Opus/Claude commit that was truncated mid-file.\nreturn [\n  { json: { owner, repo, branch, filePath: 'dashboard.html', opusRef: '9f17a4c' } },\n  { json: { owner, repo, branch, filePath: 'cv.html', opusRef: '1e1382b' } },\n];"
+      }
+    },
+    {
+      "id": "6a37ef26-00b9-4cc2-aa49-b9d52c84714c",
+      "name": "All Files Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "4bf7fc75-88cb-4072-9519-dedd27dbbc08",
+      "name": "Fetch Opus Seed",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "={{ $json.opusRef }}"
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "2298db8d-3f8b-4b59-bff5-9bba80f43f34"
+    },
+    {
+      "id": "50d7450d-2990-4977-b096-fdc984d3430b",
+      "name": "Fetch Live File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Loop Over Files').item.json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $('Loop Over Files').item.json.repo }}"
+        },
+        "filePath": "={{ $('Loop Over Files').item.json.filePath }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "={{ $('Loop Over Files').item.json.branch }}"
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "4e1f1d68-f951-42d1-9a54-304d489b32c0"
+    },
+    {
+      "id": "044e1b18-c645-467a-8f98-e4820d98ed5c",
+      "name": "Decode & Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const meta = $('Loop Over Files').item.json;\nfunction dec(resp){ const raw=(resp&&resp.content)||''; if((resp&&resp.encoding||'base64')==='base64'){ try { return Buffer.from(raw,'base64').toString('utf8'); } catch(e){ return raw; } } return raw; }\nconst seed = dec($('Fetch Opus Seed').item.json);\nconst live = dec($('Fetch Live File').item.json);\n\n// --- Extract the known-good functional script bundle from the CURRENT live file ---\n// Find the <script> block that carries the working integrations.\nlet liveScripts='';\nconst markerIdx = (function(){ const keys=['SHEET_ID','JULIE_ENDPOINT','SUBMIT_ENDPOINT']; let best=-1; for(const k of keys){ const i=live.indexOf(k); if(i!==-1 && (best===-1||i<best)) best=i; } return best; })();\nif (markerIdx !== -1) {\n  const scriptStart = live.lastIndexOf('<script', markerIdx);\n  const htmlEnd = live.lastIndexOf('</html>');\n  if (scriptStart !== -1 && htmlEnd !== -1) {\n    liveScripts = live.substring(scriptStart, htmlEnd).replace(/<\\/body>\\s*$/,'').trim();\n  }\n}\n\n// --- Tokens the finished file MUST contain (working endpoints + sheet id) ---\nconst preserve = [];\nconst urls = live.match(/https?:\\/\\/[^\\s\"'<>]+/g) || [];\nfor (const u of urls){ if (u.indexOf('app.n8n.cloud/webhook')!==-1 && preserve.indexOf(u)===-1) preserve.push(u); }\nconst sid = live.match(/SHEET_ID\\s*[=:]\\s*[\"']([^\"']+)[\"']/);\nif (sid) preserve.push(sid[1]);\n\nconst systemPrompt = 'You are completing an HTML file that a senior designer started and which was accidentally TRUNCATED mid-file. You will receive the PARTIAL file exactly as it was cut off. Reproduce the entire document and seamlessly CONTINUE from the exact truncation point to a complete, valid HTML page. Strictly preserve the design language, CSS custom properties, class names, color palette, spacing and visual style already established in the partial. Do NOT redesign, restart, summarize, or alter anything before the cut. Complete any unclosed tags, finish the current section, add the remaining sections implied by the existing structure/navigation, and properly close body and html. Output ONLY the full HTML document from <!DOCTYPE html> to the closing html tag. No markdown fences, no commentary.';\nconst userPrompt = 'Here is the truncated partial file for ' + meta.filePath + '. Continue and complete it:\\n\\n' + seed;\n\nreturn [{ json: { owner: meta.owner, repo: meta.repo, branch: meta.branch, filePath: meta.filePath, seed, liveScripts, preserve, systemPrompt, userPrompt } }];"
+      }
+    },
+    {
+      "id": "568db371-7104-4f63-9496-f5dcc0446908",
+      "name": "Groq Continue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama-3.3-70b-versatile', temperature: 0.3, max_tokens: 20000, messages: [ { role: 'system', content: $('Decode & Build Prompt').item.json.systemPrompt }, { role: 'user', content: $('Decode & Build Prompt').item.json.userPrompt } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi"
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "id": "f6137b39-9155-45fa-a244-a52068d95211",
+      "name": "Validate Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const d = $('Decode & Build Prompt').item.json;\nconst resp = $input.first().json;\nlet content='';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch(e){ content=''; }\ncontent = (content||'').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060')===0){ content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/,'').replace(/\\u0060\\u0060\\u0060\\s*$/,'').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nif (di>0) content = content.substring(di).trim();\nif (hi!==-1) content = content.substring(0, content.lastIndexOf('</html>')+7).trim();\n\n// --- Guarantee integrations: re-inject known-good live scripts if any token missing ---\nconst preserve = d.preserve || [];\nlet missing = preserve.filter(t => content.indexOf(t)===-1);\nif (missing.length && d.liveScripts) {\n  const bodyCloseIdx = content.lastIndexOf('</body>');\n  if (bodyCloseIdx !== -1) { content = content.slice(0,bodyCloseIdx) + '\\n' + d.liveScripts + '\\n' + content.slice(bodyCloseIdx); }\n  else if (content.indexOf('</html>')!==-1) { content = content.replace('</html>', d.liveScripts + '\\n</body>\\n</html>'); }\n  missing = preserve.filter(t => content.indexOf(t)===-1);\n}\n\nconst startsOk = content.indexOf('<!DOCTYPE html>')===0;\nconst endsOk = content.slice(-7)==='</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi)||[]).length;\nconst bodyClose = (content.match(/<\\/body>/gi)||[]).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi)||[]).length;\nconst scriptClose = (content.match(/<\\/script>/gi)||[]).length;\nconst structOk = startsOk && endsOk && bodyOpen>=1 && bodyOpen===bodyClose && scriptOpen>=1 && scriptOpen===scriptClose;\nconst isValid = structOk && missing.length===0 && content.length > 3000;\nconst reason = 'GROQ start='+startsOk+' end='+endsOk+' body='+bodyOpen+'/'+bodyClose+' script='+scriptOpen+'/'+scriptClose+' missing='+missing.length+' len='+content.length;\nreturn [{ json: { owner:d.owner, repo:d.repo, branch:d.branch, filePath:d.filePath, finalHtml:content, isValid, reason, provider:'GROQ' } }];"
+      }
+    },
+    {
+      "id": "e5811a7c-966b-432f-bb8a-2fd5aa80e2df",
+      "name": "Groq Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "4aeea529-3594-4786-8007-ab7ebfe2e968",
+      "name": "Push (Groq)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Continue {{ $json.filePath }} from Opus draft via {{ $json.provider }} (integrations preserved)",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "3646cd7d-5598-49d2-a149-71783859ee12"
+    },
+    {
+      "id": "ae4a3bfc-120f-4a01-89a2-b8404060b7ee",
+      "name": "Loop Over Files",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        320
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "01dabf8d-bba5-478c-bbaf-023309f1f7d3",
+      "name": "Cerebras Continue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2016,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama-3.3-70b', temperature: 0.3, max_tokens: 20000, messages: [ { role: 'system', content: $('Decode & Build Prompt').item.json.systemPrompt }, { role: 'user', content: $('Decode & Build Prompt').item.json.userPrompt } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth"
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "q18eCPTyfdCpPlV1",
+          "name": "cerebras key"
+        }
+      }
+    },
+    {
+      "id": "51604ef4-00f7-46ae-babc-06c0531950d0",
+      "name": "Validate Cerebras",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const d = $('Decode & Build Prompt').item.json;\nconst resp = $input.first().json;\nlet content='';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch(e){ content=''; }\ncontent = (content||'').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060')===0){ content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/,'').replace(/\\u0060\\u0060\\u0060\\s*$/,'').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nif (di>0) content = content.substring(di).trim();\nif (hi!==-1) content = content.substring(0, content.lastIndexOf('</html>')+7).trim();\n\n// --- Guarantee integrations: re-inject known-good live scripts if any token missing ---\nconst preserve = d.preserve || [];\nlet missing = preserve.filter(t => content.indexOf(t)===-1);\nif (missing.length && d.liveScripts) {\n  const bodyCloseIdx = content.lastIndexOf('</body>');\n  if (bodyCloseIdx !== -1) { content = content.slice(0,bodyCloseIdx) + '\\n' + d.liveScripts + '\\n' + content.slice(bodyCloseIdx); }\n  else if (content.indexOf('</html>')!==-1) { content = content.replace('</html>', d.liveScripts + '\\n</body>\\n</html>'); }\n  missing = preserve.filter(t => content.indexOf(t)===-1);\n}\n\nconst startsOk = content.indexOf('<!DOCTYPE html>')===0;\nconst endsOk = content.slice(-7)==='</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi)||[]).length;\nconst bodyClose = (content.match(/<\\/body>/gi)||[]).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi)||[]).length;\nconst scriptClose = (content.match(/<\\/script>/gi)||[]).length;\nconst structOk = startsOk && endsOk && bodyOpen>=1 && bodyOpen===bodyClose && scriptOpen>=1 && scriptOpen===scriptClose;\nconst isValid = structOk && missing.length===0 && content.length > 3000;\nconst reason = 'CEREBRAS start='+startsOk+' end='+endsOk+' body='+bodyOpen+'/'+bodyClose+' script='+scriptOpen+'/'+scriptClose+' missing='+missing.length+' len='+content.length;\nreturn [{ json: { owner:d.owner, repo:d.repo, branch:d.branch, filePath:d.filePath, finalHtml:content, isValid, reason, provider:'CEREBRAS' } }];"
+      }
+    },
+    {
+      "id": "3856eb81-6c31-400d-b9b9-a47d27f11df5",
+      "name": "Cerebras Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2464,
+        288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3d55a3eb-bd18-4ed4-8e62-c3e6b5d925f3",
+      "name": "Push (Cerebras)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Continue {{ $json.filePath }} from Opus draft via {{ $json.provider }} (integrations preserved)",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "b62a1efc-7038-4ca1-baea-abfbfa51477e"
+    },
+    {
+      "id": "e59e7315-db50-44b3-b2fb-1ce24c7daa48",
+      "name": "DeepSeek Continue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2688,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'deepseek-chat', temperature: 0.3, max_tokens: 20000, messages: [ { role: 'system', content: $('Decode & Build Prompt').item.json.systemPrompt }, { role: 'user', content: $('Decode & Build Prompt').item.json.userPrompt } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "deepSeekApi"
+      },
+      "credentials": {
+        "deepSeekApi": {
+          "id": "JcfeGmtChFdDrNbF",
+          "name": "DeepSeek account"
+        }
+      }
+    },
+    {
+      "id": "5f09280b-e92c-411f-af44-98f2c5d44b04",
+      "name": "Validate DeepSeek",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const d = $('Decode & Build Prompt').item.json;\nconst resp = $input.first().json;\nlet content='';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch(e){ content=''; }\ncontent = (content||'').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060')===0){ content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/,'').replace(/\\u0060\\u0060\\u0060\\s*$/,'').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nif (di>0) content = content.substring(di).trim();\nif (hi!==-1) content = content.substring(0, content.lastIndexOf('</html>')+7).trim();\n\n// --- Guarantee integrations: re-inject known-good live scripts if any token missing ---\nconst preserve = d.preserve || [];\nlet missing = preserve.filter(t => content.indexOf(t)===-1);\nif (missing.length && d.liveScripts) {\n  const bodyCloseIdx = content.lastIndexOf('</body>');\n  if (bodyCloseIdx !== -1) { content = content.slice(0,bodyCloseIdx) + '\\n' + d.liveScripts + '\\n' + content.slice(bodyCloseIdx); }\n  else if (content.indexOf('</html>')!==-1) { content = content.replace('</html>', d.liveScripts + '\\n</body>\\n</html>'); }\n  missing = preserve.filter(t => content.indexOf(t)===-1);\n}\n\nconst startsOk = content.indexOf('<!DOCTYPE html>')===0;\nconst endsOk = content.slice(-7)==='</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi)||[]).length;\nconst bodyClose = (content.match(/<\\/body>/gi)||[]).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi)||[]).length;\nconst scriptClose = (content.match(/<\\/script>/gi)||[]).length;\nconst structOk = startsOk && endsOk && bodyOpen>=1 && bodyOpen===bodyClose && scriptOpen>=1 && scriptOpen===scriptClose;\nconst isValid = structOk && missing.length===0 && content.length > 3000;\nconst reason = 'DEEPSEEK start='+startsOk+' end='+endsOk+' body='+bodyOpen+'/'+bodyClose+' script='+scriptOpen+'/'+scriptClose+' missing='+missing.length+' len='+content.length;\nreturn [{ json: { owner:d.owner, repo:d.repo, branch:d.branch, filePath:d.filePath, finalHtml:content, isValid, reason, provider:'DEEPSEEK' } }];"
+      }
+    },
+    {
+      "id": "12d6a0fa-b46a-46ae-a5ae-6eb5f90844ff",
+      "name": "DeepSeek Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3136,
+        384
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "48fc80ea-4549-496a-b05e-5d21c7882277",
+      "name": "Push (DeepSeek)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        3360,
+        336
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Continue {{ $json.filePath }} from Opus draft via {{ $json.provider }} (integrations preserved)",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "a85eb573-bdfe-4ea7-900c-7d92c3b0031c"
+    },
+    {
+      "id": "9fe25478-0054-4191-b7f7-2f6ac0597a2a",
+      "name": "ZAI Continue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3360,
+        528
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'z-ai/glm-4.6', temperature: 0.3, max_tokens: 20000, messages: [ { role: 'system', content: $('Decode & Build Prompt').item.json.systemPrompt }, { role: 'user', content: $('Decode & Build Prompt').item.json.userPrompt } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 180000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi"
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "id": "07e2e251-cee0-40f4-94de-4759f404a0c1",
+      "name": "Validate ZAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        528
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const d = $('Decode & Build Prompt').item.json;\nconst resp = $input.first().json;\nlet content='';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch(e){ content=''; }\ncontent = (content||'').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060')===0){ content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/,'').replace(/\\u0060\\u0060\\u0060\\s*$/,'').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nif (di>0) content = content.substring(di).trim();\nif (hi!==-1) content = content.substring(0, content.lastIndexOf('</html>')+7).trim();\n\n// --- Guarantee integrations: re-inject known-good live scripts if any token missing ---\nconst preserve = d.preserve || [];\nlet missing = preserve.filter(t => content.indexOf(t)===-1);\nif (missing.length && d.liveScripts) {\n  const bodyCloseIdx = content.lastIndexOf('</body>');\n  if (bodyCloseIdx !== -1) { content = content.slice(0,bodyCloseIdx) + '\\n' + d.liveScripts + '\\n' + content.slice(bodyCloseIdx); }\n  else if (content.indexOf('</html>')!==-1) { content = content.replace('</html>', d.liveScripts + '\\n</body>\\n</html>'); }\n  missing = preserve.filter(t => content.indexOf(t)===-1);\n}\n\nconst startsOk = content.indexOf('<!DOCTYPE html>')===0;\nconst endsOk = content.slice(-7)==='</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi)||[]).length;\nconst bodyClose = (content.match(/<\\/body>/gi)||[]).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi)||[]).length;\nconst scriptClose = (content.match(/<\\/script>/gi)||[]).length;\nconst structOk = startsOk && endsOk && bodyOpen>=1 && bodyOpen===bodyClose && scriptOpen>=1 && scriptOpen===scriptClose;\nconst isValid = structOk && missing.length===0 && content.length > 3000;\nconst reason = 'ZAI start='+startsOk+' end='+endsOk+' body='+bodyOpen+'/'+bodyClose+' script='+scriptOpen+'/'+scriptClose+' missing='+missing.length+' len='+content.length;\nreturn [{ json: { owner:d.owner, repo:d.repo, branch:d.branch, filePath:d.filePath, finalHtml:content, isValid, reason, provider:'ZAI' } }];"
+      }
+    },
+    {
+      "id": "1aef725c-01a7-4563-a562-8fc8bd9e76c3",
+      "name": "ZAI Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3808,
+        528
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "v",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "870f5339-1922-4901-868a-6d720431633f",
+      "name": "Push (ZAI)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        4032,
+        608
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Continue {{ $json.filePath }} from Opus draft via {{ $json.provider }} (integrations preserved)",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "de0f48ff-56f2-4151-9b11-8391cc2ed061"
+    },
+    {
+      "id": "4305c0e5-0a36-4f0a-bd51-e149b297bd9d",
+      "name": "Stop - All Providers Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        4032,
+        800
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=All AI providers failed to complete {{ $json.filePath }} ({{ $json.reason }}). Nothing pushed."
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Build File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build File List": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Opus Seed": {
+      "main": [
+        [
+          {
+            "node": "Fetch Live File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Live File": {
+      "main": [
+        [
+          {
+            "node": "Decode & Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode & Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Groq Continue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Continue": {
+      "main": [
+        [
+          {
+            "node": "Validate Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Groq": {
+      "main": [
+        [
+          {
+            "node": "Groq Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cerebras Continue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Files": {
+      "main": [
+        [
+          {
+            "node": "All Files Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Opus Seed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cerebras Continue": {
+      "main": [
+        [
+          {
+            "node": "Validate Cerebras",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Cerebras": {
+      "main": [
+        [
+          {
+            "node": "Cerebras Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cerebras Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (Cerebras)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DeepSeek Continue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (Cerebras)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Continue": {
+      "main": [
+        [
+          {
+            "node": "Validate DeepSeek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate DeepSeek": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (DeepSeek)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ZAI Continue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (DeepSeek)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZAI Continue": {
+      "main": [
+        [
+          {
+            "node": "Validate ZAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate ZAI": {
+      "main": [
+        [
+          {
+            "node": "ZAI Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZAI Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (ZAI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop - All Providers Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (ZAI)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

@@ -1,0 +1,122 @@
+{
+  "name": "NVIDIA NIM Test (temp)",
+  "nodes": [
+    {
+      "id": "11111111-0000-4000-8000-000000000001",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "11111111-0000-4000-8000-000000000002",
+      "name": "Sample Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p",
+              "name": "input",
+              "type": "string",
+              "value": "You are an INDEPENDENT hiring reviewer. Return ONLY valid JSON in this shape: {\"approved\": true, \"score\": 78, \"note\": \"one concise sentence\"}. Candidate: Industrial Engineer in Jeddah, Lean/DMAIC, supply chain, ISO 9001, OSHA 30. Job: Quality Engineer at a manufacturing company in Riyadh. Decide if the candidate should apply."
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "11111111-0000-4000-8000-000000000003",
+      "name": "NVIDIA NIM Reviewer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'meta/llama-3.1-70b-instruct', messages: [{ role: 'user', content: $json.input }], temperature: 0.2, max_tokens: 500 }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      }
+    },
+    {
+      "id": "11111111-0000-4000-8000-000000000004",
+      "name": "Parse NVIDIA Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = $json || {};\nlet content = \"\";\ntry { content = body.choices[0].message.content || \"\"; } catch (e) { content = \"\"; }\nlet parsed = {};\nlet ok = false;\nif (content) {\n  try {\n    let c = String(content).trim();\n    const m = c.match(/\\{[\\s\\S]*\\}/);\n    if (m) { c = m[0]; }\n    parsed = JSON.parse(c);\n    ok = true;\n  } catch (e) { ok = false; }\n}\nreturn { json: { parsed_ok: ok, model_content: content, approved: ok ? (parsed.approved === true) : null, score: ok ? parsed.score : null, note: ok ? parsed.note : null } };"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Sample Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sample Prompt": {
+      "main": [
+        [
+          {
+            "node": "NVIDIA NIM Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA NIM Reviewer": {
+      "main": [
+        [
+          {
+            "node": "Parse NVIDIA Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

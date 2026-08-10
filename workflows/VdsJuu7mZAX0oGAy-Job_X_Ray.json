@@ -1,0 +1,146 @@
+{
+  "name": "Job X-Ray",
+  "nodes": [
+    {
+      "id": "bc2bbefd-94a3-4b38-99b1-7283db483e79",
+      "name": "Job Desc In",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-xray",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "7ceb9841-cf6e-41de-90d9-255f56f19869"
+    },
+    {
+      "id": "a9a2b749-3ced-4c94-be85-bb22a6342271",
+      "name": "Ghost Job Scorer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var body = ($input.first().json && $input.first().json.body) ? $input.first().json.body : ($input.first().json || {});\nvar jd = String(body.job_description || '');\nvar company = String(body.company || '');\nvar email = String(body.recipient || body.contact_email || '').toLowerCase().trim();\nvar score = 0;\nvar reasons = [];\n// Email domain vs company (only if provided)\nvar emailDomain = '';\nvar at = email.indexOf('@'); if (at !== -1) emailDomain = email.slice(at + 1);\nvar freeProviders = ['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com','aol.com','icloud.com','protonmail.com','mail.com','yandex.com','gmx.com','ymail.com'];\nvar isFree = false;\nfor (var i = 0; i < freeProviders.length; i++) { if (emailDomain === freeProviders[i]) { isFree = true; break; } }\nif (isFree) { score += 25; reasons.push('Free-mail domain (' + emailDomain + ') used'); }\n// Description length\nvar words = jd ? jd.split(/\\s+/).filter(function (w) { return w.length > 0; }).length : 0;\nif (words === 0) { score += 20; reasons.push('No job description provided'); }\nelse if (words < 100) { score += 15; reasons.push('Job description under 100 words (' + words + ')'); }\n// Ghost-job / vague language signals\nvar hay = (jd + ' ' + company).toLowerCase();\nvar vagueKw = ['fast-paced environment','wear many hats','rockstar','ninja','unlimited earning','be your own boss','no experience needed','immediate start','urgent hiring','work from home opportunity','flexible schedule guaranteed'];\nfor (var v = 0; v < vagueKw.length; v++) { if (hay.indexOf(vagueKw[v]) !== -1) { score += 8; reasons.push('Vague/ghost phrasing: ' + vagueKw[v]); } }\n// Scam keywords -> strong signal\nvar scamKw = ['training fee','equipment purchase','bank details','bank account number','national id','processing fee','registration fee','pay a deposit','western union','send money','upfront payment','activation fee'];\nfor (var k = 0; k < scamKw.length; k++) { if (hay.indexOf(scamKw[k]) !== -1) { score += 40; reasons.push('Scam keyword detected: ' + scamKw[k]); } }\nif (score > 100) score = 100;\nif (score < 0) score = 0;\nvar groqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.2, max_tokens: 120, messages: [ { role: 'system', content: 'You extract keywords. Return ONLY a comma-separated list of the 5 most important keywords or short key phrases from the job description, no numbering, no extra text.' }, { role: 'user', content: 'Extract the top 5 most important keywords from this job description: ' + jd.slice(0, 4000) } ] };\nreturn [{ json: { job_description: jd, word_count: words, ghost_score: score, ghost_reasons: reasons.join('; ') || 'No suspicious signals detected', groqBody: groqBody } }];"
+      }
+    },
+    {
+      "id": "71433200-9bd2-417b-80ca-d0f95e43bb54",
+      "name": "Groq Keywords",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.groqBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b91dfd49-c92c-4a36-ab4d-a60f98bda15f",
+      "name": "Assemble XRay",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var meta = $('Ghost Job Scorer').first().json || {};\nvar jd = String(meta.job_description || '');\nvar groq = $input.first().json || {};\nvar raw = '';\ntry { raw = groq.choices[0].message.content || ''; } catch (e) { raw = ''; }\nraw = String(raw).trim();\n// Parse comma / newline separated keyword list\nvar top = [];\nif (raw) {\n  var parts = raw.split(/[,\\n]+/);\n  for (var i = 0; i < parts.length; i++) {\n    var t = parts[i].replace(/^[0-9]+[).\\-\\s]+/, '').replace(/^[\\-\\*\\s]+/, '').trim();\n    if (t) top.push(t);\n  }\n}\ntop = top.slice(0, 5);\n// Keyword frequency map over common industry terms\nvar terms = ['engineering','industrial','process','optimization','supply chain','logistics','operations','management','lean','quality','safety','inventory','procurement','vendor','risk','data','analysis','project','manufacturing','production','compliance','maintenance','planning','continuous improvement','six sigma','automation'];\nvar lc = jd.toLowerCase();\nvar freq = {};\nfor (var j = 0; j < terms.length; j++) {\n  var term = terms[j];\n  var count = 0; var idx = lc.indexOf(term);\n  while (idx !== -1) { count++; idx = lc.indexOf(term, idx + term.length); }\n  if (count > 0) freq[term] = count;\n}\nvar response = { ghost_score: meta.ghost_score, ghost_reasons: meta.ghost_reasons, word_count: meta.word_count, top_keywords: top, keyword_frequency: freq };\nreturn [{ json: response }];"
+      }
+    },
+    {
+      "id": "c8381f73-a0e0-485f-a700-453c26470de5",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ ghost_score: $json.ghost_score, top_keywords: $json.top_keywords, keyword_frequency: $json.keyword_frequency }) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Job Desc In": {
+      "main": [
+        [
+          {
+            "node": "Ghost Job Scorer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ghost Job Scorer": {
+      "main": [
+        [
+          {
+            "node": "Groq Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Keywords": {
+      "main": [
+        [
+          {
+            "node": "Assemble XRay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble XRay": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

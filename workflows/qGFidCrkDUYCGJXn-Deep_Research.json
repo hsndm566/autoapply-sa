@@ -1,0 +1,250 @@
+{
+  "name": "Deep Research",
+  "nodes": [
+    {
+      "id": "614df167-0d61-47c9-8c78-d9b271134198",
+      "name": "When clicking Execute",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        128
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ae2efc9e-cb82-4ad1-8115-a1691e81bd0a",
+      "name": "Set Prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        128
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prompt-1",
+              "name": "prompt",
+              "value": "Summarize the latest AI news in Saudi Arabia.",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "05d37d91-af5b-43e9-83bf-193b6e5cfece",
+      "name": "Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        128
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": {{ JSON.stringify($json.prompt) }} }\n  ]\n}"
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "865ea0aa-7ec3-4d1c-95c5-d22271bbf14d",
+      "name": "Telegram Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1120,
+        224
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "=Deep Research Test – Failed\n\nError: {{ $json.error ? ($json.error.message || JSON.stringify($json.error)) : JSON.stringify($json) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "8486903e-3f56-42bd-93bc-546bdd7177f9"
+    },
+    {
+      "id": "19aba13d-720c-45c7-9f01-ed2876dd1bbb",
+      "name": "Combine Responses",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        48
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const groqText = $('Groq').first().json.choices?.[0]?.message?.content ?? 'No response';\nconst combined = `Groq says: ${groqText}`;\nreturn [{ json: { combined } }];"
+      }
+    },
+    {
+      "id": "55c82bc7-a4b6-44eb-a189-59ad76f74f59",
+      "name": "Send via Brevo",
+      "type": "n8n-nodes-base.sendInBlue",
+      "typeVersion": 1,
+      "position": [
+        896,
+        48
+      ],
+      "parameters": {
+        "resource": "email",
+        "operation": "send",
+        "sendHTML": false,
+        "subject": "Deep Research Results",
+        "textContent": "={{ $json.combined }}",
+        "sender": "hasanadam506@gmail.com",
+        "receipients": "hasanadam506@gmail.com"
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "4296cc7c-6e08-4803-a5c6-8450fe33b3aa",
+      "name": "Telegram Success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "=Deep Research Test – Passed\n\n{{ $('Combine Responses').item.json.combined.slice(0, 100) }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "3bb9f764-1e40-4eaf-9280-9480a023a0ee"
+    },
+    {
+      "id": "8af524ee-6e23-4b5f-a7d5-ea9f2885cbbb",
+      "name": "Sticky Note 8af524ee",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        560,
+        288
+      ],
+      "parameters": {
+        "content": "Deep Research Agent – Finalized on July 23, 2026. Uses Groq for research, Brevo for email, Telegram for alerts. Manual trigger only – not scheduled. Future: add news API for current headlines."
+      }
+    }
+  ],
+  "connections": {
+    "When clicking Execute": {
+      "main": [
+        [
+          {
+            "node": "Set Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Prompt": {
+      "main": [
+        [
+          {
+            "node": "Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq": {
+      "main": [
+        [
+          {
+            "node": "Combine Responses",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Responses": {
+      "main": [
+        [
+          {
+            "node": "Send via Brevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send via Brevo": {
+      "main": [
+        [
+          {
+            "node": "Telegram Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

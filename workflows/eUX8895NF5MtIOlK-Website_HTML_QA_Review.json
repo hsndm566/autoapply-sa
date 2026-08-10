@@ -1,0 +1,408 @@
+{
+  "name": "Website HTML QA Review",
+  "nodes": [
+    {
+      "id": "4487c628-a23f-4b79-8850-c284a9d82d07",
+      "name": "Paste Website HTML",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {
+        "formTitle": "hsndm.tech — HTML QA Review",
+        "formDescription": "Paste a full HTML page. Groq, Gemini and Kimi will review it for broken endpoints, malformed/truncated tags, SEO, accessibility, mobile, brand and security — then return a report plus corrected HTML. Nothing is committed to GitHub.",
+        "responseMode": "lastNode",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "page_name",
+              "fieldLabel": "Page name (e.g. index.html)",
+              "fieldType": "text",
+              "placeholder": "index.html",
+              "requiredField": true
+            },
+            {
+              "fieldName": "html_code",
+              "fieldLabel": "Paste your HTML code",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "path": "review-html",
+          "buttonLabel": "Run QA Review"
+        }
+      },
+      "webhookId": "8b44a6c0-599b-42dc-b106-89c212e29223"
+    },
+    {
+      "id": "1da26800-be28-4856-b6f0-c4b42b8b33ef",
+      "name": "Local Pre-Checks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const item = $input.first().json;\nconst html = String(item.html_code || '');\nconst pageName = String(item.page_name || 'page.html');\n\nconst local = [];\nif (html.indexOf('joulie-chat') !== -1) local.push('Dead endpoint typo \"joulie-chat\" found (should be a live endpoint).');\nif (html.indexOf('julie-chat') !== -1) local.push('Endpoint \"julie-chat\" referenced - confirm it is live (known live: deploy-julie, submit-job).');\nif (html.indexOf('submit-cv') !== -1) local.push('Endpoint \"submit-cv\" referenced - confirm it is live.');\nif (!/name=[\"']viewport[\"']/i.test(html)) local.push('Missing responsive viewport meta tag.');\nif (!/<title[>\\s]/i.test(html)) local.push('Missing <title> tag (SEO).');\nif (!/name=[\"']description[\"']/i.test(html)) local.push('Missing meta description (SEO).');\nconst imgs = html.match(/<img\\b[^>]*>/gi) || [];\nconst imgsNoAlt = imgs.filter(function (t) { return !/\\balt=/i.test(t); }).length;\nif (imgsNoAlt > 0) local.push(imgsNoAlt + ' <img> tag(s) missing alt attribute (accessibility).');\nif (/sk-[A-Za-z0-9]{20,}/.test(html) || /AIza[0-9A-Za-z\\-_]{30,}/.test(html)) local.push('Possible exposed API key detected in HTML (security).');\n['div', 'section', 'header', 'footer', 'main', 'nav', 'ul', 'ol', 'script', 'style'].forEach(function (tag) {\n  const open = (html.match(new RegExp('<' + tag + '\\\\b', 'gi')) || []).length;\n  const close = (html.match(new RegExp('</' + tag + '>', 'gi')) || []).length;\n  if (open !== close) local.push('Unbalanced <' + tag + '> tags: ' + open + ' open vs ' + close + ' close (possible truncation/malformed).');\n});\nconst localText = local.length ? local.map(function (l, i) { return (i + 1) + '. ' + l; }).join('\\n') : 'No issues found by local static checks.';\n\nconst instr = 'You are a meticulous web QA reviewer for the website hsndm.tech. Review the HTML between the <<<HTML>>> markers. Check ALL of: (1) broken/dead endpoints & links - known-bad: \"joulie-chat\",\"julie-chat\"; known-good live webhooks: \"deploy-julie\",\"submit-job\"; (2) unbalanced/malformed/truncated tags; (3) SEO & meta tags (title, description, og:); (4) accessibility (alt text, aria, contrast); (5) mobile/responsive; (6) brand/content consistency for hsndm.tech; (7) security (exposed keys, unsafe inline scripts). Respond ONLY with minified JSON, no markdown: {\"reviewer\":\"<NAME>\",\"overall\":\"pass|warn|fail\",\"issues\":[{\"category\":\"...\",\"severity\":\"high|medium|low\",\"detail\":\"...\",\"suggestedFix\":\"...\"}]}';\n\nfunction userMsg(name) {\n  return 'Static pre-check findings:\\n' + localText + '\\n\\n<<<HTML>>>\\n' + html + '\\n<<<HTML>>>';\n}\nfunction bodyOpenAI(model, name) {\n  return JSON.stringify({ model: model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [ { role: 'system', content: instr.replace('<NAME>', name) }, { role: 'user', content: userMsg(name) } ] });\n}\nconst geminiBody = bodyOpenAI('google/gemini-2.0-flash-001', 'Gemini');\n\nreturn [{ json: { page_name: pageName, html: html, localText: localText, groqBody: bodyOpenAI('llama-3.3-70b-versatile', 'Groq'), kimiBody: bodyOpenAI('moonshotai/kimi-k2', 'Kimi'), geminiBody: geminiBody } }];"
+      }
+    },
+    {
+      "id": "ab99c167-d3c3-4f54-927e-4adf5e60135d",
+      "name": "Groq Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.groqBody }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "id": "7bd35609-b48f-4538-9230-61af775d3300",
+      "name": "Merge Reviews",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        672,
+        176
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 3
+      }
+    },
+    {
+      "id": "77a16f81-416b-4e36-88b8-dd98f8667906",
+      "name": "Gemini Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.geminiBody }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "id": "121ce7e5-6100-482a-97d8-43ac944a27a8",
+      "name": "Kimi Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.kimiBody }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "id": "91cd3040-d85a-43e0-8799-bd5137e63e89",
+      "name": "Consolidate Reviews",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "function parseOpenAI(nodeName) {\n  try { return JSON.parse($(nodeName).first().json.choices[0].message.content); }\n  catch (e) { return { reviewer: nodeName, overall: 'error', issues: [{ category: 'system', severity: 'low', detail: 'Could not parse response: ' + e.message, suggestedFix: '' }] }; }\n}\nconst reviews = [parseOpenAI('Groq Review'), parseOpenAI('Gemini Review'), parseOpenAI('Kimi Review')];\nconst base = $('Local Pre-Checks').first().json;\nconst allIssues = [];\nreviews.forEach(function (r) { (r.issues || []).forEach(function (i) { allIssues.push({ reviewer: r.reviewer || '?', category: i.category, severity: i.severity, detail: i.detail, suggestedFix: i.suggestedFix }); }); });\nconst rank = { high: 0, medium: 1, low: 2 };\nallIssues.sort(function (a, b) { return (rank[a.severity] == null ? 3 : rank[a.severity]) - (rank[b.severity] == null ? 3 : rank[b.severity]); });\nconst findingsText = allIssues.length\n  ? allIssues.map(function (i, n) { return (n + 1) + '. [' + String(i.severity || '?').toUpperCase() + '] (' + i.reviewer + ' / ' + i.category + ') ' + i.detail + (i.suggestedFix ? (' - Fix: ' + i.suggestedFix) : ''); }).join('\\n')\n  : 'No issues reported by any reviewer.';\n\nconst fixInstr = 'You are an expert front-end engineer. Given the ORIGINAL HTML and a list of QA issues, return the COMPLETE corrected HTML document. Preserve all working integration endpoints (deploy-julie, submit-job) and tokens (SHEET_ID, JULIE_ENDPOINT, SUBMIT_ENDPOINT). Fix any \"joulie-chat\"/\"julie-chat\" typos. Do NOT add explanations or markdown fences. Return ONLY raw HTML.';\nconst fixBody = JSON.stringify({ model: 'moonshotai/kimi-k2', temperature: 0.1, messages: [{ role: 'system', content: fixInstr }, { role: 'user', content: 'QA ISSUES:\\n' + findingsText + '\\n\\nORIGINAL HTML:\\n' + base.html }] });\n\nreturn [{ json: { page_name: base.page_name, html: base.html, findingsText: findingsText, issuesCount: allIssues.length, reviews: reviews, fixBody: fixBody } }];"
+      }
+    },
+    {
+      "id": "3b6f00d8-9f6d-4231-8031-6df46166a782",
+      "name": "Generate Corrected HTML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.fixBody }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "id": "c9bf870a-7fce-4334-8378-9f7731d22f25",
+      "name": "Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const base = $('Consolidate Reviews').first().json;\nlet corrected = '';\ntry { corrected = String($('Generate Corrected HTML').first().json.choices[0].message.content || ''); } catch (e) { corrected = ''; }\ncorrected = corrected.replace(/^\\s*```html\\s*/i, '').replace(/\\s*```\\s*$/i, '').trim();\nfunction esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }\nconst reportHtml = '<div style=\"font-family:system-ui,sans-serif;max-width:900px;margin:0 auto;padding:24px\">'\n  + '<h1>QA Review - ' + esc(base.page_name) + '</h1>'\n  + '<p><strong>' + base.issuesCount + '</strong> issue(s) found by Groq + Gemini + Kimi working together.</p>'\n  + '<h2>Findings</h2><pre style=\"white-space:pre-wrap;background:#f5f5f5;padding:16px;border-radius:8px\">' + esc(base.findingsText) + '</pre>'\n  + '<h2>Corrected HTML</h2><p>Copy the code below and paste it into your GitHub file (or check the email sent to you).</p>'\n  + '<textarea style=\"width:100%;height:320px;font-family:monospace\">' + esc(corrected) + '</textarea>'\n  + '<p style=\"color:#888;margin-top:24px\">No changes were committed to GitHub. Review and deploy manually.</p></div>';\nconst emailHtml = '<h2>QA Review - ' + esc(base.page_name) + '</h2><p>' + base.issuesCount + ' issue(s) found by Groq + Gemini + Kimi.</p>'\n  + '<h3>Findings</h3><pre>' + esc(base.findingsText) + '</pre>'\n  + '<h3>Corrected HTML</h3><pre>' + esc(corrected) + '</pre>';\nreturn [{ json: { page_name: base.page_name, reportHtml: reportHtml, emailHtml: emailHtml, correctedHtml: corrected, issuesCount: base.issuesCount } }];"
+      }
+    },
+    {
+      "id": "13360393-f287-4b4b-8ee6-fcdb5a599294",
+      "name": "Email Report",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "hasanadam506@gmail.com",
+        "subject": "=QA Review - {{ $json.page_name }} ({{ $json.issuesCount }} issues)",
+        "emailType": "html",
+        "message": "={{ $json.emailHtml }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pT6ZfpwQkTrfQhkt",
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "544beec9-c592-4612-b6e8-b8bdd072bac9"
+    },
+    {
+      "id": "2c772715-4cbc-4301-9699-508eef443639",
+      "name": "Show Report",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{ $(\"Build Report\").first().json.reportHtml }}"
+      },
+      "webhookId": "5caf477a-fbe8-4c95-94cc-bcb8d3ee3eac"
+    }
+  ],
+  "connections": {
+    "Paste Website HTML": {
+      "main": [
+        [
+          {
+            "node": "Local Pre-Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Local Pre-Checks": {
+      "main": [
+        [
+          {
+            "node": "Groq Review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gemini Review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Kimi Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Review": {
+      "main": [
+        [
+          {
+            "node": "Merge Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Reviews": {
+      "main": [
+        [
+          {
+            "node": "Consolidate Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Review": {
+      "main": [
+        [
+          {
+            "node": "Merge Reviews",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Kimi Review": {
+      "main": [
+        [
+          {
+            "node": "Merge Reviews",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Consolidate Reviews": {
+      "main": [
+        [
+          {
+            "node": "Generate Corrected HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Corrected HTML": {
+      "main": [
+        [
+          {
+            "node": "Build Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Report": {
+      "main": [
+        [
+          {
+            "node": "Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Report": {
+      "main": [
+        [
+          {
+            "node": "Show Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

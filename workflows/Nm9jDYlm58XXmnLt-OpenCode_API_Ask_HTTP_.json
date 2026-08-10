@@ -1,0 +1,182 @@
+{
+  "name": "OpenCode API — Ask (HTTP)",
+  "nodes": [
+    {
+      "id": "e1acd7be-6c86-4470-b2cc-9887ced837ea",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "218cc103-3920-4cfd-b797-ed9c64fea6c1",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "baseUrl",
+              "name": "baseUrl",
+              "value": "http://localhost:4096",
+              "type": "string"
+            },
+            {
+              "id": "providerID",
+              "name": "providerID",
+              "value": "anthropic",
+              "type": "string"
+            },
+            {
+              "id": "modelID",
+              "name": "modelID",
+              "value": "claude-3-5-sonnet-20241022",
+              "type": "string"
+            },
+            {
+              "id": "prompt",
+              "name": "prompt",
+              "value": "Explain what this project does in two sentences.",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1776afd6-582e-4c8f-ba19-b8fab84d8205",
+      "name": "Create Session",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.baseUrl }}/session",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"title\": \"n8n request \" + $now.toISO() } }}"
+      }
+    },
+    {
+      "id": "a441b0f1-8e46-4e11-a2ab-256a3b710f1e",
+      "name": "Send Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $(\"Config\").item.json.baseUrl }}/session/{{ $json.id }}/message",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": { \"providerID\": $(\"Config\").item.json.providerID, \"modelID\": $(\"Config\").item.json.modelID }, \"parts\": [ { \"type\": \"text\", \"text\": $(\"Config\").item.json.prompt } ] } }}",
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "e4a5bd04-72c2-42dd-b4d7-17235a6021df",
+      "name": "Extract Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "const parts = $json.parts || [];\nconst text = parts\n  .filter(p => p && p.type === 'text' && typeof p.text === 'string')\n  .map(p => p.text)\n  .join('\\n')\n  .trim();\nreturn { json: { answer: text, raw: $json } };"
+      }
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Create Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Session": {
+      "main": [
+        [
+          {
+            "node": "Send Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Message": {
+      "main": [
+        [
+          {
+            "node": "Extract Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

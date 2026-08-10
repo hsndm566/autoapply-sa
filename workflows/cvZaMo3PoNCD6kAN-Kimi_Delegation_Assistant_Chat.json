@@ -1,0 +1,116 @@
+{
+  "name": "Kimi Delegation — Assistant Chat",
+  "nodes": [
+    {
+      "id": "990100d8-24be-42d8-a385-d9eb66bab104",
+      "name": "Chat",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        112
+      ],
+      "parameters": {
+        "public": false,
+        "options": {
+          "responseMode": "streaming",
+          "title": "Kimi Delegation — Assistant",
+          "subtitle": "Ask about the multi-agent job-application pipeline."
+        }
+      },
+      "webhookId": "2194e794-e15e-431f-9d88-8c375ec20cbe"
+    },
+    {
+      "id": "e8766226-158d-4db2-a8ab-84184cf76e74",
+      "name": "Assistant",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        112
+      ],
+      "parameters": {
+        "promptType": "auto",
+        "options": {
+          "systemMessage": "You are the assistant for Hassan's \"Kimi Delegation — Single Send\" job-application pipeline. Explain what the workflow does, help the user understand each stage, and answer questions about how it works. The pipeline: Groq acts as free orchestrator and produces a task plan; Groq is the primary CV tailor and cover-letter writer with OpenAI then Z.ai (GLM-4-Flash) as sequential fallbacks; NVIDIA NIM is the fallback job analyzer; Hugging Face embeds the job and Pinecone (index job-agent-memory, 384-dim cosine) stores/queries past jobs; Gemini is an optional keyword enricher; PDFShift renders the tailored CV to CV_Hassan_Adam.pdf; Brevo emails the application; Telegram (chat 8890901423) confirms with the send status. Be concise and practical. You cannot trigger the pipeline yourself from this chat — tell the user to run the \"Run Single (Row 21)\" trigger in that workflow.",
+          "maxIterations": 10
+        }
+      }
+    },
+    {
+      "id": "f9900d4c-2da7-4ac0-917b-9782a6204ec0",
+      "name": "Groq Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        240,
+        336
+      ],
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.4
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "id": "f4864fc3-b7cc-4918-b095-e0b97b2a9c2a",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        368,
+        336
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Chat": {
+      "main": [
+        [
+          {
+            "node": "Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Assistant",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Assistant",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

@@ -1,0 +1,388 @@
+{
+  "name": "AI Call (resilient)",
+  "nodes": [
+    {
+      "id": "b8e90cf3-eacf-475f-8242-a70c4a22e72d",
+      "name": "Input",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "system",
+              "type": "string"
+            },
+            {
+              "name": "prompt",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5c643419-093b-49dc-b230-2efadc2a689b",
+      "name": "Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"llama-3.3-70b-versatile\", \"temperature\": 0.4, \"messages\": [ { \"role\": \"system\", \"content\": $('Input').item.json.system }, { \"role\": \"user\", \"content\": $('Input').item.json.prompt } ] } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "8c7c0426-0cf9-4f4c-be00-b9f25275fb01",
+      "name": "Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        48
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const j = $json || {};\nlet text = \"\";\nlet model = \"none\";\n// OpenAI-compatible shape (Groq, NVIDIA, Qwen, DeepSeek, OpenAI)\nif (j.choices && j.choices[0] && j.choices[0].message) {\n  text = j.choices[0].message.content || \"\";\n  model = j.model || \"unknown\";\n// Anthropic shape: { content: [{ type: \"text\", text }], model }\n} else if (Array.isArray(j.content) && j.content[0]) {\n  text = j.content.map(function (b) { return b && b.text ? b.text : \"\"; }).join(\"\");\n  model = j.model || \"unknown\";\n// Already-normalized passthrough\n} else if (typeof j.text === \"string\") {\n  text = j.text;\n  model = j.model_used || \"none\";\n}\nreturn { json: { text: text, model_used: model } };"
+      }
+    },
+    {
+      "id": "5ffef2b0-2604-4259-bbad-770f5b7324c7",
+      "name": "NVIDIA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        80
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"meta/llama-3.1-8b-instruct\", \"temperature\": 0.4, \"messages\": [ { \"role\": \"system\", \"content\": $('Input').item.json.system }, { \"role\": \"user\", \"content\": $('Input').item.json.prompt } ] } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "5323c3ec-d9fd-40b5-8950-e3e156e51d8d",
+      "name": "Anthropic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        144
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"claude-3-5-haiku-latest\", \"max_tokens\": 1024, \"temperature\": 0.4, \"system\": $('Input').item.json.system, \"messages\": [ { \"role\": \"user\", \"content\": $('Input').item.json.prompt } ] } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": "7jk7vpQVq8LJWszR",
+          "name": "Anthropic account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "d9583c3b-da49-489a-b50d-9860c928509f",
+      "name": "Qwen 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        224
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"qwen-plus\", \"temperature\": 0.4, \"messages\": [ { \"role\": \"system\", \"content\": $('Input').item.json.system }, { \"role\": \"user\", \"content\": $('Input').item.json.prompt } ] } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Ff0G1ve73IkZFnLh",
+          "name": "Bearer Auth account 3"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "e896af9a-ae7e-4708-aba7-96da7ded1daa",
+      "name": "DeepSeek",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "deepSeekApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"deepseek-chat\", \"temperature\": 0.4, \"messages\": [ { \"role\": \"system\", \"content\": $('Input').item.json.system }, { \"role\": \"user\", \"content\": $('Input').item.json.prompt } ] } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "deepSeekApi": {
+          "id": "JcfeGmtChFdDrNbF",
+          "name": "DeepSeek account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "fe7d8fb0-28cf-4756-82f9-fbb036c0b5c9",
+      "name": "OpenAI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        368
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"gpt-4o-mini\", \"temperature\": 0.4, \"messages\": [ { \"role\": \"system\", \"content\": $('Input').item.json.system }, { \"role\": \"user\", \"content\": $('Input').item.json.prompt } ] } }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "fb581c6c-2340-4bdd-887e-09ce7232a824",
+      "name": "All Providers Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        1568,
+        432
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{ \"choices\": [], \"model\": \"none\", \"failed\": true }"
+      }
+    }
+  ],
+  "connections": {
+    "Input": {
+      "main": [
+        [
+          {
+            "node": "Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NVIDIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Anthropic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Qwen 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen 3": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DeepSeek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "All Providers Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Providers Failed": {
+      "main": [
+        [
+          {
+            "node": "Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

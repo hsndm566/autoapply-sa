@@ -1,0 +1,2912 @@
+{
+  "name": "Kimi — Process One Row (with Review)",
+  "nodes": [
+    {
+      "id": "f881161c-8a31-48cb-8e68-f13f4192d41e",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "row_id",
+              "type": "number"
+            },
+            {
+              "name": "company",
+              "type": "string"
+            },
+            {
+              "name": "industry",
+              "type": "string"
+            },
+            {
+              "name": "recipient",
+              "type": "string"
+            },
+            {
+              "name": "job_description",
+              "type": "string"
+            },
+            {
+              "name": "drive_folder_id",
+              "type": "string"
+            },
+            {
+              "name": "processed_index",
+              "type": "number"
+            },
+            {
+              "name": "total",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "9cc1783c-f9f2-4195-8357-1dfcadbffd2f",
+      "name": "CV Source",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cv",
+              "name": "cv_text",
+              "type": "string",
+              "value": "HASSAN AHMED ADAM MOHAMMAD\nIndustrial Engineer — Jeddah, Saudi Arabia\nEmail: hasanadam506@gmail.com | Phone: +966 57 144 8656\n\nProfessional Summary\nIndustrial Engineer specializing in process optimization, supply chain logistics, and operations management. Proven ability to streamline workflows, coordinate cross-functional teams, and leverage Lean methodologies to drive measurable efficiency improvements and operational compliance.\n\nCore Competencies\nLean Manufacturing | Process Optimization | Supply Chain Logistics | Inventory Management | Vendor Relations | Risk Management | Cross-Functional Leadership | Data Analysis\n\nEducation\nMarch 2022 - Present — Bachelor of Science in Industrial Engineering, University of Business and Technology (UBT), Jeddah\nJanuary 2014 - November 2019 — STEM Diploma, International Philippine School in Jeddah (IPSJ), Jeddah\n\nAcademic Projects\nSenior Project: Process Optimization Using Lean Management, King AbdulAziz International Airport (KAIA)\n- Applied DMAIC framework and Value Stream Mapping (VSM) to analyze and optimize passenger check-in workflows.\n- Reduced average check-in time from 15.5 minutes to 9.2 minutes (a 40% process acceleration).\n- Decreased passenger waiting time by 50% and manual verification time by 57%.\n\nProfessional Experience\nJune 2022 - December 2025 — Logistics & Operations Coordinator, UBT, Jeddah\n- Orchestrated travel, accommodation, and logistics frameworks for international athletic contingents.\n- Recruited and directed large-scale volunteer workforces for high-profile events including the Jeddah Marathon.\n\nMarch 2024 - August 2024 — Purchasing Assistant, Aljabr, Dammam\n- Directed procurement operations to guarantee uninterrupted supply chain flow and timely material delivery.\n- Optimized vendor relationships to establish cost-effective communication channels.\n\nFebruary 2021 - November 2022 — Production Management Secretary, Piece of Fabric Est., Jeddah\n- Engineered standardized production schedules to maximize operational output and minimize downtime.\n\nJanuary 2019 - December 2019 — Educational Operations Assistant, AGS Advanced Generations School, Jeddah\n- Streamlined communication channels between staff and external stakeholders.\n\nCertifications\nOSHA 30-Hour General Industry | ISO 9001:2015 & Risk Management | Business Analysis Virtual Work Experience (BCG & Misk) | Professional Certificate in Productivity (PCP)\n\nLanguages\nEnglish, Arabic, Somali, Filipino"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a673e51e-d910-4938-ae85-ae03ad55893e",
+      "name": "Prep Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var row = $('When Called').first().json || {};\nvar cv = '';\ntry { cv = $('CV Source').first().json.cv_text || ''; } catch (e) { cv = ''; }\nvar company = row.company || 'the company';\nvar industry = row.industry || 'Engineering';\nvar recipient = (row.recipient || '').toString().trim();\nvar hasJd = row.job_description && String(row.job_description).trim().length > 0;\nvar jd = hasJd ? String(row.job_description) : ('General open application to ' + company + ', a Saudi Arabia-based ' + industry + ' company. Target role: Industrial Engineer focused on process optimization, supply chain logistics, operations management, quality and safety compliance.');\nvar ctx = 'Company: ' + company + ' | Industry: ' + industry + ' | Context: ' + jd;\nvar cvSys = 'You are a CV tailor for Hassan Ahmed Adam Mohammad, an Industrial Engineer in Jeddah. Rewrite the base CV emphasizing experience relevant to the target company/role, reorder bullets, and weave in relevant engineering keywords WITHOUT fabricating anything. Return ONLY the tailored CV as plain text.';\nvar cvUsr = ctx + ' Base CV: ' + cv;\nvar clSys = 'You are a cover letter writer for Hassan Ahmed Adam Mohammad, an Industrial Engineer in Jeddah. Write a confident, warm, professional cover letter under 200 words, three short paragraphs: opening interest, middle mapping his experience to the role, closing call-to-action. Return ONLY the cover letter as plain text.';\nvar clUsr = ctx + ' Candidate background: ' + cv.slice(0, 1200);\nvar cvMsgs = [ { role: 'system', content: cvSys }, { role: 'user', content: cvUsr } ];\nvar clMsgs = [ { role: 'system', content: clSys }, { role: 'user', content: clUsr } ];\nvar cvGroqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.6, max_tokens: 1800, messages: cvMsgs };\nvar coverGroqBody = { model: 'llama-3.3-70b-versatile', temperature: 0.6, max_tokens: 900, messages: clMsgs };\nvar cvZaiBody = { model: 'glm-4-flash', temperature: 0.6, max_tokens: 1800, messages: cvMsgs };\nvar coverZaiBody = { model: 'glm-4-flash', temperature: 0.6, max_tokens: 900, messages: clMsgs };\nvar keywords = ['process optimization','supply chain','operations','logistics','lean','quality','safety','inventory','procurement','industrial engineering','vendor','risk','data analysis', String(industry).toLowerCase()];\nreturn [{ json: { row_id: row.row_id, company: company, industry: industry, recipient: recipient, job_description: jd, cv_text: cv, drive_folder_id: (row.drive_folder_id || ''), processed_index: (row.processed_index || 0), total: (row.total || 0), keywords: keywords, cvSys: cvSys, cvUsr: cvUsr, clSys: clSys, clUsr: clUsr, cvGroqBody: cvGroqBody, coverGroqBody: coverGroqBody, cvZaiBody: cvZaiBody, coverZaiBody: coverZaiBody } }];"
+      }
+    },
+    {
+      "id": "655334d5-4d48-4adb-bd43-d4e298f5381d",
+      "name": "HF Embed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "huggingFaceApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ inputs: $('Prep Row').first().json.job_description }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "7HjlGl9dK3pF9sed",
+          "name": "Hugging Face account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "89e41460-2b3a-48e0-937f-aaa837bf627c",
+      "name": "Aggregate Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var all = $input.all();\nvar vec = [];\nfor (var i = 0; i < all.length; i++) {\n  var v = all[i].json;\n  if (typeof v === \"number\") { vec.push(v); }\n  else if (Array.isArray(v)) { for (var k = 0; k < v.length; k++) { if (typeof v[k] === \"number\") vec.push(v[k]); } }\n}\nreturn [{ json: { embedding: vec, dim: vec.length } }];"
+      }
+    },
+    {
+      "id": "0841c9b1-c3ee-4d9f-85e8-3885ddd7acd7",
+      "name": "CV Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep Row').first().json.cvGroqBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a07fe896-d457-4a39-90e7-e61b5d27aef4",
+      "name": "Parse CV Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\nreturn [{ json: { cv_groq: String(txt).trim() } }];"
+      }
+    },
+    {
+      "id": "fb6bb9c9-71f5-4bcb-bb9f-fb767fe948aa",
+      "name": "CV OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        96
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "={{ $('Prep Row').first().json.cvSys }}"
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "={{ $('Prep Row').first().json.cvUsr }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "maxTokens": 1800
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "45090b04-a849-4c29-b128-375fd2783d20",
+      "name": "Pick Best CV",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar groq = '';\ntry { groq = $('Parse CV Groq').first().json.cv_groq || ''; } catch (e) { groq = ''; }\nvar oai = '';\nvar o = $input.first().json || {};\ntry { oai = o.output[0].content[0].text; } catch (e) { oai = ''; }\nif (!oai) { try { oai = o.text || ''; } catch (e) { oai = ''; } }\nif (!oai && typeof o.content === 'string') oai = o.content;\nif (!oai) { try { oai = o.message.content || ''; } catch (e) {} }\noai = String(oai || '').trim();\nvar negs = ['unfortunately','regret','sorry','cannot','unable','not qualified','lack of','no experience','weak','poor','fail'];\nvar kws = prep.keywords || [];\nfunction score(t) {\n  t = String(t || '');\n  if (t.length < 60) return -1;\n  var lt = t.toLowerCase();\n  var hits = 0; for (var i = 0; i < kws.length; i++) { if (kws[i] && lt.indexOf(String(kws[i]).toLowerCase()) !== -1) hits++; }\n  var density = t.length > 0 ? (hits / (t.length / 500)) : 0;\n  var neg = 0; for (var n = 0; n < negs.length; n++) { if (lt.indexOf(negs[n]) !== -1) neg++; }\n  var lenScore = Math.min(t.length, 3500) / 3500;\n  return lenScore * 0.4 + Math.min(density, 10) * 0.06 + (hits * 0.03) - (neg * 0.15);\n}\nvar sg = score(groq), so = score(oai);\nvar winner = '', agent = '';\nif (sg < 0 && so < 0) { winner = ''; agent = 'none'; }\nelse if (so > sg) { winner = oai; agent = 'openai'; } else { winner = groq; agent = 'groq'; }\nvar ok = winner && winner.length > 60;\nreturn [{ json: { row_id: prep.row_id, company: prep.company, recipient: prep.recipient, tailored_cv: winner, cv_agent: agent, cv_ok: !!ok } }];"
+      }
+    },
+    {
+      "id": "faae17ad-b7e8-438c-9cea-1e2b70d58f17",
+      "name": "CV OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2016,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cvok",
+              "leftValue": "={{ $json.cv_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "7fc0834b-aeaf-4afe-b956-218b906cfe78",
+      "name": "Keep CV",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "8e8baef4-38bd-4a43-b25a-1037e3c0afe6",
+      "name": "Merge CV",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2688,
+        96
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "e534d814-7ad3-4530-a629-4828b9eb48eb",
+      "name": "CV Z.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2240,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep Row').first().json.cvZaiBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "bN7hxfTJtLOuCUU1",
+          "name": "Bearer Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ef75b670-c148-4da7-a8bc-aec8367c24f5",
+      "name": "Parse CV Z.ai",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar src = $input.first().json || {};\nvar txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\ntxt = String(txt).trim();\nif (!txt) { txt = prep.cv_text || ''; }\nreturn [{ json: { row_id: prep.row_id, company: prep.company, recipient: prep.recipient, tailored_cv: txt, cv_agent: 'zai', cv_ok: txt.length > 60 } }];"
+      }
+    },
+    {
+      "id": "7b21c931-876a-427c-9856-4b027ad16edf",
+      "name": "Cover Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2912,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep Row').first().json.coverGroqBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "42709afd-6174-448f-8368-4f8adc764a9e",
+      "name": "Parse Cover Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3136,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\nreturn [{ json: { cover_groq: String(txt).trim() } }];"
+      }
+    },
+    {
+      "id": "9349bbc3-6f8b-474a-8d1b-b0df1e0f58a7",
+      "name": "Cover OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.3,
+      "position": [
+        3360,
+        96
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "response",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "responses": {
+          "values": [
+            {
+              "type": "text",
+              "role": "system",
+              "content": "={{ $('Prep Row').first().json.clSys }}"
+            },
+            {
+              "type": "text",
+              "role": "user",
+              "content": "={{ $('Prep Row').first().json.clUsr }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "maxTokens": 900
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "671e47d5-f0ab-44d7-a7cb-1dd3421c41e8",
+      "name": "Pick Best Cover",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar cvm = $('Merge CV').first().json || {};\nvar groq = '';\ntry { groq = $('Parse Cover Groq').first().json.cover_groq || ''; } catch (e) { groq = ''; }\nvar oai = '';\nvar o = $input.first().json || {};\ntry { oai = o.output[0].content[0].text; } catch (e) { oai = ''; }\nif (!oai) { try { oai = o.text || ''; } catch (e) { oai = ''; } }\nif (!oai && typeof o.content === 'string') oai = o.content;\nif (!oai) { try { oai = o.message.content || ''; } catch (e) {} }\noai = String(oai || '').trim();\nvar negs = ['unfortunately','regret','sorry','cannot','unable','not qualified','lack of','no experience','weak','poor','fail'];\nvar kws = prep.keywords || [];\nfunction score(t) {\n  t = String(t || '');\n  if (t.length < 40) return -1;\n  var lt = t.toLowerCase();\n  var hits = 0; for (var i = 0; i < kws.length; i++) { if (kws[i] && lt.indexOf(String(kws[i]).toLowerCase()) !== -1) hits++; }\n  var neg = 0; for (var n = 0; n < negs.length; n++) { if (lt.indexOf(negs[n]) !== -1) neg++; }\n  var ideal = Math.max(0, 1 - Math.abs(t.length - 1100) / 1100);\n  return ideal * 0.5 + (hits * 0.05) - (neg * 0.15);\n}\nvar sg = score(groq), so = score(oai);\nvar winner = '', agent = '';\nif (sg < 0 && so < 0) { winner = ''; agent = 'none'; }\nelse if (so > sg) { winner = oai; agent = 'openai'; } else { winner = groq; agent = 'groq'; }\nvar ok = winner && winner.length > 40;\nreturn [{ json: { row_id: prep.row_id, company: prep.company, recipient: prep.recipient, tailored_cv: cvm.tailored_cv || '', cv_agent: cvm.cv_agent || '', cover_letter: winner, cover_agent: agent, cover_ok: !!ok } }];"
+      }
+    },
+    {
+      "id": "9555210a-6928-49ac-bab1-62b5c01a4790",
+      "name": "Cover OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3808,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "clok",
+              "leftValue": "={{ $json.cover_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "dfbb1dc4-245f-4861-b96d-3fadf90b2319",
+      "name": "Keep Cover",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4256,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "2aca4790-e060-4545-bedb-0ff1c1e572d6",
+      "name": "Merge Cover",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        4480,
+        96
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "70a0cc7c-2ea0-4587-a7c8-ba0f2f618c22",
+      "name": "Cover Z.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4032,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep Row').first().json.coverZaiBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "bN7hxfTJtLOuCUU1",
+          "name": "Bearer Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f10be17a-ef40-434e-a245-d641e313af2b",
+      "name": "Parse Cover Z.ai",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4256,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar cvm = $('Merge CV').first().json || {};\nvar src = $input.first().json || {};\nvar txt = '';\ntry { txt = src.choices[0].message.content || ''; } catch (e) { txt = ''; }\ntxt = String(txt).trim();\nreturn [{ json: { row_id: prep.row_id, company: prep.company, recipient: prep.recipient, tailored_cv: cvm.tailored_cv || '', cv_agent: cvm.cv_agent || '', cover_letter: txt, cover_agent: 'zai', cover_ok: txt.length > 40 } }];"
+      }
+    },
+    {
+      "id": "ad3e3c40-bd8a-40db-aa0b-5b23b9d12b9c",
+      "name": "HF Quality Gate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4704,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://router.huggingface.co/hf-inference/models/cardiffnlp/twitter-roberta-base-sentiment-latest",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "huggingFaceApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ inputs: (($(\"Merge Cover\").first().json.cover_letter || \"\") + \" \" + ($(\"Merge Cover\").first().json.tailored_cv || \"\")).slice(0, 480) }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "7HjlGl9dK3pF9sed",
+          "name": "Hugging Face account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "1a8deacc-894e-4de6-b385-2bb94dc2f472",
+      "name": "Check Sentiment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4928,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var hf = $input.first().json;\nvar pk = $('Merge Cover').first().json || {};\nvar isNeg = false; var score = 0.9;\ntry {\n  var arr = hf; if (Array.isArray(arr) && Array.isArray(arr[0])) arr = arr[0];\n  if (Array.isArray(arr)) { var top = arr[0]; for (var i = 0; i < arr.length; i++) { if (arr[i] && arr[i].score > top.score) top = arr[i]; } var lbl = String(top.label || '').toLowerCase(); if ((lbl === 'negative' || lbl === 'label_0') && top.score >= 0.6) { isNeg = true; score = 0.4; } }\n} catch (e) { isNeg = false; score = 0.9; }\nreturn [{ json: { row_id: pk.row_id, company: pk.company, recipient: pk.recipient, tailored_cv: pk.tailored_cv || '', cover_letter: pk.cover_letter || '', cv_agent: pk.cv_agent || '', cover_agent: pk.cover_agent || '', tone_score: score, tone_flagged: isNeg } }];"
+      }
+    },
+    {
+      "id": "294e6ad0-b2ea-4948-84ed-6cdb52dc4cec",
+      "name": "Merge Quality",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        5152,
+        96
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "6aabe6eb-9727-43b9-99f6-5f17b031299b",
+      "name": "Simple Tone Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4928,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var pk = $('Merge Cover').first().json || {};\nvar text = ((pk.cover_letter || '') + ' ' + (pk.tailored_cv || '')).toLowerCase();\nvar negs = ['unfortunately','regret','sorry','cannot','unable','not qualified','lack of','no experience','weak','poor','fail','problem','concern','desperate'];\nvar flagged = false; for (var i = 0; i < negs.length; i++) { if (text.indexOf(negs[i]) !== -1) { flagged = true; break; } }\nreturn [{ json: { row_id: pk.row_id, company: pk.company, recipient: pk.recipient, tailored_cv: pk.tailored_cv || '', cover_letter: pk.cover_letter || '', cv_agent: pk.cv_agent || '', cover_agent: pk.cover_agent || '', tone_score: flagged ? 0.4 : 0.9, tone_flagged: flagged } }];"
+      }
+    },
+    {
+      "id": "93932425-f002-473e-bdd8-617dc8842be3",
+      "name": "Build CV HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5376,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $('PII Scrubber').first().json || {};\nvar esc = function (s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };\nvar LF = String.fromCharCode(10);\nvar cvHtml = esc(j.tailored_cv).split(LF).join('<br>');\nvar coverHtml = esc(j.cover_letter).split(LF).join('<br>');\nvar html = '<html><head><meta charset=\"utf-8\"><style>body{font-family:Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#222;margin:40px;}</style></head><body>' + cvHtml + '</body></html>';\nreturn [{ json: { row_id: j.row_id, company: j.company, recipient: j.recipient, tailored_cv: j.tailored_cv || '', cover_letter: j.cover_letter || '', cv_agent: j.cv_agent || '', cover_agent: j.cover_agent || '', cover_html: coverHtml, html: html } }];"
+      }
+    },
+    {
+      "id": "6955dfe8-abcd-4bce-8a2e-a27978c093d7",
+      "name": "PDFShift Convert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5600,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.pdfshift.io/v3/convert/pdf",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ source: $json.html, sandbox: false }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "MK4iVgw9hy0Rtbd0",
+          "name": "PDFShift API key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b4f7d4ee-5bcd-4e18-8683-03a4eb2e21ce",
+      "name": "Encode PDF + Build Brevo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5824,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var bh = $('Build CV HTML').first().json || {};\nvar b64 = '';\ntry { var buf = await this.helpers.getBinaryDataBuffer(0, 'data'); b64 = buf.toString('base64'); } catch (e) { b64 = ''; }\nvar coverHtml = bh.cover_html || '';\nvar subject = 'Application for Industrial Engineering Position - Hassan Adam';\nvar htmlContent = '<html><body style=\"font-family:Helvetica,Arial,sans-serif;font-size:14px;color:#222;\">' + coverHtml + '</body></html>';\nvar att = b64 ? [{ content: b64, name: 'CV_Hassan_Adam.pdf' }] : [];\nfunction body(fromEmail) { return { sender: { name: 'Hassan Ahmed Adam Mohammad', email: fromEmail }, to: [{ email: bh.recipient }], subject: subject, htmlContent: htmlContent, attachment: att }; }\nreturn [{ json: { row_id: bh.row_id, recipient: bh.recipient, company: bh.company, cv_agent: bh.cv_agent, cover_agent: bh.cover_agent, tailored_cv: bh.tailored_cv, cover_letter: bh.cover_letter, cover_html: coverHtml, pdf_bytes: b64.length, brevoPrimary: body('jobapplier@agentmail.to'), brevoFallback: body('hasanadam506@gmail.com') } }];"
+      }
+    },
+    {
+      "id": "5d8e0fd3-d57d-4593-be89-c371a8e7d15a",
+      "name": "Brevo Primary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        6048,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.brevoPrimary) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "226fd419-9c62-465e-901a-fcf3d2288c14",
+      "name": "Parse Brevo Primary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar eb = $('Encode PDF + Build Brevo').first().json || {};\nvar mid = src.messageId || (src.messageIds && src.messageIds[0]) || '';\nreturn [{ json: { row_id: eb.row_id, recipient: eb.recipient, company: eb.company, cv_agent: eb.cv_agent, cover_agent: eb.cover_agent, tailored_cv: eb.tailored_cv, cover_letter: eb.cover_letter, cover_html: eb.cover_html, messageId: mid, sender_used: 'jobapplier@agentmail.to', status: mid ? 'sent' : 'failed' } }];"
+      }
+    },
+    {
+      "id": "0116b2b8-2b6a-4191-8479-6ff96b09973c",
+      "name": "Merge Brevo",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        6720,
+        96
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "0b2ae58f-324f-453f-88ae-6ff96b09973c",
+      "name": "Brevo Fallback (Gmail sender)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        6272,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.brevoFallback) }}",
+        "options": {}
+      },
+      "credentials": {
+        "sendInBlueApi": {
+          "id": "siq0Unj7E3TTb6nH",
+          "name": "Brevo account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "4da4fbc9-cecf-40c8-a8c0-9c7f28df1daf",
+      "name": "Parse Brevo Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar eb = $('Encode PDF + Build Brevo').first().json || {};\nvar mid = src.messageId || (src.messageIds && src.messageIds[0]) || '';\nreturn [{ json: { row_id: eb.row_id, recipient: eb.recipient, company: eb.company, cv_agent: eb.cv_agent, cover_agent: eb.cover_agent, tailored_cv: eb.tailored_cv, cover_letter: eb.cover_letter, cover_html: eb.cover_html, messageId: mid, sender_used: 'hasanadam506@gmail.com', status: mid ? 'sent' : 'failed' } }];"
+      }
+    },
+    {
+      "id": "c6d0933c-3393-4a79-800e-bf458d74821f",
+      "name": "Build Upsert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6944,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var pb = $input.first().json || {};\nvar prep = $('Prep Row').first().json || {};\nvar vec = [];\ntry { vec = $('Aggregate Embedding').first().json.embedding || []; } catch (e) { vec = []; }\nvar host = 'job-agent-memory-kwj37r9.svc.aped-4627-b74a.pinecone.io';\nvar ts = new Date().toISOString();\nvar upsertBody = { vectors: [{ id: 'job-' + (pb.row_id || Date.now()), values: vec, metadata: { company: pb.company || '', job_description: String(prep.job_description || '').slice(0, 1000), tailored_cv: String(pb.tailored_cv || '').slice(0, 2000), cover_letter: String(pb.cover_letter || '').slice(0, 1000), status: pb.status || '', cv_agent: pb.cv_agent || '', cover_agent: pb.cover_agent || '', sender_used: pb.sender_used || '', message_id: pb.messageId || '', timestamp: ts } }] };\nreturn [{ json: { row_id: pb.row_id, company: pb.company, recipient: pb.recipient, cv_agent: pb.cv_agent, cover_agent: pb.cover_agent, cover_html: pb.cover_html, cover_letter: pb.cover_letter, tailored_cv: pb.tailored_cv, messageId: pb.messageId, sender_used: pb.sender_used, status: pb.status, drive_folder_id: prep.drive_folder_id || '', processed_index: prep.processed_index || 0, total: prep.total || 0, host: host, dim: vec.length, upsertBody: upsertBody } }];"
+      }
+    },
+    {
+      "id": "7563cd3b-eb04-44f2-8ae3-34c439b4cc53",
+      "name": "Pinecone Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        7168,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{ $json.host }}/vectors/upsert",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "pineconeApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Pinecone-API-Version",
+              "value": "2024-07"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.upsertBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "pineconeApi": {
+          "id": "ifABlu9PCWIqab6R",
+          "name": "Pinecone account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "aa11bb22-cc33-dd44-ee55-ff6600110011",
+      "name": "Attach PDF (Drive)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7392,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $input.first().json || {};\nvar bin = {};\ntry { bin = $('PDFShift Convert').first().binary || {}; } catch (e) { bin = {}; }\nreturn [{ json: j, binary: bin }];"
+      }
+    },
+    {
+      "id": "6d759491-cb14-4d33-baf5-ce621e5258fa",
+      "name": "Drive Upload PDF",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        7616,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "inputDataFieldName": "data",
+        "name": "={{ 'CV_Hassan_Adam_' + $('Build Upsert').first().json.row_id + '.pdf' }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": "={{ ($('Build Upsert').first().json.drive_folder_id) ? { __rl: true, mode: 'id', value: $('Build Upsert').first().json.drive_folder_id } : { __rl: true, mode: 'list', value: 'root', cachedResultName: '/ (Root folder)' } }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "34dJpcQH8s7EzLLJ",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "dd9ae65d-b3bf-4679-b34e-d66d3f04d9ab",
+      "name": "Drive Upload Cover",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        7840,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "createFromText",
+        "content": "={{ $('Build Upsert').first().json.cover_letter }}",
+        "name": "={{ 'CoverLetter_' + $('Build Upsert').first().json.company + '_' + $('Build Upsert').first().json.row_id + '.txt' }}",
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": "={{ ($('Build Upsert').first().json.drive_folder_id) ? { __rl: true, mode: 'id', value: $('Build Upsert').first().json.drive_folder_id } : { __rl: true, mode: 'list', value: 'root', cachedResultName: '/ (Root folder)' } }}",
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "34dJpcQH8s7EzLLJ",
+          "name": "Google Drive account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "bb22cc33-dd44-ee55-ff66-001100112222",
+      "name": "Attach PDF (S3)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8064,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $('Build Upsert').first().json || {};\nvar bin = {};\ntry { bin = $('PDFShift Convert').first().binary || {}; } catch (e) { bin = {}; }\nreturn [{ json: j, binary: bin }];"
+      }
+    },
+    {
+      "id": "39400ecc-d86f-4cd9-b8d1-171abb283652",
+      "name": "S3 Backup PDF",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        8288,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "job-apps-backup",
+        "fileName": "={{ 'CV_Hassan_Adam_' + $('Build Upsert').first().json.row_id + '.pdf' }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "credentials": {
+        "s3": {
+          "id": "wIs6CoHxqzpDHZlS",
+          "name": "S3 account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "cc33dd44-ee55-ff66-0011-001122223333",
+      "name": "S3 Backup Cover",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        8512,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "job-apps-backup",
+        "fileName": "={{ 'CoverLetter_' + $('Build Upsert').first().json.company + '_' + $('Build Upsert').first().json.row_id + '.txt' }}",
+        "binaryData": false,
+        "fileContent": "={{ $('Build Upsert').first().json.cover_letter }}",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "credentials": {
+        "s3": {
+          "id": "wIs6CoHxqzpDHZlS",
+          "name": "S3 account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "6aedb503-1a66-490f-a799-bbfe72cb433f",
+      "name": "Update Row Status",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        8736,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('Build Upsert').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "={{ $('Build Upsert').first().json.status }}",
+            "applied": "={{ $('Build Upsert').first().json.status === 'sent' }}",
+            "processed_at": "={{ $now.toISO() }}",
+            "cover_letter": "={{ ($('Build Upsert').first().json.cover_letter || '').slice(0, 4000) }}",
+            "vector_id": "={{ 'job-' + $('Build Upsert').first().json.row_id }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d02f526b-1c35-48ba-8d48-dfbe46afcd3a",
+      "name": "Loop Progress",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8960,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var bu = $('Build Upsert').first().json || {};\nvar processed = (bu.processed_index || 0);\nvar total = bu.total || 0;\nvar every10 = (processed > 0 && processed % 10 === 0);\nvar tgText = 'Batch progress: ' + processed + '/' + total + ' processed. Latest: ' + (bu.company || '') + ' (' + (bu.status || '') + ', sender ' + (bu.sender_used || '') + ', CV ' + (bu.cv_agent || '?') + '/cover ' + (bu.cover_agent || '?') + ').';\nreturn [{ json: { row_id: bu.row_id, company: bu.company, recipient: bu.recipient, messageId: bu.messageId, sender_used: bu.sender_used, status: bu.status, cv_agent: bu.cv_agent, cover_agent: bu.cover_agent, processed: processed, total: total, every10: every10, tgText: tgText } }];"
+      }
+    },
+    {
+      "id": "44408aac-5203-495a-898b-c6a2ee5b7fa7",
+      "name": "Every 10?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        9184,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e10",
+              "leftValue": "={{ $json.every10 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "325aedfe-f296-48da-853a-b93b66cc7933",
+      "name": "Telegram Progress",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        9408,
+        32
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ $json.tgText }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "ff25c7ab-38aa-4752-9e05-c3b4971f12f7",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "7caf4bf7-cad7-4bf8-9252-f57bd7bbfece",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        9632,
+        96
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "r1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('Loop Progress').first().json.row_id }}"
+            },
+            {
+              "id": "r2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.company }}"
+            },
+            {
+              "id": "r3",
+              "name": "recipient",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.recipient }}"
+            },
+            {
+              "id": "r4",
+              "name": "messageId",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.messageId }}"
+            },
+            {
+              "id": "r5",
+              "name": "sender_used",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.sender_used }}"
+            },
+            {
+              "id": "r6",
+              "name": "status",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.status }}"
+            },
+            {
+              "id": "r7",
+              "name": "cv_agent",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.cv_agent }}"
+            },
+            {
+              "id": "r8",
+              "name": "cover_agent",
+              "type": "string",
+              "value": "={{ $('Loop Progress').first().json.cover_agent }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "scam0001-0000-0000-0000-000000000000",
+      "name": "Scam Scorer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        420
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Row').first().json || {};\nvar company = String(prep.company || '');\nvar email = String(prep.recipient || '').toLowerCase().trim();\nvar jd = String(prep.job_description || '');\nvar score = 0;\nvar reasons = [];\nvar kwBlock = false;\n// Check 1 (first, cheap, high-signal): email domain vs company domain\nvar emailDomain = '';\nvar at = email.indexOf('@');\nif (at !== -1) emailDomain = email.slice(at + 1);\nvar freeProviders = ['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com','aol.com','icloud.com','protonmail.com','mail.com','yandex.com','gmx.com','ymail.com'];\nvar isFree = false;\nfor (var i = 0; i < freeProviders.length; i++) { if (emailDomain === freeProviders[i]) { isFree = true; break; } }\nvar compToken = company.toLowerCase().replace(/[^a-z0-9]/g, '');\nvar domainCore = (emailDomain.split('.')[0]) || '';\nvar domainMatches = false;\nif (compToken && domainCore && domainCore.length >= 3) { if (compToken.indexOf(domainCore) !== -1 || domainCore.indexOf(compToken.slice(0, 5)) !== -1) domainMatches = true; }\nif (isFree) { score += 25; reasons.push('Free-mail domain (' + emailDomain + ') used for company ' + company); }\nelse if (emailDomain && compToken && !domainMatches) { score += 10; reasons.push('Email domain ' + emailDomain + ' does not obviously match company name'); }\n// Description length\nvar words = jd ? jd.split(/\\s+/).filter(function (w) { return w.length > 0; }).length : 0;\nif (words > 0 && words < 100) { score += 15; reasons.push('Job description under 100 words (' + words + ')'); }\n// Scam keywords -> auto-block\nvar scamKw = ['training fee','equipment purchase','bank details','bank account number','national id','processing fee','registration fee','pay a deposit','western union','send money','upfront payment','activation fee'];\nvar hay = (jd + ' ' + company).toLowerCase();\nfor (var k = 0; k < scamKw.length; k++) { if (hay.indexOf(scamKw[k]) !== -1) { score += 40; reasons.push('Scam keyword detected: ' + scamKw[k]); kwBlock = true; } }\nif (score > 100) score = 100;\nvar decision = 'proceed';\nif (score >= 85) decision = 'blocked';\nelse if (score >= 60) decision = 'flagged';\nif (kwBlock) decision = 'blocked';\nvar reasonText = reasons.length ? reasons.join('; ') : 'No suspicious signals detected';\nreturn [{ json: Object.assign({}, prep, { scam_score: score, scam_decision: decision, scam_reasons: reasonText }) }];"
+      }
+    },
+    {
+      "id": "scam0001-0000-0000-0000-000000000004",
+      "name": "Is Scam Blocked",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        780,
+        420
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "blk",
+              "leftValue": "={{ $json.scam_decision }}",
+              "rightValue": "blocked",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "scam0001-0000-0000-0000-000000000005",
+      "name": "Is Scam Flagged",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        520
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "flg",
+              "leftValue": "={{ $json.scam_decision }}",
+              "rightValue": "flagged",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "scam0001-0000-0000-0000-000000000001",
+      "name": "Mark Blocked",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1000,
+        320
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('Scam Scorer').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "blocked_scam",
+            "scam_score": "={{ $('Scam Scorer').first().json.scam_score }}",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "scam0001-0000-0000-0000-000000000002",
+      "name": "Telegram Scam Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1220,
+        520
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ '⚠️ Flagged for review (not auto-sent): ' + $('Scam Scorer').first().json.company + ' — ' + $('Scam Scorer').first().json.recipient + '\\nScam score: ' + $('Scam Scorer').first().json.scam_score + '\\nReasons: ' + $('Scam Scorer').first().json.scam_reasons }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "837a798b-8ebc-4988-a22e-94b6268b87fe",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "scam0001-0000-0000-0000-000000000006",
+      "name": "Mark Flagged",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1440,
+        520
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('Scam Scorer').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "flagged_for_review",
+            "scam_score": "={{ $('Scam Scorer').first().json.scam_score }}",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "scam0001-0000-0000-0000-000000000003",
+      "name": "Return Scam",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1660,
+        420
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "s1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('Scam Scorer').first().json.row_id }}"
+            },
+            {
+              "id": "s2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('Scam Scorer').first().json.company }}"
+            },
+            {
+              "id": "s3",
+              "name": "recipient",
+              "type": "string",
+              "value": "={{ $('Scam Scorer').first().json.recipient }}"
+            },
+            {
+              "id": "s4",
+              "name": "status",
+              "type": "string",
+              "value": "={{ $('Scam Scorer').first().json.scam_decision === 'blocked' ? 'blocked_scam' : 'flagged_for_review' }}"
+            },
+            {
+              "id": "s5",
+              "name": "scam_score",
+              "type": "number",
+              "value": "={{ $('Scam Scorer').first().json.scam_score }}"
+            },
+            {
+              "id": "s6",
+              "name": "messageId",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "s7",
+              "name": "sender_used",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "s8",
+              "name": "cv_agent",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "s9",
+              "name": "cover_agent",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "pii00001-0000-0000-0000-000000000001",
+      "name": "PII Scrubber",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5264,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $input.first().json || {};\nvar cv = String(j.tailored_cv || '');\nvar cover = String(j.cover_letter || '');\nvar warnings = [];\nvar redacted = false;\n// Saudi national ID: 10 digits starting with 1 or 2\nvar reNid = /\\b[12]\\d{9}\\b/g;\n// Saudi/general IBAN\nvar reIban = /\\b[A-Z]{2}\\d{2}[A-Z0-9]{11,30}\\b/g;\n// Passport-like: 1-2 letters + 6-8 digits\nvar rePass = /\\b[A-Z]{1,2}\\d{6,8}\\b/g;\n// Long bank-account-like digit runs (12+)\nvar reBank = /\\b\\d{12,}\\b/g;\nfunction scrub(text, label) {\n  var t = text;\n  var patterns = [ ['national_id', reNid], ['iban', reIban], ['passport', rePass], ['bank_account', reBank] ];\n  for (var i = 0; i < patterns.length; i++) {\n    var name = patterns[i][0]; var re = patterns[i][1];\n    if (re.test(t)) { warnings.push(name + ' pattern found in ' + label); redacted = true; }\n    t = t.replace(re, '[REDACTED]');\n  }\n  return t;\n}\ncv = scrub(cv, 'CV');\ncover = scrub(cover, 'cover letter');\n// Always append STOP line to cover letter\nvar stopLine = 'If you\\u2019d prefer not to receive future applications from this platform, reply STOP.';\nif (cover.indexOf('reply STOP') === -1) { cover = cover + '\\n\\n' + stopLine; }\nreturn [{ json: { row_id: j.row_id, company: j.company, recipient: j.recipient, tailored_cv: cv, cover_letter: cover, cv_agent: j.cv_agent || '', cover_agent: j.cover_agent || '', tone_score: j.tone_score, tone_flagged: j.tone_flagged, pii_redacted: redacted, pii_warnings: warnings.join('; ') } }];"
+      }
+    },
+    {
+      "id": "pii00001-0000-0000-0000-000000000002",
+      "name": "PII Redacted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5264,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pr",
+              "leftValue": "={{ $json.pii_redacted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "pii00001-0000-0000-0000-000000000003",
+      "name": "Log PII Warn",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5488,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Qh3DXLSbV0aaLSxS"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "event_type": "pii_redaction",
+            "log_timestamp": "={{ $now.toISO() }}",
+            "message": "={{ 'PII redacted for row ' + $('PII Scrubber').first().json.row_id + ' (' + $('PII Scrubber').first().json.company + '): ' + $('PII Scrubber').first().json.pii_warnings }}",
+            "node_name": "PII Scrubber",
+            "payload": "={{ $('PII Scrubber').first().json.recipient }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "pii00001-0000-0000-0000-000000000004",
+      "name": "Compliance Audit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        8848,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Ouk2wIkJvBrXv2L7"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "related_row_id": "={{ Number($('Build Upsert').first().json.row_id) }}",
+            "company": "={{ $('Build Upsert').first().json.company }}",
+            "recipient": "={{ $('Build Upsert').first().json.recipient }}",
+            "cv_version": "={{ ($('Build Upsert').first().json.cv_agent || '') + ' | ' + ($('Build Upsert').first().json.tailored_cv || '').slice(0, 1800) }}",
+            "cover_version": "={{ ($('Build Upsert').first().json.cover_agent || '') + ' | ' + ($('Build Upsert').first().json.cover_letter || '').slice(0, 1800) }}",
+            "approval_action": "auto_approved",
+            "pii_redacted": "={{ $('PII Scrubber').first().json.pii_redacted === true }}",
+            "sent_ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000001",
+      "name": "Get Send Limit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        120,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "daily_send_limit"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000002",
+      "name": "Get Sent Today",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "sent"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000003",
+      "name": "Volume Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var limitRaw = 15;\ntry { var c = $('Get Send Limit').first().json; if (c && c.config_value !== undefined && c.config_value !== null && String(c.config_value).length) { var pv = parseInt(String(c.config_value), 10); if (!isNaN(pv)) limitRaw = pv; } } catch (e) {}\nvar enabled = false;\ntry { var g = $('Get Guard Flag').first().json; if (g && String(g.config_value).toLowerCase() === 'true') enabled = true; } catch (e) {}\nvar rows = [];\ntry { rows = $('Get Sent Today').all(); } catch (e) { rows = []; }\nvar now = new Date();\nvar startToday = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0);\nvar endToday = startToday + (24 * 60 * 60 * 1000);\nvar sentToday = 0;\nfor (var i = 0; i < rows.length; i++) {\n  var r = rows[i].json || {};\n  if (!r || Object.keys(r).length === 0) continue;\n  var pa = r.processed_at ? Date.parse(r.processed_at) : NaN;\n  if (!isNaN(pa) && pa >= startToday && pa < endToday) sentToday++;\n}\nvar limitReached = enabled && (sentToday >= limitRaw);\nreturn [{ json: { guard_enabled: enabled, daily_limit: limitRaw, sent_today: sentToday, limit_reached: limitReached } }];"
+      }
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000004",
+      "name": "Limit Reached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "lr",
+              "leftValue": "={{ $json.limit_reached }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000005",
+      "name": "Mark Deferred",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        600,
+        180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('When Called').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "deferred"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000006",
+      "name": "Telegram Deferred",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        820,
+        180
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ 'Daily limit reached (' + $('Volume Guard').first().json.sent_today + '/' + $('Volume Guard').first().json.daily_limit + '). Deferred: ' + $('When Called').first().json.company + ' — will retry tomorrow.' }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "3e05a883-00c6-4b0a-8594-80e41a167ca9",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000007",
+      "name": "Return Deferred",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        180
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('When Called').first().json.row_id }}"
+            },
+            {
+              "id": "d2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('When Called').first().json.company }}"
+            },
+            {
+              "id": "d3",
+              "name": "status",
+              "type": "string",
+              "value": "deferred"
+            },
+            {
+              "id": "d4",
+              "name": "messageId",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "vol00001-0000-0000-0000-000000000008",
+      "name": "Get Guard Flag",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        180,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "volume_guard_enabled"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000001",
+      "name": "Get Review Flag",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5480,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "human_review_enabled"
+            }
+          ]
+        },
+        "returnAll": false
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000002",
+      "name": "Review Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5680,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "re",
+              "leftValue": "={{ $json.config_value }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000003",
+      "name": "Telegram Review",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5900,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendAndWait",
+        "chatId": "8890901423",
+        "message": "={{ '🎯 Review: ' + $('PII Scrubber').first().json.company + ' — ' + $('PII Scrubber').first().json.recipient + '\\n\\nCover opener: \"' + ($('PII Scrubber').first().json.cover_letter || '').slice(0, 160) + '...\"\\n\\nApprove to send, or Skip to discard.' }}",
+        "responseType": "approval",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double",
+            "approveLabel": "✅ Approve",
+            "disapproveLabel": "⏭️ Skip"
+          }
+        },
+        "chatApproval": true,
+        "chatApprovalOptions": {
+          "postDecisionBehavior": "showOutcome"
+        },
+        "options": {
+          "limitWaitTime": {
+            "values": {
+              "limitType": "afterTimeInterval",
+              "resumeAmount": 12,
+              "resumeUnit": "hours"
+            }
+          },
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "1aaa0496-662c-4ace-93fa-8d0358722b13"
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000004",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6120,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ap",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000005",
+      "name": "Proceed To Send",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        6340,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000006",
+      "name": "Mark Skipped",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6340,
+        220
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($('PII Scrubber').first().json.row_id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "skipped_by_user",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000007",
+      "name": "Log Skip Edit",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        6560,
+        220
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "K63qYkkS9cUJYJoj"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "related_row_id": "={{ Number($('PII Scrubber').first().json.row_id) }}",
+            "company": "={{ $('PII Scrubber').first().json.company }}",
+            "original_text": "={{ ($('PII Scrubber').first().json.cover_letter || '').slice(0, 2000) }}",
+            "edited_text": "",
+            "edit_type": "skip",
+            "edited_ts": "={{ $now.toISO() }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "rev00001-0000-0000-0000-000000000008",
+      "name": "Return Skipped",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        6780,
+        220
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "k1",
+              "name": "row_id",
+              "type": "number",
+              "value": "={{ $('PII Scrubber').first().json.row_id }}"
+            },
+            {
+              "id": "k2",
+              "name": "company",
+              "type": "string",
+              "value": "={{ $('PII Scrubber').first().json.company }}"
+            },
+            {
+              "id": "k3",
+              "name": "status",
+              "type": "string",
+              "value": "skipped_by_user"
+            },
+            {
+              "id": "k4",
+              "name": "messageId",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Get Send Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Source": {
+      "main": [
+        [
+          {
+            "node": "Prep Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Row": {
+      "main": [
+        [
+          {
+            "node": "Scam Scorer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scam Scorer": {
+      "main": [
+        [
+          {
+            "node": "Is Scam Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Scam Blocked": {
+      "main": [
+        [
+          {
+            "node": "Mark Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Scam Flagged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Blocked": {
+      "main": [
+        [
+          {
+            "node": "Return Scam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Scam Flagged": {
+      "main": [
+        [
+          {
+            "node": "Telegram Scam Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "HF Embed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Scam Alert": {
+      "main": [
+        [
+          {
+            "node": "Mark Flagged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Flagged": {
+      "main": [
+        [
+          {
+            "node": "Return Scam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HF Embed": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Embedding": {
+      "main": [
+        [
+          {
+            "node": "CV Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Groq": {
+      "main": [
+        [
+          {
+            "node": "Parse CV Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CV Groq": {
+      "main": [
+        [
+          {
+            "node": "CV OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Pick Best CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Best CV": {
+      "main": [
+        [
+          {
+            "node": "CV OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV OK?": {
+      "main": [
+        [
+          {
+            "node": "Keep CV",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CV Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep CV": {
+      "main": [
+        [
+          {
+            "node": "Merge CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge CV": {
+      "main": [
+        [
+          {
+            "node": "Cover Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CV Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Parse CV Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse CV Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Merge CV",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Cover Groq": {
+      "main": [
+        [
+          {
+            "node": "Parse Cover Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cover Groq": {
+      "main": [
+        [
+          {
+            "node": "Cover OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Pick Best Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pick Best Cover": {
+      "main": [
+        [
+          {
+            "node": "Cover OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover OK?": {
+      "main": [
+        [
+          {
+            "node": "Keep Cover",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cover Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keep Cover": {
+      "main": [
+        [
+          {
+            "node": "Merge Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Cover": {
+      "main": [
+        [
+          {
+            "node": "HF Quality Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cover Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Parse Cover Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cover Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Merge Cover",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HF Quality Gate": {
+      "main": [
+        [
+          {
+            "node": "Check Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Simple Tone Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Merge Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Quality": {
+      "main": [
+        [
+          {
+            "node": "PII Scrubber",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Tone Check": {
+      "main": [
+        [
+          {
+            "node": "Merge Quality",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build CV HTML": {
+      "main": [
+        [
+          {
+            "node": "PDFShift Convert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDFShift Convert": {
+      "main": [
+        [
+          {
+            "node": "Encode PDF + Build Brevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode PDF + Build Brevo": {
+      "main": [
+        [
+          {
+            "node": "Brevo Primary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brevo Primary": {
+      "main": [
+        [
+          {
+            "node": "Parse Brevo Primary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Brevo Fallback (Gmail sender)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Brevo Primary": {
+      "main": [
+        [
+          {
+            "node": "Merge Brevo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Brevo": {
+      "main": [
+        [
+          {
+            "node": "Build Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brevo Fallback (Gmail sender)": {
+      "main": [
+        [
+          {
+            "node": "Parse Brevo Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Brevo Fallback": {
+      "main": [
+        [
+          {
+            "node": "Merge Brevo",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Upsert": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Upsert": {
+      "main": [
+        [
+          {
+            "node": "Attach PDF (Drive)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach PDF (Drive)": {
+      "main": [
+        [
+          {
+            "node": "Drive Upload PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Upload PDF": {
+      "main": [
+        [
+          {
+            "node": "Drive Upload Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Upload Cover": {
+      "main": [
+        [
+          {
+            "node": "Attach PDF (S3)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach PDF (S3)": {
+      "main": [
+        [
+          {
+            "node": "S3 Backup PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S3 Backup PDF": {
+      "main": [
+        [
+          {
+            "node": "S3 Backup Cover",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "S3 Backup Cover": {
+      "main": [
+        [
+          {
+            "node": "Update Row Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Row Status": {
+      "main": [
+        [
+          {
+            "node": "Compliance Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Progress": {
+      "main": [
+        [
+          {
+            "node": "Every 10?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 10?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Progress",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Progress": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PII Scrubber": {
+      "main": [
+        [
+          {
+            "node": "Get Review Flag",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "PII Redacted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PII Redacted?": {
+      "main": [
+        [
+          {
+            "node": "Log PII Warn",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Compliance Audit": {
+      "main": [
+        [
+          {
+            "node": "Loop Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Send Limit": {
+      "main": [
+        [
+          {
+            "node": "Get Guard Flag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sent Today": {
+      "main": [
+        [
+          {
+            "node": "Volume Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Volume Guard": {
+      "main": [
+        [
+          {
+            "node": "Limit Reached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limit Reached?": {
+      "main": [
+        [
+          {
+            "node": "Mark Deferred",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CV Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Deferred": {
+      "main": [
+        [
+          {
+            "node": "Telegram Deferred",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Deferred": {
+      "main": [
+        [
+          {
+            "node": "Return Deferred",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Guard Flag": {
+      "main": [
+        [
+          {
+            "node": "Get Sent Today",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Review Flag": {
+      "main": [
+        [
+          {
+            "node": "Review Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Review Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Proceed To Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Review": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Proceed To Send",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proceed To Send": {
+      "main": [
+        [
+          {
+            "node": "Build CV HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Skipped": {
+      "main": [
+        [
+          {
+            "node": "Log Skip Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Skip Edit": {
+      "main": [
+        [
+          {
+            "node": "Return Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

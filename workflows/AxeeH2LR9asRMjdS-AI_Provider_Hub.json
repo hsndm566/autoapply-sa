@@ -1,0 +1,292 @@
+{
+  "name": "AI Provider Hub",
+  "nodes": [
+    {
+      "id": "8b600afb-4725-4703-81d5-974411b0de65",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "inputSource": "workflowInputs",
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "system",
+              "type": "string"
+            },
+            {
+              "name": "user",
+              "type": "string"
+            },
+            {
+              "name": "max_tokens",
+              "type": "number"
+            },
+            {
+              "name": "temperature",
+              "type": "number"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f72f76a4-e7d1-404f-b909-f03f4d3d74a7",
+      "name": "Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $('When Called').first().json || {};\nvar sys = j.system || '';\nvar usr = j.user || '';\nvar mt = (j.max_tokens !== undefined && j.max_tokens !== null && String(j.max_tokens).length) ? Number(j.max_tokens) : 2000;\nif (!mt || isNaN(mt)) mt = 2000;\nvar temp = (j.temperature !== undefined && j.temperature !== null && String(j.temperature).length) ? Number(j.temperature) : 0.6;\nif (isNaN(temp)) temp = 0.6;\nvar messages = [ { role: 'system', content: sys }, { role: 'user', content: usr } ];\nvar groqBody = { model: 'llama-3.3-70b-versatile', temperature: temp, max_tokens: mt, messages: messages };\nvar orBody = { model: 'meta-llama/llama-3.3-70b-instruct', temperature: temp, max_tokens: mt, messages: messages };\nvar zaiBody = { model: 'glm-4.5-flash', temperature: temp, max_tokens: mt, messages: messages };\nreturn [{ json: { system: sys, user: usr, groqBody: groqBody, orBody: orBody, zaiBody: zaiBody } }];"
+      }
+    },
+    {
+      "id": "6532369b-23ba-4d0d-b7dd-5fcc35d25468",
+      "name": "Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep').first().json.groqBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fa13942a-7308-4cb1-97a5-0ced7508f0d0",
+      "name": "Parse Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar t = '';\ntry { t = src.choices[0].message.content || ''; } catch (e) { t = ''; }\nreturn [{ json: { text_groq: String(t).trim() } }];"
+      }
+    },
+    {
+      "id": "d60edd4b-923f-4e05-a6b4-4036da065837",
+      "name": "OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep').first().json.orBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "17ca1c12-8a01-49eb-9afc-c11375e728b2",
+      "name": "Parse OpenRouter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar t = '';\ntry { t = src.choices[0].message.content || ''; } catch (e) { t = ''; }\nreturn [{ json: { text_or: String(t).trim() } }];"
+      }
+    },
+    {
+      "id": "d1ebc488-4f9b-4e2b-b3af-1b256ac4befe",
+      "name": "Z.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($('Prep').first().json.zaiBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Ff0G1ve73IkZFnLh",
+          "name": "Bearer Auth account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "92182ac5-b429-48f6-9e91-4cb907166a43",
+      "name": "Parse Z.ai",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var src = $input.first().json || {};\nvar t = '';\ntry { t = src.choices[0].message.content || ''; } catch (e) { t = ''; }\nreturn [{ json: { text_zai: String(t).trim() } }];"
+      }
+    },
+    {
+      "id": "5fa9b83b-21ba-4ebd-bc74-e5e4d8ed34a7",
+      "name": "Pick Best",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var groq = '';\ntry { groq = $('Parse Groq').first().json.text_groq || ''; } catch (e) {}\nvar orr = '';\ntry { orr = $('Parse OpenRouter').first().json.text_or || ''; } catch (e) {}\nvar zai = '';\ntry { zai = $('Parse Z.ai').first().json.text_zai || ''; } catch (e) {}\nfunction valid(s){ s = String(s || '').trim(); return s.length >= 1 ? s : ''; }\nvar cands = [ { t: valid(groq), a: 'groq' }, { t: valid(orr), a: 'openrouter' }, { t: valid(zai), a: 'zai' } ];\nvar best = ''; var provider = 'none';\nfor (var i = 0; i < cands.length; i++) { if (cands[i].t) { best = cands[i].t; provider = cands[i].a; break; } }\nvar ok = !!best;\nreturn [{ json: { text: best, provider: provider, ok: ok } }];"
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep": {
+      "main": [
+        [
+          {
+            "node": "Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq": {
+      "main": [
+        [
+          {
+            "node": "Parse Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Groq": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Parse OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Parse Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Pick Best",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

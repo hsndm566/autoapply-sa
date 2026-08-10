@@ -1,0 +1,1188 @@
+{
+  "name": "AI Provider Hub",
+  "nodes": [
+    {
+      "id": "dc3ea180-6da1-441d-be0e-1429bf228017",
+      "name": "Hub Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        752
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-provider-hub",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "a3b0e56d-12bc-47f9-84ec-00e2b20960b2"
+    },
+    {
+      "id": "3c2ce858-784c-4a27-9b29-cf1180377987",
+      "name": "Parse & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        752
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var root = $input.first().json || {};\nvar req = root.body || {};\nvar messages = Array.isArray(req.messages) ? req.messages : [];\nvar task_type = String(req.task_type || 'general');\nvar validTasks = ['cv_tailor','script_gen','website_gen','translate','general'];\nif (validTasks.indexOf(task_type) === -1) task_type = 'general';\nvar priority = (req.priority === 'high') ? 'high' : 'normal';\nvar max_tokens = parseInt(req.max_tokens, 10);\nif (!max_tokens || isNaN(max_tokens)) max_tokens = 1500;\nvar valid = messages.length > 0;\nfor (var i = 0; i < messages.length; i++) { if (!messages[i] || messages[i].content === undefined || messages[i].content === null || String(messages[i].content).length === 0) { valid = false; break; } }\nvar plan;\nif (task_type === 'cv_tailor' || priority === 'high') plan = ['cerebras','groq','openrouter','siliconflow','zai'];\nelse if (task_type === 'website_gen') plan = ['openrouter','groq','siliconflow','zai'];\nelse if (task_type === 'script_gen' || task_type === 'translate') plan = ['groq','openrouter','siliconflow','zai'];\nelse plan = ['groq','openrouter','siliconflow','cerebras','zai'];\nvar models = { cerebras: 'gpt-oss-120b', groq: 'llama-3.3-70b-versatile', openrouter: 'deepseek/deepseek-r1:free', siliconflow: 'Qwen/Qwen3-8B', zai: 'glm-4.5-flash' };\nvar summary = task_type + ' | prio=' + priority + ' | msgs=' + messages.length + ' | max=' + max_tokens;\nreturn [{ json: { valid: valid, task_type: task_type, priority: priority, max_tokens: max_tokens, messages: messages, plan: plan, plan_csv: plan.join(\",\"), models: models, request_summary: summary, invalid_reason: valid ? \"\" : \"messages missing or empty\" } }];"
+      }
+    },
+    {
+      "id": "a062d429-6646-4b33-823f-327418cdd9d6",
+      "name": "Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        752
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "4b710534-1996-4a36-885c-04232ced579b",
+      "name": "Expand Providers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        656
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var p = $input.first().json || {};\nvar out = [];\nfor (var i = 0; i < p.plan.length; i++) {\n  var prov = p.plan[i];\n  out.push({ json: { provider: prov, model: p.models[prov], task_type: p.task_type, priority: p.priority, max_tokens: p.max_tokens, messages: p.messages, plan_csv: p.plan_csv, request_summary: p.request_summary, order_index: i } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "e2593fb7-c8bc-47f8-8af7-e13002cfa4e1",
+      "name": "All Failed Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        128
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var pv = $('Parse & Validate').first().json || {};\nvar sd = $getWorkflowStaticData('global');\nvar last = sd['last_error'] || 'all providers failed or unavailable';\nreturn [{ json: { success: false, provider: 'none', model: 'none', task_type: pv.task_type || 'general', content: 'All AI providers are currently unavailable. Please try again later.', prompt_tokens: 0, completion_tokens: 0, plan_csv: pv.plan_csv || '', request_summary: pv.request_summary || '', last_error: last } }];"
+      }
+    },
+    {
+      "id": "720ef3f6-eaf2-47af-9c07-e19b05c58e71",
+      "name": "Log Provider Error",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        128
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2FTvApTPXPCPA95N"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurred_at": "={{ $now.toISO() }}",
+            "task_type": "={{ $json.task_type }}",
+            "providers_tried": "={{ $json.plan_csv }}",
+            "last_error": "={{ $json.last_error }}",
+            "request_summary": "={{ $json.request_summary }}"
+          },
+          "schema": [
+            {
+              "id": "occurred_at",
+              "displayName": "occurred_at",
+              "type": "date",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "providers_tried",
+              "displayName": "providers_tried",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_error",
+              "displayName": "last_error",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_summary",
+              "displayName": "request_summary",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "28316c79-1243-4252-a029-870e6bfc2f13",
+      "name": "Respond Failed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1568,
+        128
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"provider\": \"none\", \"content\": $(\"All Failed Fallback\").first().json.content, \"task_type\": $(\"All Failed Fallback\").first().json.task_type, \"last_error\": $(\"All Failed Fallback\").first().json.last_error } }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "70a4d966-cd0f-4934-b0be-3d68e010ab2f",
+      "name": "Preflight",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        512
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var item = $input.first().json || {};\nvar provider = item.provider;\nvar sd = $getWorkflowStaticData('global');\nvar now = Date.now();\nvar today = new Date().toISOString().slice(0, 10);\nvar available = true; var skip = '';\n// OpenRouter free allowlist (NOTE: OpenRouter :free list churns — review periodically)\nvar OPENROUTER_FREE = ['deepseek/deepseek-r1:free','google/gemma-3-27b-it:free','meta-llama/llama-4-maverick:free','qwen/qwen2.5-vl-7b-instruct:free'];\nvar SILICONFLOW_ALLOW = ['Qwen/Qwen3-8B','deepseek-ai/DeepSeek-R1-Distill-Qwen-7B','deepseek-ai/DeepSeek-OCR'];\nvar model = item.model;\nif (provider === 'openrouter') {\n  if (OPENROUTER_FREE.indexOf(model) === -1) model = OPENROUTER_FREE[0];\n  if (String(model).indexOf(':free') === -1) { available = false; skip = 'model not free'; }\n  if (!sd.openrouter || sd.openrouter.date !== today) sd.openrouter = { date: today, count: 0 };\n  if (sd.openrouter.count >= 200) { available = false; skip = 'openrouter daily 200 reached'; }\n}\nif (provider === 'siliconflow') { if (SILICONFLOW_ALLOW.indexOf(model) === -1) model = SILICONFLOW_ALLOW[0]; }\nvar est = Math.ceil((JSON.stringify(item.messages || []).length) / 4) + (item.max_tokens || 0);\nif (provider === 'cerebras') {\n  if (!sd.cerebras || sd.cerebras.date !== today) sd.cerebras = { date: today, tokens: 0, ts: [] };\n  var kept = []; for (var t = 0; t < sd.cerebras.ts.length; t++) { if (now - sd.cerebras.ts[t] < 60000) kept.push(sd.cerebras.ts[t]); }\n  sd.cerebras.ts = kept;\n  if (sd.cerebras.ts.length >= 5) { available = false; skip = 'cerebras 5/min rate limit'; }\n  else if (sd.cerebras.tokens + est > 900000) { available = false; skip = 'cerebras 900k daily token budget'; }\n}\nvar request_body = { model: model, messages: item.messages, max_tokens: item.max_tokens, temperature: 0.6 };\nif (available) {\n  if (provider === 'openrouter') sd.openrouter.count = (sd.openrouter.count || 0) + 1;\n  if (provider === 'cerebras') sd.cerebras.ts.push(now);\n}\nvar o = Object.assign({}, item, { model: model, request_body: request_body, _available: available, _skip_reason: skip });\nreturn [{ json: o }];"
+      }
+    },
+    {
+      "id": "28207f80-801d-41a0-a0f1-594455ba119c",
+      "name": "Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        512
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "avail",
+              "leftValue": "={{ $json._available }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "3c19c35b-a16d-48a1-937f-8d031a021f6e",
+      "name": "Route Provider",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1568,
+        320
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "renameOutput": true,
+              "outputKey": "cerebras",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "cerebras",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "groq",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "groq",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "openrouter",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "openrouter",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "siliconflow",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "siliconflow",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "zai",
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.provider }}",
+                    "rightValue": "zai",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "b2bb1e78-697d-439d-a619-dedf17672738",
+      "name": "Log Skip",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        720
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VQmCEJ6AnSP1fmDY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "log_timestamp": "={{ $now.toISO() }}",
+            "provider": "={{ $json.provider }}",
+            "model": "={{ $json.model }}",
+            "task_type": "={{ $json.task_type }}",
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "success": false
+          },
+          "schema": [
+            {
+              "id": "log_timestamp",
+              "displayName": "log_timestamp",
+              "type": "date",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "provider",
+              "displayName": "provider",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prompt_tokens",
+              "displayName": "prompt_tokens",
+              "type": "number",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "completion_tokens",
+              "displayName": "completion_tokens",
+              "type": "number",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "success",
+              "displayName": "success",
+              "type": "boolean",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5895ec6a-e65b-4027-8e8c-c719b33aeee6",
+      "name": "Loop Providers",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        896,
+        656
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "1e35bb6a-38b0-467a-b759-1a636956bd6a",
+      "name": "Log Invalid Error",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        848
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "2FTvApTPXPCPA95N"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "occurred_at": "={{ $now.toISO() }}",
+            "task_type": "={{ $json.task_type }}",
+            "providers_tried": "",
+            "last_error": "={{ $json.invalid_reason }}",
+            "request_summary": "={{ $json.request_summary }}"
+          },
+          "schema": [
+            {
+              "id": "occurred_at",
+              "displayName": "occurred_at",
+              "type": "date",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "providers_tried",
+              "displayName": "providers_tried",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_error",
+              "displayName": "last_error",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "request_summary",
+              "displayName": "request_summary",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "449b8d61-1ab1-4ce0-a7a7-3e777cecb05d",
+      "name": "Respond Invalid",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        848
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": $(\"Parse & Validate\").first().json.invalid_reason } }}",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "522a0c85-e16c-4ef8-b1e7-d9feeb209464",
+      "name": "Cerebras",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth"
+      },
+      "credentials": {},
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "66e86140-f9ca-4445-b634-f0578a401c0a",
+      "name": "Parse Attempt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2016,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var resp = $input.first().json || {};\nvar ctx = $('Preflight').first().json || {};\nvar statusCode = resp.statusCode;\nvar bodyR = resp.body;\nif (bodyR === undefined && resp.choices) { bodyR = resp; }\nvar success = false; var content = ''; var pt = 0; var ct = 0; var errmsg = '';\nif (resp.error) { errmsg = String(resp.error).slice(0, 500); }\nif (typeof statusCode === 'number') { if (statusCode >= 200 && statusCode < 300) success = true; else errmsg = 'HTTP ' + statusCode; }\nelse if (bodyR && bodyR.choices) { success = true; }\ntry { if (bodyR && bodyR.choices && bodyR.choices[0] && bodyR.choices[0].message) content = bodyR.choices[0].message.content || \"\"; } catch (e) {}\ntry { if (bodyR && bodyR.usage) { pt = bodyR.usage.prompt_tokens || 0; ct = bodyR.usage.completion_tokens || 0; } } catch (e) {}\nif (success && (!content || String(content).length === 0)) { success = false; errmsg = errmsg || 'empty content'; }\nvar sd = $getWorkflowStaticData('global');\nif (ctx.provider === 'cerebras' && sd.cerebras) { sd.cerebras.tokens = (sd.cerebras.tokens || 0) + ((pt + ct) || 0); }\nif (!success) { sd['last_error'] = (ctx.provider + ': ' + (errmsg || 'failed')).slice(0, 500); }\nreturn [{ json: { provider: ctx.provider, model: ctx.model, task_type: ctx.task_type, priority: ctx.priority, request_summary: ctx.request_summary, plan_csv: ctx.plan_csv, success: success, content: content, prompt_tokens: pt, completion_tokens: ct, error: errmsg } }];"
+      }
+    },
+    {
+      "id": "ddb9beb7-10de-49a6-8975-b3a0ffed018e",
+      "name": "Groq",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi"
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "cb1f74c0-b619-407f-8e93-954536ffdbf1",
+      "name": "OpenRouter",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi"
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "54f4a4ed-de78-4499-ae3d-90304a9c0e5d",
+      "name": "SiliconFlow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        576
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.siliconflow.cn/v1/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth"
+      },
+      "credentials": {},
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fb8b283c-71b3-4650-8666-de2ae5fca0dd",
+      "name": "Z.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        768
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.request_body) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth"
+      },
+      "credentials": {},
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "2f76ab4e-81b8-4fc9-bada-ff1c69f08a0a",
+      "name": "Log Attempt",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        368
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "VQmCEJ6AnSP1fmDY"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "log_timestamp": "={{ $now.toISO() }}",
+            "provider": "={{ $json.provider }}",
+            "model": "={{ $json.model }}",
+            "task_type": "={{ $json.task_type }}",
+            "prompt_tokens": "={{ $json.prompt_tokens }}",
+            "completion_tokens": "={{ $json.completion_tokens }}",
+            "success": "={{ $json.success }}"
+          },
+          "schema": [
+            {
+              "id": "log_timestamp",
+              "displayName": "log_timestamp",
+              "type": "date",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "provider",
+              "displayName": "provider",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "model",
+              "displayName": "model",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "task_type",
+              "displayName": "task_type",
+              "type": "string",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "prompt_tokens",
+              "displayName": "prompt_tokens",
+              "type": "number",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "completion_tokens",
+              "displayName": "completion_tokens",
+              "type": "number",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "success",
+              "displayName": "success",
+              "type": "boolean",
+              "display": true,
+              "required": false,
+              "defaultMatch": false,
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "d8529dae-af1e-47a4-9110-318c9677207a",
+      "name": "Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2464,
+        720
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $(\"Parse Attempt\").first().json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "0e7450f9-f544-4e79-b538-c96593d2da05",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2688,
+        720
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"provider\": $(\"Parse Attempt\").first().json.provider, \"model\": $(\"Parse Attempt\").first().json.model, \"task_type\": $(\"Parse Attempt\").first().json.task_type, \"content\": $(\"Parse Attempt\").first().json.content, \"prompt_tokens\": $(\"Parse Attempt\").first().json.prompt_tokens, \"completion_tokens\": $(\"Parse Attempt\").first().json.completion_tokens, \"success\": true } }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Hub Webhook": {
+      "main": [
+        [
+          {
+            "node": "Parse & Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Validate": {
+      "main": [
+        [
+          {
+            "node": "Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid?": {
+      "main": [
+        [
+          {
+            "node": "Expand Providers",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Invalid Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Providers": {
+      "main": [
+        [
+          {
+            "node": "Loop Providers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "All Failed Fallback": {
+      "main": [
+        [
+          {
+            "node": "Log Provider Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Provider Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preflight": {
+      "main": [
+        [
+          {
+            "node": "Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Available?": {
+      "main": [
+        [
+          {
+            "node": "Route Provider",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Provider": {
+      "main": [
+        [
+          {
+            "node": "Cerebras",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Groq",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SiliconFlow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Skip": {
+      "main": [
+        [
+          {
+            "node": "Loop Providers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Providers": {
+      "main": [
+        [
+          {
+            "node": "All Failed Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preflight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Invalid Error": {
+      "main": [
+        [
+          {
+            "node": "Respond Invalid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cerebras": {
+      "main": [
+        [
+          {
+            "node": "Parse Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Attempt": {
+      "main": [
+        [
+          {
+            "node": "Log Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq": {
+      "main": [
+        [
+          {
+            "node": "Parse Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Parse Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SiliconFlow": {
+      "main": [
+        [
+          {
+            "node": "Parse Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Parse Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Attempt": {
+      "main": [
+        [
+          {
+            "node": "Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success?": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Providers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": {
+    "global": {
+      "openrouter": {
+        "date": "2026-07-25",
+        "count": 2
+      },
+      "last_error": "zai: HTTP 500"
+    }
+  },
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

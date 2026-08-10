@@ -1,0 +1,746 @@
+{
+  "name": "Finish Claude Opus drafts with my AI agents (one-time)",
+  "nodes": [
+    {
+      "id": "3b8f7a72-374a-4788-9b92-9bf8b7a8af70",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        272
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "9ff41c70-70e9-48f6-b753-55da37740191",
+      "name": "Build File List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        272
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst owner = 'hsndm566';\nconst repo = 'hsndm.tech';\nconst branch = 'main';\n// Each file seeded from the ACTUAL Claude/Opus draft commit (design to finish)\n// plus the current working file on main (functionality to preserve).\nconst files = [\n  { filePath: 'index.html',     claudeSha: '8d22d8b' },\n  { filePath: 'dashboard.html', claudeSha: '9f17a4c' },\n  { filePath: 'cv.html',        claudeSha: '1e1382b' },\n];\nreturn files.map(f => ({ json: { owner, repo, branch, filePath: f.filePath, claudeSha: f.claudeSha } }));\n"
+      }
+    },
+    {
+      "id": "8b165050-2db1-43bd-8025-068a2b9a8451",
+      "name": "All Files Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "62fa6ab5-914b-49bb-9049-08ad107eca66",
+      "name": "Fetch Claude Draft",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://raw.githubusercontent.com/{{ $json.owner }}/{{ $json.repo }}/{{ $json.claudeSha }}/{{ $json.filePath }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      }
+    },
+    {
+      "id": "75e2a840-810f-40ef-a6b1-8c8955bb7669",
+      "name": "Fetch Working File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $(\"Loop Over Files\").item.json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $(\"Loop Over Files\").item.json.repo }}"
+        },
+        "filePath": "={{ $(\"Loop Over Files\").item.json.filePath }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "={{ $(\"Loop Over Files\").item.json.branch }}"
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "d03e88ea-3858-44ad-ade5-483ff64db8bc"
+    },
+    {
+      "id": "33c100c4-7aa4-44a6-9eb2-3f2c5dab8114",
+      "name": "Assemble Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst meta = $('Loop Over Files').first().json;\n\n// Claude's draft (text response body).\nconst draftResp = $('Fetch Claude Draft').item.json;\nlet claudeDraft = draftResp.data;\nif (typeof claudeDraft !== 'string') { claudeDraft = (draftResp.body || draftResp.text || '') + ''; }\n\n// Working file (base64 from GitHub).\nconst wResp = $('Fetch Working File').item.json;\nconst raw = wResp.content || '';\nlet working;\nif ((wResp.encoding || 'base64') === 'base64') { try { working = Buffer.from(raw, 'base64').toString('utf8'); } catch (e) { working = raw; } }\nelse { working = raw; }\n\n// Tokens the finished file MUST still contain (extracted from the WORKING file).\nconst preserve = [];\nconst urls = working.match(/https?:\\/\\/[^\\s\"'<>]+/g) || [];\nfor (const u of urls) { if (u.indexOf('app.n8n.cloud/webhook') !== -1 && preserve.indexOf(u) === -1) preserve.push(u); }\nconst sid = working.match(/SHEET_ID\\s*=\\s*[\"']([^\"']+)[\"']/);\nif (sid) preserve.push(sid[1]);\n\nconst systemPrompt = [\n  'You are a world-class front-end engineer completing an unfinished web page. You are given TWO inputs:',\n  '1) DRAFT: an incomplete / truncated HTML file that defines the INTENDED visual design (premium dark glassmorphism, accent color #2563eb, frosted translucent cards with backdrop-filter blur, gradients, soft shadows, strong hierarchy, mobile responsive). This is the creative direction you must adopt and FINISH.',\n  '2) WORKING: the current complete, fully-functional version of the same page.',\n  '',\n  'Your task: produce ONE complete, valid HTML file that adopts the DRAFT visual design and finishes it properly (complete every truncated section, close every tag), while preserving EVERY piece of functionality from WORKING.',\n  'You MUST keep working and verbatim: all <script> logic, the Google Sheets SHEET_ID and the gviz fetch, any Chart.js charts, all form field name and id attributes, all webhook and API endpoint URLs, the Julie chatbot, and the Google Translate widget.',\n  'Do NOT drop any feature that exists in WORKING. Do NOT change any element id or name attribute referenced by scripts, and do NOT change any endpoint URL or SHEET_ID value.',\n  'Output ONLY the complete HTML file, starting with <!DOCTYPE html> and ending with </html>. No markdown fences, no preamble, no commentary.',\n].join('\\n');\n\nconst userContent = '=== DRAFT (Claude/Opus design direction to FINISH) ===\\n' + claudeDraft + '\\n\\n=== WORKING (functionality to PRESERVE) ===\\n' + working;\n\nreturn [{ json: {\n  owner: meta.owner, repo: meta.repo, branch: meta.branch, filePath: meta.filePath,\n  systemPrompt, userContent, preserve, workingLen: working.length, draftLen: (claudeDraft || '').length,\n} }];\n"
+      }
+    },
+    {
+      "id": "44a82373-d264-4157-b671-0a93860c7472",
+      "name": "ZAI Finish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openRouterApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"z-ai/glm-4.6\", temperature: 0.3, max_tokens: 60000, messages: [ { role: \"system\", content: $(\"Assemble Prompt\").item.json.systemPrompt }, { role: \"user\", content: $(\"Assemble Prompt\").item.json.userContent } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "credentials": {
+        "openRouterApi": {
+          "id": "iKWLFz8p7yDAWQtI",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "id": "4505a21b-516f-413d-a98e-5af0219e9452",
+      "name": "Validate ZAI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Assemble Prompt').item.json;\nconst resp = $input.first().json;\nlet content = '';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch (e) { content = ''; }\ncontent = (content || '').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060') === 0) { content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nconst di2 = di === -1 ? 0 : di;\nif (hi !== -1) content = content.substring(di2, hi + 7).trim();\nconst startsOk = content.indexOf('<!DOCTYPE html>') === 0;\nconst endsOk = content.slice(-7) === '</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (content.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (content.match(/<\\/script>/gi) || []).length;\nconst preserve = d.preserve || [];\nconst missing = [];\nfor (const t of preserve) { if (content.indexOf(t) === -1) missing.push(t); }\nconst themeOk = content.indexOf('#2563eb') !== -1 && /backdrop-filter/i.test(content);\nconst lenOk = content.length >= Math.floor((d.workingLen || 0) * 0.5);\nconst structOk = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst isValid = structOk && missing.length === 0 && themeOk && lenOk;\nconst reason = 'ZAI start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' theme=' + themeOk + ' lenOk=' + lenOk + ' missing=' + missing.length + ' len=' + content.length;\nreturn [{ json: { owner: d.owner, repo: d.repo, branch: d.branch, filePath: d.filePath, finalHtml: content, isValid, reason, provider: 'ZAI' } }];\n"
+      }
+    },
+    {
+      "id": "111e6020-65a4-4b9c-82da-718988eca5fb",
+      "name": "ZAI Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "z",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "14d1ae35-e6be-4aba-96ad-676a0316cd11",
+      "name": "Push (ZAI)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        96
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Finish Claude Opus draft for {{ $json.filePath }} — completed by {{ $json.provider }}, functionality preserved",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "85e20063-e63b-4a20-a5b4-6de296353177"
+    },
+    {
+      "id": "326aa09f-28be-47b9-b092-63956536a1e4",
+      "name": "Loop Over Files",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        448,
+        272
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "ea9ff0d7-9310-4ec6-a156-e9da5d9c693b",
+      "name": "NVIDIA Finish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2016,
+        288
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"qwen/qwen2.5-coder-32b-instruct\", temperature: 0.3, max_tokens: 16000, messages: [ { role: \"system\", content: $(\"Assemble Prompt\").item.json.systemPrompt }, { role: \"user\", content: $(\"Assemble Prompt\").item.json.userContent } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      }
+    },
+    {
+      "id": "644b8f62-4122-4de8-9d30-a6de1f49596e",
+      "name": "Validate NVIDIA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        288
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Assemble Prompt').item.json;\nconst resp = $input.first().json;\nlet content = '';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch (e) { content = ''; }\ncontent = (content || '').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060') === 0) { content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nconst di2 = di === -1 ? 0 : di;\nif (hi !== -1) content = content.substring(di2, hi + 7).trim();\nconst startsOk = content.indexOf('<!DOCTYPE html>') === 0;\nconst endsOk = content.slice(-7) === '</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (content.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (content.match(/<\\/script>/gi) || []).length;\nconst preserve = d.preserve || [];\nconst missing = [];\nfor (const t of preserve) { if (content.indexOf(t) === -1) missing.push(t); }\nconst themeOk = content.indexOf('#2563eb') !== -1 && /backdrop-filter/i.test(content);\nconst lenOk = content.length >= Math.floor((d.workingLen || 0) * 0.5);\nconst structOk = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst isValid = structOk && missing.length === 0 && themeOk && lenOk;\nconst reason = 'NVIDIA start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' theme=' + themeOk + ' lenOk=' + lenOk + ' missing=' + missing.length + ' len=' + content.length;\nreturn [{ json: { owner: d.owner, repo: d.repo, branch: d.branch, filePath: d.filePath, finalHtml: content, isValid, reason, provider: 'NVIDIA' } }];\n"
+      }
+    },
+    {
+      "id": "5e76f30e-3826-4509-9d72-66bdc33da806",
+      "name": "NVIDIA Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2464,
+        288
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "n",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "7ff5e481-3a64-4b27-b02a-1929d389b419",
+      "name": "Push (NVIDIA)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        192
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Finish Claude Opus draft for {{ $json.filePath }} — completed by {{ $json.provider }}, functionality preserved",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "9626cb86-8642-4598-91d0-850b56663779"
+    },
+    {
+      "id": "0a0e3e66-a941-481f-aecf-8650498209f2",
+      "name": "Groq Finish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2688,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "groqApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"llama-3.3-70b-versatile\", temperature: 0.3, max_tokens: 32000, messages: [ { role: \"system\", content: $(\"Assemble Prompt\").item.json.systemPrompt }, { role: \"user\", content: $(\"Assemble Prompt\").item.json.userContent } ] }) }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "id": "b863e0dc-3d51-43d7-b926-0ee1ebfcf5c6",
+      "name": "Validate Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst d = $('Assemble Prompt').item.json;\nconst resp = $input.first().json;\nlet content = '';\ntry { content = (resp && resp.choices && resp.choices[0] && resp.choices[0].message && resp.choices[0].message.content) || ''; } catch (e) { content = ''; }\ncontent = (content || '').trim();\nif (content.indexOf('\\u0060\\u0060\\u0060') === 0) { content = content.replace(/^\\u0060\\u0060\\u0060[a-zA-Z]*\\n?/, '').replace(/\\u0060\\u0060\\u0060\\s*$/, '').trim(); }\nconst di = content.indexOf('<!DOCTYPE html>');\nconst hi = content.lastIndexOf('</html>');\nconst di2 = di === -1 ? 0 : di;\nif (hi !== -1) content = content.substring(di2, hi + 7).trim();\nconst startsOk = content.indexOf('<!DOCTYPE html>') === 0;\nconst endsOk = content.slice(-7) === '</html>';\nconst bodyOpen = (content.match(/<body[\\s>]/gi) || []).length;\nconst bodyClose = (content.match(/<\\/body>/gi) || []).length;\nconst scriptOpen = (content.match(/<script[\\s>]/gi) || []).length;\nconst scriptClose = (content.match(/<\\/script>/gi) || []).length;\nconst preserve = d.preserve || [];\nconst missing = [];\nfor (const t of preserve) { if (content.indexOf(t) === -1) missing.push(t); }\nconst themeOk = content.indexOf('#2563eb') !== -1 && /backdrop-filter/i.test(content);\nconst lenOk = content.length >= Math.floor((d.workingLen || 0) * 0.5);\nconst structOk = startsOk && endsOk && bodyOpen >= 1 && bodyOpen === bodyClose && scriptOpen >= 1 && scriptOpen === scriptClose;\nconst isValid = structOk && missing.length === 0 && themeOk && lenOk;\nconst reason = 'GROQ start=' + startsOk + ' end=' + endsOk + ' body=' + bodyOpen + '/' + bodyClose + ' script=' + scriptOpen + '/' + scriptClose + ' theme=' + themeOk + ' lenOk=' + lenOk + ' missing=' + missing.length + ' len=' + content.length;\nreturn [{ json: { owner: d.owner, repo: d.repo, branch: d.branch, filePath: d.filePath, finalHtml: content, isValid, reason, provider: 'GROQ' } }];\n"
+      }
+    },
+    {
+      "id": "f1bdcb8d-1ff0-4893-bd1f-8ab6a6d4cff5",
+      "name": "Groq Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3136,
+        384
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "g",
+              "leftValue": "={{ $json.isValid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "3993becc-6a2d-46cd-b117-ae5abb9a3b89",
+      "name": "Push (Groq)",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        3360,
+        464
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $json.repo }}"
+        },
+        "filePath": "={{ $json.filePath }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.finalHtml }}",
+        "commitMessage": "=Finish Claude Opus draft for {{ $json.filePath }} — completed by {{ $json.provider }}, functionality preserved",
+        "additionalParameters": {
+          "branch": {
+            "branch": "={{ $json.branch }}"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "2b5f5ec5-a948-452c-b7f7-ed6cba96860f"
+    },
+    {
+      "id": "ea6c808f-5e45-42a7-a5ae-442366475eef",
+      "name": "Stop - All Providers Failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        3360,
+        656
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "=All AI providers failed validation for {{ $json.filePath }} ({{ $json.reason }}). Halted before pushing."
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Build File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build File List": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Claude Draft": {
+      "main": [
+        [
+          {
+            "node": "Fetch Working File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Working File": {
+      "main": [
+        [
+          {
+            "node": "Assemble Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Prompt": {
+      "main": [
+        [
+          {
+            "node": "ZAI Finish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZAI Finish": {
+      "main": [
+        [
+          {
+            "node": "Validate ZAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate ZAI": {
+      "main": [
+        [
+          {
+            "node": "ZAI Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ZAI Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (ZAI)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NVIDIA Finish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (ZAI)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Files": {
+      "main": [
+        [
+          {
+            "node": "All Files Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Claude Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA Finish": {
+      "main": [
+        [
+          {
+            "node": "Validate NVIDIA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate NVIDIA": {
+      "main": [
+        [
+          {
+            "node": "NVIDIA Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (NVIDIA)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Groq Finish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (NVIDIA)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Finish": {
+      "main": [
+        [
+          {
+            "node": "Validate Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Groq": {
+      "main": [
+        [
+          {
+            "node": "Groq Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Valid?": {
+      "main": [
+        [
+          {
+            "node": "Push (Groq)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop - All Providers Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push (Groq)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

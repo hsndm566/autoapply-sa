@@ -1,0 +1,179 @@
+{
+  "name": "Deploy Julie Chatbot",
+  "nodes": [
+    {
+      "id": "f6304403-0c2d-4539-8618-0e1e224d2cff",
+      "name": "Deploy Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deploy-julie",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "64a082de-8c1d-4101-a414-d6c088a96a91"
+    },
+    {
+      "id": "b6fd9b7b-26e7-4e05-8f6e-3417730006ec",
+      "name": "GitHub - Get File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm.tech"
+        },
+        "filePath": "index.html",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "main"
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "a7e5d700-2929-4608-b7a1-11902fcd8aef"
+    },
+    {
+      "id": "f35a7152-c74c-4663-986c-3e916f931ffa",
+      "name": "Insert Julie snippet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Julie chatbot snippet (base64) — inserted verbatim before </body>.\nconst SNIPPET_B64 = 'PCEtLSBKdWxpZSBDaGF0Ym90IC0tPgo8c3R5bGU+CiAgI2pvdWxpZS1idWJibGUgewogICAgcG9zaXRpb246IGZpeGVkOyBib3R0b206IDIwcHg7IHJpZ2h0OiAyMHB4OyB6LWluZGV4OiAxMDAwOwogICAgd2lkdGg6IDYwcHg7IGhlaWdodDogNjBweDsgYm9yZGVyLXJhZGl1czogNTAlOwogICAgYmFja2dyb3VuZDogdmFyKC0tYWNjZW50KTsgYm9yZGVyOiBub25lOyBjdXJzb3I6IHBvaW50ZXI7CiAgICBib3gtc2hhZG93OiAwIDRweCAxNXB4IHJnYmEoMzcsOTksMjM1LDAuNSk7CiAgICBkaXNwbGF5OiBmbGV4OyBhbGlnbi1pdGVtczogY2VudGVyOyBqdXN0aWZ5LWNvbnRlbnQ6IGNlbnRlcjsKICAgIHRyYW5zaXRpb246IHRyYW5zZm9ybSAwLjNzIGVhc2U7CiAgfQogICNqb3VsaWUtYnViYmxlOmhvdmVyIHsgdHJhbnNmb3JtOiBzY2FsZSgxLjEpOyB9CiAgI2pvdWxpZS1idWJibGUgaW1nIHsKICAgIHdpZHRoOiA1NHB4OyBoZWlnaHQ6IDU0cHg7IGJvcmRlci1yYWRpdXM6IDUwJTsgb2JqZWN0LWZpdDogY292ZXI7CiAgfQogICNqb3VsaWUtY2hhdCB7CiAgICBwb3NpdGlvbjogZml4ZWQ7IGJvdHRvbTogOTBweDsgcmlnaHQ6IDIwcHg7IHotaW5kZXg6IDk5OTsKICAgIHdpZHRoOiAzMjBweDsgbWF4LWhlaWdodDogNDUwcHg7CiAgICBiYWNrZ3JvdW5kOiB2YXIoLS1iZy1lbGV2YXRlZCk7IGJvcmRlcjogMXB4IHNvbGlkIHZhcigtLWJvcmRlcik7CiAgICBib3JkZXItcmFkaXVzOiAxNnB4OyBib3gtc2hhZG93OiB2YXIoLS1zaGFkb3cpOwogICAgZGlzcGxheTogbm9uZTsgZmxleC1kaXJlY3Rpb246IGNvbHVtbjsgb3ZlcmZsb3c6IGhpZGRlbjsKICB9CiAgI2pvdWxpZS1jaGF0Lm9wZW4geyBkaXNwbGF5OiBmbGV4OyB9CiAgI2pvdWxpZS1oZWFkZXIgewogICAgYmFja2dyb3VuZDogdmFyKC0tYWNjZW50KTsgcGFkZGluZzogMTBweCAxNXB4OyBjb2xvcjogd2hpdGU7CiAgICBkaXNwbGF5OiBmbGV4OyBhbGlnbi1pdGVtczogY2VudGVyOyBnYXA6IDEwcHg7CiAgfQogICNqb3VsaWUtaGVhZGVyIGltZyB7CiAgICB3aWR0aDogMzZweDsgaGVpZ2h0OiAzNnB4OyBib3JkZXItcmFkaXVzOiA1MCU7IG9iamVjdC1maXQ6IGNvdmVyOwogIH0KICAjam91bGllLWhlYWRlciBzcGFuIHsgZm9udC13ZWlnaHQ6IDYwMDsgfQogICNqb3VsaWUtbWVzc2FnZXMgewogICAgZmxleDogMTsgcGFkZGluZzogMTBweDsgb3ZlcmZsb3cteTogYXV0bzsgbWF4LWhlaWdodDogMzAwcHg7CiAgICBkaXNwbGF5OiBmbGV4OyBmbGV4LWRpcmVjdGlvbjogY29sdW1uOyBnYXA6IDhweDsKICB9CiAgLm1zZyB7CiAgICBtYXgtd2lkdGg6IDgwJTsgcGFkZGluZzogOHB4IDEycHg7IGJvcmRlci1yYWRpdXM6IDE0cHg7CiAgICBmb250LXNpemU6IDAuOXJlbTsgbGluZS1oZWlnaHQ6IDEuNDsKICB9CiAgLm1zZy51c2VyIHsgYWxpZ24tc2VsZjogZmxleC1lbmQ7IGJhY2tncm91bmQ6IHZhcigtLWFjY2VudCk7IGNvbG9yOiB3aGl0ZTsgfQogIC5tc2cuYm90IHsgYWxpZ24tc2VsZjogZmxleC1zdGFydDsgYmFja2dyb3VuZDogdmFyKC0tYmctZWxldmF0ZWQtMik7IGNvbG9yOiB2YXIoLS10ZXh0KTsgfQogICNqb3VsaWUtaW5wdXQtYXJlYSB7CiAgICBkaXNwbGF5OiBmbGV4OyBib3JkZXItdG9wOiAxcHggc29saWQgdmFyKC0tYm9yZGVyKTsKICB9CiAgI2pvdWxpZS1pbnB1dCB7CiAgICBmbGV4OiAxOyBwYWRkaW5nOiAxMHB4OyBib3JkZXI6IG5vbmU7IGJhY2tncm91bmQ6IHZhcigtLWJnLWVsZXZhdGVkLTIpOwogICAgY29sb3I6IHZhcigtLXRleHQpOyBvdXRsaW5lOiBub25lOwogIH0KICAjam91bGllLXNlbmQgewogICAgYmFja2dyb3VuZDogdmFyKC0tYWNjZW50KTsgY29sb3I6IHdoaXRlOyBib3JkZXI6IG5vbmU7IHBhZGRpbmc6IDAgMTVweDsKICAgIGN1cnNvcjogcG9pbnRlcjsgZm9udC13ZWlnaHQ6IDYwMDsKICB9Cjwvc3R5bGU+Cgo8ZGl2IGlkPSJqb3VsaWUtYnViYmxlIiBvbmNsaWNrPSJ0b2dnbGVDaGF0KCkiPgogIDxpbWcgc3JjPSJodHRwczovL3Jhdy5naXRodWJ1c2VyY29udGVudC5jb20vaHNuZG01NjYvaHNuZG0udGVjaC9tYWluL2pvdWxpZS5wbmciIGFsdD0iSnVsaWUiPgo8L2Rpdj4KPGRpdiBpZD0iam91bGllLWNoYXQiPgogIDxkaXYgaWQ9ImpvdWxpZS1oZWFkZXIiPgogICAgPGltZyBzcmM9Imh0dHBzOi8vcmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbS9oc25kbTU2Ni9oc25kbS50ZWNoL21haW4vam91bGllLnBuZyIgYWx0PSJKdWxpZSI+CiAgICA8c3Bhbj5KdWxpZTwvc3Bhbj4KICA8L2Rpdj4KICA8ZGl2IGlkPSJqb3VsaWUtbWVzc2FnZXMiPjwvZGl2PgogIDxkaXYgaWQ9ImpvdWxpZS1pbnB1dC1hcmVhIj4KICAgIDxpbnB1dCB0eXBlPSJ0ZXh0IiBpZD0iam91bGllLWlucHV0IiBwbGFjZWhvbGRlcj0iQXNrIEp1bGllIGFueXRoaW5nLi4uIiBvbmtleXByZXNzPSJpZihldmVudC5rZXk9PT0nRW50ZXInKSBzZW5kTWVzc2FnZSgpIj4KICAgIDxidXR0b24gaWQ9ImpvdWxpZS1zZW5kIiBvbmNsaWNrPSJzZW5kTWVzc2FnZSgpIj5TZW5kPC9idXR0b24+CiAgPC9kaXY+CjwvZGl2PgoKPHNjcmlwdD4KICBmdW5jdGlvbiB0b2dnbGVDaGF0KCkgewogICAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2pvdWxpZS1jaGF0JykuY2xhc3NMaXN0LnRvZ2dsZSgnb3BlbicpOwogIH0KICBhc3luYyBmdW5jdGlvbiBzZW5kTWVzc2FnZSgpIHsKICAgIGNvbnN0IGlucHV0ID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2pvdWxpZS1pbnB1dCcpOwogICAgY29uc3QgbXNnID0gaW5wdXQudmFsdWUudHJpbSgpOwogICAgaWYgKCFtc2cpIHJldHVybjsKICAgIGFkZE1lc3NhZ2UobXNnLCAndXNlcicpOwogICAgaW5wdXQudmFsdWUgPSAnJzsKICAgIHRyeSB7CiAgICAgIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKCdodHRwczovL2hzbmRtNTY2LmFwcC5uOG4uY2xvdWQvd2ViaG9vay9qb3VsaWUtY2hhdCcsIHsKICAgICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgICBoZWFkZXJzOiB7ICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicgfSwKICAgICAgICBib2R5OiBKU09OLnN0cmluZ2lmeSh7IG1lc3NhZ2U6IG1zZyB9KQogICAgICB9KTsKICAgICAgY29uc3QgZGF0YSA9IGF3YWl0IHJlcy5qc29uKCk7CiAgICAgIGFkZE1lc3NhZ2UoZGF0YS5yZXBseSB8fCAiSSdtIGhlcmUhIEJ1dCBJIGRpZG4ndCB1bmRlcnN0YW5kIHRoYXQuIiwgJ2JvdCcpOwogICAgfSBjYXRjaChlKSB7CiAgICAgIGFkZE1lc3NhZ2UoIkp1bGllIGlzIHJlY2hhcmdpbmcuLi4gdHJ5IGFnYWluIGluIGEgbW9tZW50ISIsICdib3QnKTsKICAgIH0KICB9CiAgZnVuY3Rpb24gYWRkTWVzc2FnZSh0ZXh0LCBzZW5kZXIpIHsKICAgIGNvbnN0IGRpdiA9IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ2RpdicpOwogICAgZGl2LmNsYXNzTmFtZSA9ICdtc2cgJyArIHNlbmRlcjsKICAgIGRpdi50ZXh0Q29udGVudCA9IHRleHQ7CiAgICBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnam91bGllLW1lc3NhZ2VzJykuYXBwZW5kQ2hpbGQoZGl2KTsKICAgIGRpdi5zY3JvbGxJbnRvVmlldyh7IGJlaGF2aW9yOiAnc21vb3RoJyB9KTsKICB9Cjwvc2NyaXB0Pg==';\nconst snippet = Buffer.from(SNIPPET_B64, 'base64').toString('utf8');\n\nconst file = $('GitHub - Get File').first().json;\n\n// Decode current index.html (GitHub returns base64 content).\nlet html;\nif (file.content) {\n  html = Buffer.from(String(file.content), 'base64').toString('utf8');\n} else if (typeof file.data === 'string') {\n  html = file.data;\n} else {\n  throw new Error('Could not read index.html content from GitHub - Get File output.');\n}\n\n// Idempotent: do not insert twice.\nlet updated;\nif (html.includes('<!-- Julie Chatbot -->')) {\n  updated = html; // already present, leave unchanged\n} else if (html.includes('</body>')) {\n  updated = html.replace('</body>', snippet + '\\n</body>');\n} else {\n  updated = html + '\\n' + snippet;\n}\n\nreturn [{ json: { fileContent: updated, sha: file.sha, already_present: html.includes('<!-- Julie Chatbot -->') } }];\n"
+      }
+    },
+    {
+      "id": "bc5f319d-5424-4731-8466-5e38c5820da9",
+      "name": "GitHub - Update File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm.tech"
+        },
+        "filePath": "index.html",
+        "binaryData": false,
+        "fileContent": "={{ $json.fileContent }}",
+        "commitMessage": "Add Julie chatbot",
+        "additionalParameters": {
+          "branch": {
+            "branch": "main"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "f90a87d8-00ed-439f-918b-6814de1455c7"
+    },
+    {
+      "id": "4d2c2e3b-2c0c-461a-9f0f-8b220f7991fe",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true }"
+      }
+    }
+  ],
+  "connections": {
+    "Deploy Webhook": {
+      "main": [
+        [
+          {
+            "node": "GitHub - Get File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub - Get File": {
+      "main": [
+        [
+          {
+            "node": "Insert Julie snippet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Julie snippet": {
+      "main": [
+        [
+          {
+            "node": "GitHub - Update File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GitHub - Update File": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

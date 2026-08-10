@@ -1,0 +1,286 @@
+{
+  "name": "the new one - Error Handler",
+  "nodes": [
+    {
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "parameters": {},
+      "position": [
+        0,
+        0
+      ],
+      "id": "1e48bc2c-4850-42ab-876a-ccb65b6cab08"
+    },
+    {
+      "name": "Build Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "parameters": {
+        "jsCode": "const e = $json || {};\nconst wf = e.workflow || {};\nconst exec = e.execution || {};\nconst err = exec.error || e.error || {};\nconst wfName = wf.name || \"Unknown workflow\";\nconst wfId = wf.id || \"\";\nconst mode = exec.mode || \"\";\nconst lastNode = (exec.lastNodeExecuted) || (err.node && err.node.name) || \"unknown\";\nconst msg = err.message || \"No error message provided\";\nconst stack = err.stack || \"\";\nconst when = new Date().toISOString();\n\nconst subject = \"n8n error: \" + wfName + \" failed at \" + lastNode;\nconst lines = [\n  \"A workflow execution failed.\",\n  \"\",\n  \"Workflow: \" + wfName + \" (\" + wfId + \")\",\n  \"Failed node: \" + lastNode,\n  \"Mode: \" + mode,\n  \"Time: \" + when,\n  \"\",\n  \"Error message:\",\n  msg,\n];\nif (stack) { lines.push(\"\", \"Stack:\", stack); }\nconst body = lines.join(\"\\n\");\nconst htmlBody = lines.join(\"<br>\");\nreturn [{ json: { subject, body, htmlBody } }];"
+      },
+      "position": [
+        224,
+        -96
+      ],
+      "id": "1f02547a-53ef-4e19-853d-fbfcb35ee92c"
+    },
+    {
+      "name": "Send Error Email (Brevo)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.brevo.com/v3/smtp/email",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "sendInBlueApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sender: { email: 'hasanadam506@gmail.com' }, to: [{ email: 'hasanadam506@gmail.com' }], subject: $json.subject, htmlContent: $json.htmlBody }) }}",
+        "options": {}
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        448,
+        -96
+      ],
+      "id": "e66a04d3-8240-49f2-a0f8-b6803362892f"
+    },
+    {
+      "name": "Log Error Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FfrKA9GDdaCKszXW",
+          "cachedResultName": "error_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "={{ ($json.workflow && $json.workflow.name) || 'Unknown workflow' }}",
+            "error_message": "={{ (($json.execution && $json.execution.error && $json.execution.error.message) || ($json.error && $json.error.message)) || 'No error message provided' }}",
+            "node_name": "={{ ($json.execution && $json.execution.lastNodeExecuted) || (($json.execution && $json.execution.error && $json.execution.error.node && $json.execution.error.node.name)) || 'unknown' }}",
+            "execution_id": "={{ ($json.execution && $json.execution.id) || $execution.id }}",
+            "occurred_at": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "workflow_name",
+              "displayName": "workflow_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "error_message",
+              "displayName": "error_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "node_name",
+              "displayName": "node_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "execution_id",
+              "displayName": "execution_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "occurred_at",
+              "displayName": "occurred_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        448,
+        128
+      ],
+      "id": "746bdde0-8d01-4b62-b376-0847223ab676"
+    },
+    {
+      "name": "Get Alert Chat ID",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx",
+          "cachedResultName": "bot_config"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "telegram_alert_chat_id"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "position": [
+        448,
+        320
+      ],
+      "id": "218d54ea-a954-4e8a-adc5-3b974bf85a32"
+    },
+    {
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.config_value }}",
+        "text": "={{ '⚠️ ' + $('Build Alert').first().json.subject + '\\n\\n' + $('Build Alert').first().json.body }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "onError": "continueRegularOutput",
+      "position": [
+        672,
+        320
+      ],
+      "webhookId": "fbb41fbc-7443-4177-9db7-45ab9449d5a9",
+      "id": "4489d611-b0ae-499a-848c-b1a1fa0d3d38"
+    },
+    {
+      "name": "Release Lock (On Error)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "sVqBrWbzXVouV0by",
+          "cachedResultName": "workflow_lock"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "lock_key",
+              "condition": "eq",
+              "keyValue": "global"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "is_locked": false
+          },
+          "schema": [
+            {
+              "id": "is_locked",
+              "displayName": "is_locked",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "position": [
+        224,
+        128
+      ],
+      "id": "33fa8721-d272-45ca-b170-82e6a35dd587"
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Build Alert",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Release Lock (On Error)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log Error Row",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get Alert Chat ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Error Email (Brevo)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Alert Chat ID": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

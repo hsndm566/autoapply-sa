@@ -1,0 +1,506 @@
+{
+  "name": "Generate Website Pages",
+  "nodes": [
+    {
+      "id": "0183313c-6306-4c7e-bb1c-9c829c6f747e",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        304
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate-website-pages",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "79ff6520-b235-43e0-89e6-e4a81f3c3adc"
+    },
+    {
+      "id": "d1f60123-6b06-4cfb-9302-6f31c3f3d1b5",
+      "name": "Generate Dashboard HTML",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Create dashboard.html for Hasan Adam's job automation dashboard. Use Tailwind CSS CDN, Font Awesome CDN, Chart.js CDN, same design system as the existing site (dark navy background, glassmorphism cards, accent #2563eb). Include:\n- A hero section: 'AI Job Engine – Live Activity'.\n- Four stats cards (Sent Today, Replies, Interviews, Total Sent) with count-up animation.\n- A doughnut chart (Chart.js) showing status breakdown.\n- A recent activity table (last 10 entries).\n- Auto-refresh every 5 minutes, manual refresh button, skeleton loaders.\n- Data from Google Sheets: Sheet ID 1rivD5luGlZqq6MCEUVvlT263OfUKXrzH6cr9cf0nG3A, sheet name Job Applications Log, using gviz/tq endpoint.\n- A navigation header linking to index.html and cv.html.\n- The Julie chatbot widget (bottom-right bubble, sends to https://hsndm566.app.n8n.cloud/webhook/julie-chat).\n- Footer with social links.\n- All JavaScript inline.",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are a web developer. Output ONLY the complete HTML code for a page. No explanation."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f8896a45-04dd-4078-8e7e-d0739d748789",
+      "name": "OpenAI Dashboard Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        304,
+        224
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "4b169f9e-fe97-417b-86fe-ab98c24162f7",
+      "name": "Get Dashboard SHA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        576,
+        112
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.github.com/repos/hsndm566/hsndm.tech/contents/dashboard.html",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ref",
+              "value": "main"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "id": "f9565b96-42c6-4662-a910-109de934eb2d",
+      "name": "Build Dashboard Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        112
+      ],
+      "parameters": {
+        "jsCode": "let html = $('Generate Dashboard HTML').item.json.text || '';\nhtml = html.trim();\n// Strip a leading markdown code fence like ```html and a trailing ```\nhtml = html.replace(/^```[a-zA-Z]*\\s*\\n?/, '').replace(/\\n?```\\s*$/, '').trim();\nconst getResp = $input.item.json || {};\nconst sha = getResp && getResp.sha ? getResp.sha : undefined;\nconst content = Buffer.from(html, 'utf8').toString('base64');\nconst ghBody = { message: 'Add dashboard.html', content, branch: 'main' };\nif (sha) ghBody.sha = sha;\nreturn [{ json: { ghBody } }];"
+      }
+    },
+    {
+      "id": "f1688f3d-0145-4956-88e8-cc6ca6ab4702",
+      "name": "Put Dashboard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1024,
+        112
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "https://api.github.com/repos/hsndm566/hsndm.tech/contents/dashboard.html",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ghBody) }}"
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "id": "83e0d382-d587-4c42-9f7a-229d272bbb44",
+      "name": "Wait For Both",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1248,
+        304
+      ],
+      "parameters": {
+        "mode": "append"
+      }
+    },
+    {
+      "id": "ffba1df2-f5f7-405a-8154-29b85c0241ca",
+      "name": "Generate CV HTML",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        224,
+        512
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "=Create cv.html: a clean form where a user pastes their CV text, enters target job title, and email (optional). On submit, POST to https://hsndm566.app.n8n.cloud/webhook/submit-cv with JSON {cv_text, target_role, email}. Show a success animation (checkmark) and reset the form. Use the same design system, header, footer, and Julie chatbot. Include a link back to dashboard.",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are a web developer. Output ONLY the complete HTML code for a page. No explanation."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "1f7c391c-3c8d-4979-bca9-5399d3db3db2",
+      "name": "OpenAI CV Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        304,
+        736
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "n8n credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "id": "fa6dea07-bbd7-409e-b746-60e7003d3549",
+      "name": "Get CV SHA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        576,
+        512
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.github.com/repos/hsndm566/hsndm.tech/contents/cv.html",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ref",
+              "value": "main"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "id": "5c52aadd-f86f-4d22-b509-350e96f1c984",
+      "name": "Build CV Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        512
+      ],
+      "parameters": {
+        "jsCode": "let html = $('Generate CV HTML').item.json.text || '';\nhtml = html.trim();\n// Strip a leading markdown code fence like ```html and a trailing ```\nhtml = html.replace(/^```[a-zA-Z]*\\s*\\n?/, '').replace(/\\n?```\\s*$/, '').trim();\nconst getResp = $input.item.json || {};\nconst sha = getResp && getResp.sha ? getResp.sha : undefined;\nconst content = Buffer.from(html, 'utf8').toString('base64');\nconst ghBody = { message: 'Add cv.html', content, branch: 'main' };\nif (sha) ghBody.sha = sha;\nreturn [{ json: { ghBody } }];"
+      }
+    },
+    {
+      "id": "25660abf-1dc7-447d-ada6-e03c09df0e7f",
+      "name": "Put CV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1024,
+        512
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "https://api.github.com/repos/hsndm566/hsndm.tech/contents/cv.html",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.ghBody) }}"
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "id": "39abbad8-36e0-4414-b192-fb72989626b8",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1472,
+        304
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"success\":true,\"urls\":[\"https://hsndm.tech/dashboard.html\",\"https://hsndm.tech/cv.html\"]}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Generate Dashboard HTML",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Generate CV HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Dashboard HTML": {
+      "main": [
+        [
+          {
+            "node": "Get Dashboard SHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Dashboard Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Dashboard HTML",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Dashboard SHA": {
+      "main": [
+        [
+          {
+            "node": "Build Dashboard Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dashboard Payload": {
+      "main": [
+        [
+          {
+            "node": "Put Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Put Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Wait For Both",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For Both": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate CV HTML": {
+      "main": [
+        [
+          {
+            "node": "Get CV SHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI CV Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate CV HTML",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get CV SHA": {
+      "main": [
+        [
+          {
+            "node": "Build CV Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CV Payload": {
+      "main": [
+        [
+          {
+            "node": "Put CV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Put CV": {
+      "main": [
+        [
+          {
+            "node": "Wait For Both",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

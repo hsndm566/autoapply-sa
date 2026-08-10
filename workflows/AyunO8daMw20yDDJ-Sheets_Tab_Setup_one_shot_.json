@@ -1,0 +1,243 @@
+{
+  "name": "Sheets Tab Setup (one-shot)",
+  "nodes": [
+    {
+      "id": "3f9069b0-953a-492b-bad2-748a7d7e29de",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "03d0271d-ac3f-4563-8778-552c56622caa",
+      "name": "Create Tab",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "sheet",
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1rivD5luGlZqq6MCEUVvlT263OfUKXrzH6cr9cf0nG3A"
+        },
+        "title": "Job Applications Log",
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "FMoT5bOW2uTzGb0F",
+          "name": "Google Sheets account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "af1eb004-f13b-4466-bc36-b7f06cc3fcb9",
+      "name": "Row 90 Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "t",
+              "name": "timestamp",
+              "value": "2026-07-24T15:52:39.347Z",
+              "type": "string"
+            },
+            {
+              "id": "u",
+              "name": "user_id",
+              "value": "hassan-adam",
+              "type": "string"
+            },
+            {
+              "id": "c",
+              "name": "company",
+              "value": "Waed Ventures",
+              "type": "string"
+            },
+            {
+              "id": "j",
+              "name": "job_title",
+              "value": "Internship Program",
+              "type": "string"
+            },
+            {
+              "id": "f",
+              "name": "fit_score",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "d",
+              "name": "decision",
+              "value": "auto_approved",
+              "type": "string"
+            },
+            {
+              "id": "s",
+              "name": "status",
+              "value": "sent",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "c886f621-4069-4f22-9d80-ba55c0eb05d0",
+      "name": "Append Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1rivD5luGlZqq6MCEUVvlT263OfUKXrzH6cr9cf0nG3A"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Job Applications Log"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "user_id",
+              "displayName": "user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fit_score",
+              "displayName": "fit_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "decision",
+              "displayName": "decision",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "FMoT5bOW2uTzGb0F",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Create Tab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Tab": {
+      "main": [
+        [
+          {
+            "node": "Row 90 Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Row 90 Data": {
+      "main": [
+        [
+          {
+            "node": "Append Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

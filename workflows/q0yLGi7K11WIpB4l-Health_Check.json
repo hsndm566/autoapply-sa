@@ -1,0 +1,548 @@
+{
+  "name": "Health Check",
+  "nodes": [
+    {
+      "id": "hc000000-0000-4000-8000-000000000001",
+      "name": "Daily 7AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -800,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000002",
+      "name": "Query Errors 24h",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -580,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FfrKA9GDdaCKszXW",
+          "cachedResultName": "error_log"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "occurred_at",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({ hours: 24 }).toISO() }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000003",
+      "name": "Query SysLogs 24h",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -360,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Qh3DXLSbV0aaLSxS",
+          "cachedResultName": "system_logs"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "log_timestamp",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({ hours: 24 }).toISO() }}"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000004",
+      "name": "Query Audit Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        -140,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "job_type",
+              "condition": "eq",
+              "keyValue": "audit"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000005",
+      "name": "Compute Metrics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const clean = (arr) => arr.map(i => i.json).filter(r => r && Object.keys(r).length > 0);\nlet errRows = [];\nlet sysRows = [];\nlet jobRows = [];\ntry { errRows = clean($('Query Errors 24h').all()); } catch (e) {}\ntry { sysRows = clean($('Query SysLogs 24h').all()); } catch (e) {}\ntry { jobRows = clean($('Query Audit Jobs').all()); } catch (e) {}\n\nconst texts = [];\nfor (const r of errRows) { texts.push(String(r.error_message || '')); }\nfor (const r of sysRows) { texts.push(String(r.message || '') + ' ' + String(r.event_type || '') + ' ' + String(r.payload || '')); }\nconst blob = texts.join(' \\n ');\n\nconst countOf = (needle) => {\n  let n = 0;\n  for (const t of texts) { if (t.indexOf(needle) !== -1) n++; }\n  return n;\n};\nconst c429 = countOf('429');\nconst c503 = countOf('503');\nconst c404 = countOf('404');\nconst totalErrors = errRows.length;\nconst totalLogs = sysRows.length;\n\nconst auditTotal = jobRows.length;\nlet auditCompleted = 0;\nfor (const r of jobRows) { if (String(r.status || '') === 'audit_completed') auditCompleted++; }\nconst auditRate = auditTotal > 0 ? (auditCompleted / auditTotal) : 1;\n\n// Thresholds\nconst TH_429 = 5;\nconst TH_503 = 0;\nconst TH_404 = 5;\nconst TH_AUDIT_RATE = 0.8;\n\nconst breaches = [];\nif (c429 > TH_429) breaches.push('HTTP 429 rate high (' + c429 + ' in 24h, threshold ' + TH_429 + ')');\nif (c503 > TH_503) breaches.push('HTTP 503 present (' + c503 + ' in 24h)');\nif (c404 > TH_404) breaches.push('HTTP 404 rate high (' + c404 + ' in 24h, threshold ' + TH_404 + ')');\nif (auditTotal > 0 && auditRate < TH_AUDIT_RATE) breaches.push('Audit verification rate low (' + Math.round(auditRate * 100) + '%, threshold ' + Math.round(TH_AUDIT_RATE * 100) + '%)');\n\nconst breach = breaches.length > 0;\nconst date = $now.toFormat('yyyy-LL-dd HH:mm');\n\nconst numbers = 'Window: last 24h (as of ' + date + ')\\n' +\n  'Errors logged: ' + totalErrors + ' | System logs: ' + totalLogs + '\\n' +\n  'HTTP 429: ' + c429 + ' | 503: ' + c503 + ' | 404: ' + c404 + '\\n' +\n  'Audit verified: ' + auditCompleted + '/' + auditTotal + ' (' + Math.round(auditRate * 100) + '%)';\n\nconst approxNote = 'Note: HTTP status counts are derived from log message text (raw status codes are not stored).';\n\nlet summary_text;\nif (breach) {\n  summary_text = 'HEALTH ALERT\\n\\nBreached:\\n- ' + breaches.join('\\n- ') + '\\n\\n' + numbers + '\\n\\n' + approxNote;\n} else {\n  const okMsg = (totalErrors === 0 && totalLogs === 0) ? 'Daily health OK, no errors in the last 24h.' : 'Daily health OK.';\n  summary_text = okMsg + '\\n\\n' + numbers + '\\n\\n' + approxNote;\n}\n\nreturn [{ json: { c429, c503, c404, total_errors: totalErrors, total_logs: totalLogs, audit_total: auditTotal, audit_completed: auditCompleted, audit_rate: auditRate, breach, breach_reasons: breaches.join('; '), summary_text } }];"
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000006",
+      "name": "Get Alert Chat ID",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "JfZedT7wOWXyXgfx",
+          "cachedResultName": "bot_config"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "config_key",
+              "condition": "eq",
+              "keyValue": "telegram_alert_chat_id"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000007",
+      "name": "Threshold Breached?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        520,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "br",
+              "leftValue": "={{ $('Compute Metrics').first().json.breach }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000008",
+      "name": "Loud Alert (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        760,
+        180
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Get Alert Chat ID').first().json.config_value || '8890901423' }}",
+        "text": "={{ $('Compute Metrics').first().json.summary_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "53afdae3-8134-4b1c-a35b-7e6d0ddc3938"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-000000000009",
+      "name": "Quiet Summary (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        760,
+        420
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $('Get Alert Chat ID').first().json.config_value || '8890901423' }}",
+        "text": "={{ $('Compute Metrics').first().json.summary_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "eeb73ec7-67c8-4a42-b1a8-393d87f7ea30"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-00000000000a",
+      "name": "Log Run (Alert)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        980,
+        180
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Qh3DXLSbV0aaLSxS",
+          "cachedResultName": "system_logs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "log_timestamp": "={{ $now.toISO() }}",
+            "node_name": "Health Check",
+            "event_type": "health_alert",
+            "message": "={{ 'Health check breached: ' + $('Compute Metrics').first().json.breach_reasons }}",
+            "payload": "={{ JSON.stringify({ c429: $('Compute Metrics').first().json.c429, c503: $('Compute Metrics').first().json.c503, c404: $('Compute Metrics').first().json.c404, audit_rate: $('Compute Metrics').first().json.audit_rate }) }}"
+          },
+          "schema": [
+            {
+              "id": "log_timestamp",
+              "displayName": "log_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "node_name",
+              "displayName": "node_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_type",
+              "displayName": "event_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "hc000000-0000-4000-8000-00000000000b",
+      "name": "Log Run (OK)",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        980,
+        420
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "Qh3DXLSbV0aaLSxS",
+          "cachedResultName": "system_logs"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "log_timestamp": "={{ $now.toISO() }}",
+            "node_name": "Health Check",
+            "event_type": "health_ok",
+            "message": "Daily health check OK",
+            "payload": "={{ JSON.stringify({ c429: $('Compute Metrics').first().json.c429, c503: $('Compute Metrics').first().json.c503, c404: $('Compute Metrics').first().json.c404, audit_rate: $('Compute Metrics').first().json.audit_rate }) }}"
+          },
+          "schema": [
+            {
+              "id": "log_timestamp",
+              "displayName": "log_timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "node_name",
+              "displayName": "node_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_type",
+              "displayName": "event_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "payload",
+              "displayName": "payload",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Daily 7AM": {
+      "main": [
+        [
+          {
+            "node": "Query Errors 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Errors 24h": {
+      "main": [
+        [
+          {
+            "node": "Query SysLogs 24h",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query SysLogs 24h": {
+      "main": [
+        [
+          {
+            "node": "Query Audit Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Audit Jobs": {
+      "main": [
+        [
+          {
+            "node": "Compute Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Metrics": {
+      "main": [
+        [
+          {
+            "node": "Get Alert Chat ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Alert Chat ID": {
+      "main": [
+        [
+          {
+            "node": "Threshold Breached?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Threshold Breached?": {
+      "main": [
+        [
+          {
+            "node": "Loud Alert (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Quiet Summary (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loud Alert (Telegram)": {
+      "main": [
+        [
+          {
+            "node": "Log Run (Alert)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quiet Summary (Telegram)": {
+      "main": [
+        [
+          {
+            "node": "Log Run (OK)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "timezone": "Asia/Riyadh",
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "staticData": {
+    "node:Daily 7AM": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": null
+}

@@ -1,0 +1,1734 @@
+{
+  "name": "Automated Job Applier",
+  "nodes": [
+    {
+      "id": "61548b50-7f6f-4587-aedc-bfb1d6c59485",
+      "name": "Schedule Daily 8AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        272
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 5 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "404b6b93-fafe-4d96-907a-e9a960b8eaf3",
+      "name": "Feed URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const feeds = [\n  { url: 'https://rss.indeed.com/rss?q=engineer&l=Saudi+Arabia', source: 'indeed-eng' },\n  { url: 'https://rss.indeed.com/rss?q=sales+OR+admin+OR+customer+service&l=Saudi+Arabia', source: 'indeed-general' }\n];\nreturn feeds.map((f) => ({ json: f }));"
+      }
+    },
+    {
+      "id": "129749cf-98f4-4d57-b7c2-60a96841be76",
+      "name": "Fetch RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        368
+      ],
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "ignoreSSL": false
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "12a67001-1cbe-4e78-8bfb-1789da58d55b",
+      "name": "Route Source",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "let count = 0;\ntry { for (const r of $('Fetch RSS').all()) { const j = r.json || {}; if ((j.title || '') && (j.link || j.guid || '')) count++; } } catch (e) {}\nreturn [{ json: { has_rss: count > 0, rss_count: count } }];"
+      }
+    },
+    {
+      "id": "9cfce0e6-9f35-4855-a3e5-9cbfe167e36a",
+      "name": "RSS Has Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        368
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hr",
+              "leftValue": "={{ $json.has_rss }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "7551174f-22c5-4399-878f-2a52851581f5",
+      "name": "Use RSS",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        272
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "42aac777-704c-49c0-aa03-57206589a530",
+      "name": "Jooble Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        464
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { keywords: 'engineer OR sales OR customer service OR admin OR part-time', location: 'Saudi Arabia', date: '7', page: '1' } }];"
+      }
+    },
+    {
+      "id": "cd61aeba-3dc7-45ad-83a5-ff34cb55a600",
+      "name": "Fetch Jooble",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        464
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://jooble.org/api/8cdbd2a9-1660-4fff-a89c-551c5af8cae5",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ keywords: $json.keywords, location: $json.location, date: $json.date, page: $json.page }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1c209cf6-f6df-450e-bef3-1fb2ca02f4b6",
+      "name": "Use Jooble",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        464
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "11ef7f96-9c76-45b1-a0ff-b15ccb736917",
+      "name": "Manual Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        464
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "960bb713-275a-4c37-a019-26fec3afaa57",
+      "name": "On Pipeline Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        688
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "bff61c38-972d-4564-958e-8999046a2166",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        688
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const e = $json || {};\nconst wf = (e.workflow && e.workflow.name) ? e.workflow.name : 'Automated Job Applier';\nconst ex = (e.execution && e.execution.id) ? String(e.execution.id) : '';\nlet node = ''; let msg = '';\ntry { node = e.execution.lastNodeExecuted || ''; } catch (x) {}\ntry { msg = (e.execution.error && (e.execution.error.message || e.execution.error.description)) || ''; } catch (x) {}\nif (!msg) { try { msg = e.error.message || ''; } catch (x) {} }\nreturn [{ json: { workflow_name: wf, execution_id: ex, node_name: node || 'unknown', error_message: String(msg || 'Unknown error').slice(0, 900), occurred_at: new Date().toISOString(), tg: '\\u26a0\\ufe0f Automated Job Applier error in node \"' + (node||'unknown') + '\": ' + String(msg||'Unknown error').slice(0,300) + ' (exec ' + ex + ')' } }];"
+      }
+    },
+    {
+      "id": "6253fc44-7882-4665-b587-3dad571e9f47",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        688
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FfrKA9GDdaCKszXW",
+          "cachedResultName": "error_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "workflow_name": "={{ $json.workflow_name }}",
+            "node_name": "={{ $json.node_name }}",
+            "error_message": "={{ $json.error_message }}",
+            "execution_id": "={{ $json.execution_id }}",
+            "occurred_at": "={{ $json.occurred_at }}"
+          }
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5288d34f-0af1-43f5-8855-877f8c016bca",
+      "name": "Alert Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        688
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ $json.tg }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "5c6006fa-61c2-47cb-a328-0d4bcf1dfc5f",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a7e11111-0000-4000-8000-senderroremail",
+      "name": "Send Error Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        832
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "hasanadam506@gmail.com",
+        "subject": "={{ '\\u26a0\\ufe0f Automated Job Applier failed: ' + $json.node_name }}",
+        "emailType": "text",
+        "message": "={{ 'Workflow: ' + $json.workflow_name + '\\nFailed node: ' + $json.node_name + '\\nError: ' + $json.error_message + '\\nExecution: ' + $json.execution_id + '\\nTime: ' + $json.occurred_at }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pT6ZfpwQkTrfQhkt",
+          "name": "Gmail account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "ca2de02d-b176-4308-9a41-35c096aaf5c3"
+    },
+    {
+      "id": "58cb62c0-4550-4ef0-b15b-293e3b565bf9",
+      "name": "Weekly Report Mon 9AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        912
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "eed1d0e2-2199-4023-ae4e-cf6b63ad452d",
+      "name": "Get Week Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        912
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "27215101-6dec-40fc-8a65-d6e46f95026a",
+      "name": "Build Weekly Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        912
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $input.all().map(i => i.json || {}).filter(r => r && Object.keys(r).length > 0);\nconst now = Date.now();\nconst weekAgo = now - 7*24*60*60*1000;\nfunction ts(r){ const d = r.processed_at || r.date_added; const p = d ? Date.parse(d) : NaN; return isNaN(p) ? null : p; }\nconst wk = rows.filter(r => { const t = ts(r); return t !== null && t >= weekAgo; });\nconst byStatus = {};\nfor (const r of wk) { const s = String(r.status || 'unknown'); byStatus[s] = (byStatus[s]||0)+1; }\nconst sent = (byStatus['sent']||0);\nconst blocked = (byStatus['blocked_scam']||0) + (byStatus['flagged_for_review']||0);\nconst nu = (byStatus['new']||0);\nconst statusLines = Object.keys(byStatus).sort().map(k => '  - ' + k + ': ' + byStatus[k]).join('\\n');\nconst date = new Date().toISOString().slice(0,10);\nconst msg = '\\ud83d\\udcca Automated Job Applier \\u2014 Weekly Report (' + date + ')\\n\\n' +\n  'Jobs touched this week: ' + wk.length + '\\n' +\n  'Applications sent: ' + sent + '\\n' +\n  'Blocked/flagged (ghost/scam): ' + blocked + '\\n' +\n  'Still queued (new): ' + nu + '\\n\\n' +\n  'By status:\\n' + (statusLines || '  (no activity)') + '\\n\\n' +\n  'Total rows in table: ' + rows.length;\nreturn [{ json: { chat_id: '8890901423', message: msg } }];"
+      }
+    },
+    {
+      "id": "69fe357d-80a2-4956-a63a-b39b5fbd884a",
+      "name": "Send Weekly Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        912
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "563e8c85-df19-4b37-845a-0ec155307f69",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f0000001-0000-4000-8000-jobintakeform",
+      "name": "Job Intake Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        1136
+      ],
+      "parameters": {
+        "authentication": "none",
+        "formTitle": "Submit a Job",
+        "formDescription": "Add a job to your tracker. It will be scored and a tailored cover letter drafted on the next daily run. Fill in a Contact Email only if you want the application to be auto-sent when it is a strong match.",
+        "responseMode": "onReceived",
+        "formFields": {
+          "values": [
+            {
+              "fieldName": "job_title",
+              "fieldLabel": "Job Title",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldName": "company",
+              "fieldLabel": "Company",
+              "fieldType": "text",
+              "requiredField": true
+            },
+            {
+              "fieldName": "location",
+              "fieldLabel": "Location",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldName": "job_description",
+              "fieldLabel": "Job Description (paste the full posting)",
+              "fieldType": "textarea",
+              "requiredField": true
+            },
+            {
+              "fieldName": "job_url",
+              "fieldLabel": "Job URL",
+              "fieldType": "text",
+              "requiredField": false
+            },
+            {
+              "fieldName": "contact_email",
+              "fieldLabel": "Contact Email (leave blank to only draft, not auto-send)",
+              "fieldType": "email",
+              "requiredField": false
+            }
+          ]
+        }
+      },
+      "webhookId": "ebc87e9c-65cc-4c6b-a306-55d32c0449b0"
+    },
+    {
+      "id": "f0000002-0000-4000-8000-addsubmittedjob",
+      "name": "Add Submitted Job",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        1136
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_title": "={{ $json.job_title }}",
+            "company": "={{ $json.company }}",
+            "location": "={{ $json.location }}",
+            "job_description": "={{ $json.job_description }}",
+            "job_url": "={{ $json.job_url }}",
+            "contact_email": "={{ $json.contact_email }}",
+            "status": "new",
+            "applied": false,
+            "date_added": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_description",
+              "displayName": "job_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_url",
+              "displayName": "job_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contact_email",
+              "displayName": "contact_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "applied",
+              "displayName": "applied",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_added",
+              "displayName": "date_added",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "1e522144-ef1d-4ae3-a287-43349f519240",
+      "name": "Merge Sources",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1792,
+        368
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "9ce7d1e8-6834-444e-9c00-3c9ca10a4dcb",
+      "name": "Fetch Indeed RSS",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        2016,
+        368
+      ],
+      "parameters": {
+        "url": "https://rss.indeed.com/rss?q=engineer&l=Saudi+Arabia",
+        "options": {
+          "ignoreSSL": false
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "65cabaf5-6fe9-43fd-a5ad-a97546405986",
+      "name": "Fetch Bayt",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        2240,
+        368
+      ],
+      "parameters": {
+        "url": "https://www.bayt.com/en/rss/saudi-arabia/",
+        "options": {
+          "ignoreSSL": false
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "cba1e22d-b7dd-433e-882a-f751ec67d232",
+      "name": "Fetch Wuzzuf",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1.2,
+      "position": [
+        2464,
+        368
+      ],
+      "parameters": {
+        "url": "https://wuzzuf.net/jobs/rss",
+        "options": {
+          "ignoreSSL": false
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "bff2c7f9-662b-4c41-835a-77fc1ae2fd67",
+      "name": "Fetch Jobicy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2688,
+        368
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://jobicy.com/api/v2/remote-jobs?count=50&tag=engineer",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ac0fe170-4403-49cb-bd49-f3b5d49d0f92",
+      "name": "Fetch Remotive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2912,
+        368
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://remotive.com/api/remote-jobs?search=engineer",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "63dceea6-a1f6-4da1-a7de-4f8a2b0feb7c",
+      "name": "Fetch Arbeitnow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3136,
+        368
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.arbeitnow.com/api/job-board-api",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "090668c6-63ad-4db6-84c4-601205095f9c",
+      "name": "Normalize Extra Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"').replace(/&#0?39;/g, \"'\").replace(/\\s+/g, ' ').trim();\nconst out = [];\nfunction pushJob(title, company, desc, loc, url, source) {\n  if (!title || !url) return false;\n  const cleanDesc = stripHtml(desc) || ('Position: ' + title + '. Full details via the original listing.');\n  out.push({ json: { job_title: String(title).trim(), company: (String(company || 'Unknown').trim() || 'Unknown'), job_description: cleanDesc, location: (String(loc || 'Saudi Arabia').trim() || 'Saudi Arabia'), job_url: String(url).trim(), contact_email: '', status: 'new', job_type: 'general', industry: 'General', _source: source } });\n  return true;\n}\nfunction readResp(nodeName) {\n  try { const f = $(nodeName).first(); return (f && f.json) ? f.json : {}; } catch (e) { return {}; }\n}\ntry {\n  const resp = readResp('Fetch Jobicy');\n  const jobs = Array.isArray(resp.jobs) ? resp.jobs : [];\n  let n = 0;\n  for (const jb of jobs) { if (pushJob(jb.jobTitle, jb.companyName, jb.jobExcerpt || jb.jobDescription, jb.jobGeo, jb.url, 'jobicy')) n++; }\n  if (n === 0) console.warn('[Job Engine] Jobicy returned no usable jobs (blocked or empty).');\n} catch (e) { console.warn('[Job Engine] Jobicy source failed: ' + e.message); }\ntry {\n  const resp = readResp('Fetch Remotive');\n  const jobs = Array.isArray(resp.jobs) ? resp.jobs : [];\n  let n = 0;\n  for (const jb of jobs) { if (pushJob(jb.title, jb.company_name, jb.description, jb.candidate_required_location, jb.url, 'remotive')) n++; }\n  if (n === 0) console.warn('[Job Engine] Remotive returned no usable jobs (blocked or empty).');\n} catch (e) { console.warn('[Job Engine] Remotive source failed: ' + e.message); }\ntry {\n  const resp = readResp('Fetch Arbeitnow');\n  const jobs = Array.isArray(resp.data) ? resp.data : [];\n  let n = 0;\n  for (const jb of jobs) { if (pushJob(jb.title, jb.company_name, jb.description, jb.location, jb.url, 'arbeitnow')) n++; }\n  if (n === 0) console.warn('[Job Engine] Arbeitnow returned no usable jobs (blocked or empty).');\n} catch (e) { console.warn('[Job Engine] Arbeitnow source failed: ' + e.message); }\nif (out.length === 0) { console.warn('[Job Engine] All extra JSON sources returned no jobs.'); return [{ json: { _extra_empty: true } }]; }\nreturn out;"
+      }
+    },
+    {
+      "id": "2b902bce-d688-45be-be80-61236ce3a05a",
+      "name": "Get Existing Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        3584,
+        368
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "d42601c8-82d6-4b33-8c1f-49371b01cbe3",
+      "name": "Merge & Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3808,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const stripHtml = (s) => String(s || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '\"').replace(/&#0?39;/g, \"'\").replace(/\\s+/g, ' ').trim();\nconst normUrl = (u) => String(u || '').trim().split('?')[0].replace(/\\/+$/, '').toLowerCase();\n\nconst existing = new Set();\ntry { for (const it of $('Get Existing Jobs').all()) { const u = it.json && it.json.job_url ? normUrl(it.json.job_url) : ''; if (u) existing.add(u); } } catch (e) {}\n\nfunction parseTitleCompany(raw) {\n  const t = String(raw || '').trim();\n  let title = t, company = 'Unknown';\n  const dashParts = t.split(' - ');\n  const atM = t.match(/^(.*?)\\s+at\\s+(.*?)(?:\\s+in\\s+.*)?$/i);\n  if (dashParts.length >= 2) { title = dashParts[0].trim(); company = dashParts[1].trim(); }\n  else if (atM) { title = atM[1].trim(); company = atM[2].trim(); }\n  return { title: title || t, company: company || 'Unknown' };\n}\n\nconst seen = new Set();\nconst out = [];\nfunction ingestRss(nodeName) {\n  try {\n    for (const r of $(nodeName).all()) {\n      const j = r.json || {};\n      const link = j.link || j.guid || '';\n      const rawTitle = j.title || '';\n      if (!rawTitle || !link) continue;\n      const key = normUrl(link);\n      if (!key || existing.has(key) || seen.has(key)) continue;\n      let desc = stripHtml(j.contentSnippet || j.content || j.summary || j.description || '');\n      if (!desc || desc.length < 20) desc = 'Position: ' + rawTitle + '. Full details available via the original listing.';\n      const tc = parseTitleCompany(rawTitle);\n      seen.add(key);\n      out.push({ json: { job_title: tc.title, company: tc.company, job_description: desc, location: 'Saudi Arabia', job_url: link, contact_email: '', status: 'new', job_type: 'general', industry: 'General' } });\n    }\n  } catch (e) {}\n}\nfunction ingestRssMain() {\n  try {\n    for (const r of $('Fetch RSS').all()) {\n      const j = r.json || {};\n      const link = j.link || j.guid || '';\n      const rawTitle = j.title || '';\n      if (!rawTitle || !link) continue;\n      const key = normUrl(link);\n      if (!key || existing.has(key) || seen.has(key)) continue;\n      let desc = stripHtml(j.contentSnippet || j.content || j.summary || j.description || '');\n      if (!desc || desc.length < 20) desc = 'Position: ' + rawTitle + '. Full details available via the original listing.';\n      const tc = parseTitleCompany(rawTitle);\n      seen.add(key);\n      out.push({ json: { job_title: tc.title, company: tc.company, job_description: desc, location: 'Saudi Arabia', job_url: link, contact_email: '', status: 'new', job_type: 'general', industry: 'General' } });\n    }\n  } catch (e) {}\n}\ningestRssMain();\ntry {\n  for (const r of $('Fetch Jooble').all()) {\n    const resp = r.json || {};\n    const jbs = Array.isArray(resp.jobs) ? resp.jobs : [];\n    for (const jb of jbs) {\n      const link = jb.link || '';\n      const rawTitle = jb.title || '';\n      if (!rawTitle || !link) continue;\n      const key = normUrl(link);\n      if (!key || existing.has(key) || seen.has(key)) continue;\n      let desc = stripHtml(jb.snippet || '');\n      if (!desc || desc.length < 20) desc = 'Position: ' + rawTitle + '. Full details via the original listing.';\n      seen.add(key);\n      out.push({ json: { job_title: rawTitle, company: String(jb.company || jb.source || 'Unknown').trim(), job_description: desc, location: String(jb.location || 'Saudi Arabia'), job_url: link, contact_email: '', status: 'new', job_type: 'general', industry: 'General' } });\n    }\n  }\n} catch (e) {}\ntry {\n  for (const r of $('Normalize Extra Sources').all()) {\n    const jb = r.json || {};\n    const link = jb.job_url || '';\n    const rawTitle = jb.job_title || '';\n    if (!rawTitle || !link) continue;\n    const key = normUrl(link);\n    if (!key || existing.has(key) || seen.has(key)) continue;\n    let desc = stripHtml(jb.job_description || '');\n    if (!desc || desc.length < 20) desc = 'Position: ' + rawTitle + '. Full details via the original listing.';\n    seen.add(key);\n    out.push({ json: { job_title: String(rawTitle).trim(), company: String(jb.company || 'Unknown').trim(), job_description: desc, location: String(jb.location || 'Saudi Arabia'), job_url: link, contact_email: '', status: 'new', job_type: 'general', industry: 'General' } });\n  }\n} catch (e) {}\ningestRss('Fetch Indeed RSS');\ningestRss('Fetch Bayt');\ningestRss('Fetch Wuzzuf');\nreturn out;"
+      }
+    },
+    {
+      "id": "ad3f525e-96e2-4ab0-8dfb-536887d33376",
+      "name": "Get Agencies",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4032,
+        368
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "lhvfLt3w9HL2fNY9",
+          "cachedResultName": "agency_targets"
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "26695a4b-5d25-4914-9c48-80a9cf9257af",
+      "name": "Agency Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4256,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const jobs = $('Merge & Dedup').all().map((i) => i.json || {});\nconst agencies = $('Get Agencies').all()\n  .map((i) => i.json || {})\n  .filter((a) => a && a.contact_email && String(a.contact_email).trim())\n  .map((a) => ({\n    name: String(a.agency_name || 'Agency').trim(),\n    email: String(a.contact_email).trim(),\n    region: String(a.region || 'Saudi Arabia').trim(),\n    specialties: String(a.specialties || '').toLowerCase().split(',').map((s) => s.trim()).filter(Boolean),\n    assigned: 0\n  }));\n\nconst PER_AGENCY_CAP = 3;\nconst out = [];\nfor (const j of jobs) {\n  if (j.contact_email && String(j.contact_email).trim()) { out.push({ json: j }); continue; }\n  const hay = (String(j.job_title || '') + ' ' + String(j.job_description || '')).toLowerCase();\n  const matches = [];\n  for (const a of agencies) {\n    let score = 0;\n    for (const sp of a.specialties) { if (sp && hay.includes(sp)) score++; }\n    if (score > 0) matches.push({ a, score });\n  }\n  if (!matches.length) { out.push({ json: j }); continue; }\n  const underCap = matches.filter((m) => m.a.assigned < PER_AGENCY_CAP);\n  const pool = underCap.length ? underCap : matches;\n  pool.sort((x, y) => (y.score - x.score) || (x.a.assigned - y.a.assigned));\n  const pick = pool[0].a;\n  pick.assigned++;\n  out.push({ json: Object.assign({}, j, { contact_email: pick.email, location: j.location || pick.region, job_description: String(j.job_description || '').trim() + ' [via agency: ' + pick.name + ']', status: 'new', job_type: 'general' }) });\n}\nconst real = out.filter((o) => o.json && o.json.job_url);\nif (!real.length) return [{ json: { _no_new: true } }];\nreturn real;"
+      }
+    },
+    {
+      "id": "8885ea6e-af61-4ed4-8cb4-2e9c4f49ccec",
+      "name": "Ghost/Scam Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4480,
+        368
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const items = $input.all();\nconst freeProviders = ['gmail.com','yahoo.com','hotmail.com','outlook.com','live.com','aol.com','icloud.com','protonmail.com','mail.com','yandex.com','gmx.com','ymail.com'];\nconst vagueKw = ['fast-paced environment','wear many hats','rockstar','ninja','unlimited earning','be your own boss','no experience needed','immediate start','urgent hiring','work from home opportunity','flexible schedule guaranteed'];\nconst scamKw = ['training fee','equipment purchase','bank details','bank account number','national id','processing fee','registration fee','pay a deposit','western union','send money','upfront payment','activation fee'];\nfunction scoreJob(j){\n  const jd = String(j.job_description || '');\n  const company = String(j.company || '');\n  const email = String(j.contact_email || '').toLowerCase().trim();\n  let score = 0;\n  let emailDomain = '';\n  const at = email.indexOf('@'); if (at !== -1) emailDomain = email.slice(at+1);\n  if (emailDomain && freeProviders.indexOf(emailDomain) !== -1) score += 25;\n  const words = jd ? jd.split(/\\s+/).filter(function(x){return x.length>0;}).length : 0;\n  if (words === 0) score += 20; else if (words < 100) score += 15;\n  const hay = (jd + ' ' + company).toLowerCase();\n  for (let v=0; v<vagueKw.length; v++){ if (hay.indexOf(vagueKw[v]) !== -1) score += 8; }\n  for (let k=0; k<scamKw.length; k++){ if (hay.indexOf(scamKw[k]) !== -1) score += 40; }\n  if (score > 100) score = 100; if (score < 0) score = 0;\n  return score;\n}\nconst out = [];\nlet kept = 0;\nfor (const it of items) {\n  const j = it.json || {};\n  if (j._no_new) { out.push({ json: j }); continue; }\n  if (!j.job_url) { continue; }\n  const sc = scoreJob(j);\n  if (sc >= 40) { console.warn('[Job Engine] Dropped likely ghost/scam job: ' + (j.job_title||'') + ' @ ' + (j.company||'') + ' (scam_score ' + sc + ')'); continue; }\n  kept++;\n  out.push({ json: Object.assign({}, j, { scam_score: sc }) });\n}\nif (kept === 0) return [{ json: { _no_new: true } }];\nreturn out;"
+      }
+    },
+    {
+      "id": "e94ada9f-1265-4a51-abb1-acfd10b73411",
+      "name": "Has New Jobs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4704,
+        368
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sentinel",
+              "leftValue": "={{ $json._no_new }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b689ff71-f24e-41aa-ab03-7c530b7b0485",
+      "name": "Get New Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5376,
+        368
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "new"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "7a432b07-e916-4b8e-98f7-6f4dff2201d0",
+      "name": "Get Sent Today",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5600,
+        272
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "sent"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "68346f6c-508e-4412-820a-772f9610aa73",
+      "name": "Cap Sends (40/day)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5824,
+        272
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "let jobs = $('Get New Jobs').all().map((i) => i.json || {})\n  .filter((j) => j && Object.keys(j).length > 0 && j.contact_email && String(j.contact_email).trim() && j.id !== undefined && j.id !== null);\n\nlet rows = [];\ntry { rows = $('Get Sent Today').all(); } catch (e) { rows = []; }\nconst now = new Date();\nconst start = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());\nconst end = start + 86400000;\nlet sentToday = 0;\nfor (const it of rows) { const r = it.json || {}; if (!r || Object.keys(r).length === 0) continue; const pa = r.processed_at ? Date.parse(r.processed_at) : NaN; if (!isNaN(pa) && pa >= start && pa < end) sentToday++; }\n\nconst DAILY = 40;\nconst remaining = Math.max(0, DAILY - sentToday);\nlet mr;\ntry { mr = $('Manual Run').first().json.max_sends; } catch (e) {}\nif (mr === undefined || mr === null) { try { const s = $('Schedule Daily 8AM').first().json.max_sends; if (s !== undefined) mr = s; } catch (e) {} }\nlet maxRun = DAILY;\nif (mr !== undefined && mr !== null && String(mr).length) { const p = parseInt(String(mr), 10); if (!isNaN(p)) maxRun = p; }\nconst cap = Math.min(remaining, maxRun, jobs.length);\nreturn jobs.slice(0, cap).map((j) => ({ json: j }));"
+      }
+    },
+    {
+      "id": "94eacf26-e43d-4370-8f3a-c0e49db14eb4",
+      "name": "Run Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6272,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "let processed = 0;\ntry { processed = $('Cap Sends (40/day)').all().length; } catch (e) {}\nconst date = new Date().toISOString().slice(0,10);\nconst msg = '\\u2705 Automated Job Applier run complete (' + date + '). Jobs processed this run: ' + processed + '.';\nreturn [{ json: { chat_id: '8890901423', message: msg } }];"
+      }
+    },
+    {
+      "id": "21bd8f88-c7e3-423b-8c09-d4dc4a1cbff6",
+      "name": "Send Run Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6496,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "2b06cac0-443a-498a-91ca-27ff8704a7e9",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "083edeeb-9654-4352-93de-f03f7b619ef4",
+      "name": "Process One Row (Kimi)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        6272,
+        192
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FUL8M9AOLSG0KLFJ",
+          "cachedResultName": "Kimi — Process One Row"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_id": "={{ $json.id }}",
+            "company": "={{ $json.company }}",
+            "industry": "={{ $json.industry }}",
+            "recipient": "={{ $json.contact_email }}",
+            "job_description": "={{ $json.job_description }}",
+            "drive_folder_id": "",
+            "processed_index": "={{ $runIndex }}",
+            "total": 0,
+            "user_id": "hassan-adam"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "7f55bdcb-211c-420d-aaea-2888104b6e54",
+      "name": "Prep Applied Msg",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6496,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var kimi = $json || {};\nvar row = {};\ntry { row = $('Loop Over Jobs').item.json || {}; } catch (e) { row = {}; }\nvar status = String(kimi.status || '').toLowerCase();\nvar isSent = status === 'sent';\nvar jobTitle = String(row.job_title || kimi.job_title || 'Position').trim();\nvar company = String(kimi.company || row.company || 'the company').trim();\nvar fit = null;\nif (row.fit_score !== undefined && row.fit_score !== null && String(row.fit_score).length && Number(row.fit_score) > 0) { fit = Number(row.fit_score); }\nelse if (row.adjusted_fit_score !== undefined && row.adjusted_fit_score !== null && Number(row.adjusted_fit_score) > 0) { fit = Number(row.adjusted_fit_score); }\nelse { var sc = Number(row.scam_score); if (isNaN(sc)) sc = 0; fit = Math.max(40, 100 - sc); }\nfit = Math.round(fit);\nvar text = '\\u2705 Applied: ' + jobTitle + ' at ' + company + ' \\u2013 Fit: ' + fit + '%';\nreturn [{ json: { is_sent: isSent, status: status, applied_text: text, chat_id: '8890901423', row_id: kimi.row_id, company: company, job_title: jobTitle, fit_score: fit } }];"
+      }
+    },
+    {
+      "id": "77069fdf-ebe3-4c1f-a5e2-def7e454810c",
+      "name": "Applied Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6720,
+        192
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sent",
+              "leftValue": "={{ $json.is_sent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "b32d5bf0-f84a-496e-8ac7-19e70c58442f",
+      "name": "Telegram Applied",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6944,
+        240
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.applied_text }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "003753b9-3bc4-4324-8b9a-0a91847484cf",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "291e7ee9-b639-4325-a07e-d50e7c4748c4",
+      "name": "Loop Over Jobs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        6048,
+        272
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "b012c30c-52e3-4217-abfd-e7e69adfc05a",
+      "name": "Find Unsendable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5600,
+        464
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const rows = $('Get New Jobs').all().map((i) => i.json || {});\nconst out = [];\nfor (const r of rows) {\n  if (!r || Object.keys(r).length === 0) continue;\n  if (r.id === undefined || r.id === null) continue;\n  const email = (r.contact_email || '').toString().trim();\n  if (!email) out.push({ json: { id: r.id } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "ca533793-99e6-462f-979f-329ab95fd322",
+      "name": "Mark Skipped",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5824,
+        464
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ Number($json.id) }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [
+            "id"
+          ],
+          "value": {
+            "status": "skipped",
+            "processed_at": "={{ $now.toISO() }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "5771ff49-5062-4afc-835e-5efdd3e33625",
+      "name": "Filter Real Jobs",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        4928,
+        432
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "hasurl",
+              "leftValue": "={{ $json.job_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "fa3ab2c0-dd96-4635-a496-b5bbf20fa856",
+      "name": "Add New Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5152,
+        432
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_title": "={{ $json.job_title }}",
+            "company": "={{ $json.company }}",
+            "job_description": "={{ $json.job_description }}",
+            "location": "={{ $json.location }}",
+            "job_url": "={{ $json.job_url }}",
+            "contact_email": "={{ $json.contact_email }}",
+            "status": "new",
+            "job_type": "={{ $json.job_type }}",
+            "industry": "={{ $json.industry }}",
+            "scam_score": "={{ $json.scam_score }}"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Daily 8AM": {
+      "main": [
+        [
+          {
+            "node": "Feed URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Feed URLs": {
+      "main": [
+        [
+          {
+            "node": "Fetch RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch RSS": {
+      "main": [
+        [
+          {
+            "node": "Route Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Source": {
+      "main": [
+        [
+          {
+            "node": "RSS Has Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Has Jobs?": {
+      "main": [
+        [
+          {
+            "node": "Use RSS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Jooble Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use RSS": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jooble Queries": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jooble",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Jooble": {
+      "main": [
+        [
+          {
+            "node": "Use Jooble",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Jooble": {
+      "main": [
+        [
+          {
+            "node": "Merge Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Manual Run": {
+      "main": [
+        [
+          {
+            "node": "Feed URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On Pipeline Error": {
+      "main": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Error Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Error": {
+      "main": [
+        [
+          {
+            "node": "Alert Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Report Mon 9AM": {
+      "main": [
+        [
+          {
+            "node": "Get Week Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Week Jobs": {
+      "main": [
+        [
+          {
+            "node": "Build Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Job Intake Form": {
+      "main": [
+        [
+          {
+            "node": "Add Submitted Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Sources": {
+      "main": [
+        [
+          {
+            "node": "Fetch Indeed RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Indeed RSS": {
+      "main": [
+        [
+          {
+            "node": "Fetch Bayt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bayt": {
+      "main": [
+        [
+          {
+            "node": "Fetch Wuzzuf",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Wuzzuf": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jobicy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Jobicy": {
+      "main": [
+        [
+          {
+            "node": "Fetch Remotive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Remotive": {
+      "main": [
+        [
+          {
+            "node": "Fetch Arbeitnow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Arbeitnow": {
+      "main": [
+        [
+          {
+            "node": "Normalize Extra Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Extra Sources": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge & Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge & Dedup": {
+      "main": [
+        [
+          {
+            "node": "Get Agencies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Agencies": {
+      "main": [
+        [
+          {
+            "node": "Agency Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agency Match": {
+      "main": [
+        [
+          {
+            "node": "Ghost/Scam Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ghost/Scam Filter": {
+      "main": [
+        [
+          {
+            "node": "Has New Jobs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Jobs?": {
+      "main": [
+        [
+          {
+            "node": "Get New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Filter Real Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get New Jobs": {
+      "main": [
+        [
+          {
+            "node": "Get Sent Today",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Find Unsendable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sent Today": {
+      "main": [
+        [
+          {
+            "node": "Cap Sends (40/day)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cap Sends (40/day)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process One Row (Kimi)": {
+      "main": [
+        [
+          {
+            "node": "Prep Applied Msg",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Applied Msg": {
+      "main": [
+        [
+          {
+            "node": "Applied Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Applied Sent?": {
+      "main": [
+        [
+          {
+            "node": "Telegram Applied",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Applied": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Jobs": {
+      "main": [
+        [
+          {
+            "node": "Run Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process One Row (Kimi)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Unsendable": {
+      "main": [
+        [
+          {
+            "node": "Mark Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Real Jobs": {
+      "main": [
+        [
+          {
+            "node": "Add New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add New Jobs": {
+      "main": [
+        [
+          {
+            "node": "Get New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true,
+    "timezone": "Asia/Riyadh",
+    "errorWorkflow": "9xBPxYPpxIEmQdjI"
+  },
+  "staticData": {
+    "node:Schedule Daily 8AM": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    },
+    "node:Weekly Report Mon 9AM": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 2,
+  "meta": null
+}

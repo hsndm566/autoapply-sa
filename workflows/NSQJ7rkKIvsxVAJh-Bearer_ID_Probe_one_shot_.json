@@ -1,0 +1,95 @@
+{
+  "name": "Bearer ID Probe (one-shot)",
+  "nodes": [
+    {
+      "id": "a3110713-1faa-4bdf-8756-0ebf0e2b88fe",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a557ecd4-e5ec-49fd-ae3f-10c994267ed0",
+      "name": "Zai Test Cred2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"glm-4-flash\", temperature: 0.2, max_tokens: 20, messages: [ { role: \"user\", content: \"Reply: OK\" } ] }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "ShpSAMjCydFSYEhr",
+          "name": "Bearer Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b97ad683-f80c-407a-9ef0-e7e528dd9bb7",
+      "name": "Zai Test Cred3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"glm-4-flash\", temperature: 0.2, max_tokens: 20, messages: [ { role: \"user\", content: \"Reply: OK\" } ] }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Ff0G1ve73IkZFnLh",
+          "name": "Bearer Auth account 3"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Zai Test Cred2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Zai Test Cred3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

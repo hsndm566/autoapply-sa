@@ -1,0 +1,428 @@
+{
+  "name": "TEMP Website Polish (Opus)",
+  "nodes": [
+    {
+      "id": "908e3570-f0cf-43bf-895d-a2c88804b585",
+      "name": "Run Once",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a8a1269c-2a41-4986-9aa3-332c2cb8bd00",
+      "name": "List Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [\n  { json: { filename: 'index.html' } },\n  { json: { filename: 'dashboard.html' } },\n  { json: { filename: 'cv.html' } }\n];"
+      }
+    },
+    {
+      "id": "54fe9637-39cf-443b-b8fd-ff5496866a4d",
+      "name": "Get File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ \"https://api.github.com/repos/hsndm566/hsndm.tech/contents/\" + $json.filename }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-website-polish"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8eb1fbdb-7061-44ab-96b6-19f2db1817b5",
+      "name": "Decode File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "var g = $input.item.json || {};\nvar filename = '';\ntry { filename = $('List Files').item.json.filename; } catch (e) { filename = ''; }\nif (!filename) filename = g.name || g.path || '';\nvar sha = g.sha || '';\nvar b64 = g.content || '';\nvar original = '';\ntry { original = Buffer.from(String(b64).replace(/\\n/g, ''), 'base64').toString('utf8'); } catch (e) { original = ''; }\nvar file_ok = !!(filename && sha && original && original.length > 50);\nif (!file_ok) { console.warn('Get File failed or file missing for: ' + (filename || 'unknown')); }\nreturn { json: { filename: filename, original_sha: sha, original_html: original, file_ok: file_ok } };"
+      }
+    },
+    {
+      "id": "2c6fd403-5890-4668-851c-63cb2ef6b526",
+      "name": "Claude Opus 4.7 Polish",
+      "type": "@n8n/n8n-nodes-langchain.anthropic",
+      "typeVersion": 1,
+      "position": [
+        896,
+        96
+      ],
+      "parameters": {
+        "resource": "text",
+        "operation": "message",
+        "modelId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-opus-4-7",
+          "cachedResultName": "Claude Opus 4.7"
+        },
+        "messages": {
+          "values": [
+            {
+              "role": "user",
+              "content": "={{ $json.original_html }}"
+            }
+          ]
+        },
+        "simplify": true,
+        "options": {
+          "system": "You are a world-class web designer. Enhance this personal portfolio site: improve visual hierarchy, micro-interactions, mobile responsiveness, and overall premium feel. Keep the existing dark glassmorphism, accent color #2563eb, all current content, the Google Sheets dashboard, Chart.js, contact form, Julie chatbot, and language switcher placeholder. Output the complete, improved HTML files.",
+          "maxTokens": 8000
+        }
+      },
+      "credentials": {
+        "anthropicApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "82a65b7b-0d55-4090-b03b-5aa344084d12",
+      "name": "Prep Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "var claude = $input.item.json || {};\nvar dec = {};\ntry { dec = $('Decode File').item.json || {}; } catch (e) { dec = {}; }\nvar filename = dec.filename || '';\nvar sha = dec.original_sha || '';\nvar raw = '';\nif (typeof claude.text === 'string' && claude.text) raw = claude.text;\nelse if (typeof claude.content === 'string') raw = claude.content;\nelse if (Array.isArray(claude.content)) { for (var i = 0; i < claude.content.length; i++) { var p = claude.content[i]; if (p && typeof p.text === 'string') raw += p.text; } }\nelse if (claude.message && typeof claude.message.content === 'string') raw = claude.message.content;\nraw = String(raw || '').trim();\nif (raw.indexOf('```') !== -1) { raw = raw.replace(/```html/gi, '').replace(/```/g, '').trim(); }\nvar low = raw.toLowerCase();\nvar startIdx = low.indexOf('<!doctype');\nif (startIdx === -1) startIdx = low.indexOf('<html');\nif (startIdx > 0) { raw = raw.slice(startIdx); }\nvar endIdx = raw.toLowerCase().lastIndexOf('</html>');\nif (endIdx !== -1) { raw = raw.slice(0, endIdx + 7); }\nraw = raw.trim();\nvar lc = raw.toLowerCase();\nvar valid = (lc.indexOf('<html') !== -1 || lc.indexOf('<!doctype') !== -1) && raw.length >= 200;\nvar push_ok = !!(dec.file_ok && sha && valid);\nvar reason = '';\nif (!dec.file_ok) reason = 'source file missing/unreadable';\nelse if (!valid) reason = 'claude output invalid';\nvar putBody = null;\nif (push_ok) { var cb = Buffer.from(raw, 'utf8').toString('base64'); putBody = { message: 'Polish ' + filename + ' with Claude Opus 4.7', content: cb, sha: sha }; }\nif (!push_ok) { console.warn('Skip push for ' + (filename || 'unknown') + ': ' + reason); }\nreturn { json: { filename: filename, push_ok: push_ok, reason: reason, putUrl: 'https://api.github.com/repos/hsndm566/hsndm.tech/contents/' + filename, putBody: putBody } };"
+      }
+    },
+    {
+      "id": "5bed6761-c8b3-40f6-a6f6-6c3eaf0c01f1",
+      "name": "Push OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "pk",
+              "leftValue": "={{ $json.push_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "6cbc94cb-978c-4ecc-a0ad-405bf70695cb",
+      "name": "Push To GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.putUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-website-polish"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.putBody) }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1500
+            }
+          },
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "430ba347-c7d7-4f42-8e1f-2e1296bf7928",
+      "name": "Build Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "var prep = {};\ntry { prep = $('Prep Commit').item.json || {}; } catch (e) { prep = {}; }\nvar resp = $input.item.json || {};\nvar csha = '';\ntry { if (resp.commit && typeof resp.commit.sha === 'string') csha = resp.commit.sha; } catch (e) { csha = ''; }\nvar pushed = !!csha;\nreturn { json: { filename: prep.filename || '', pushed: pushed, commit_sha: csha, reason: pushed ? '' : 'push failed' } };"
+      }
+    },
+    {
+      "id": "2c7f3b34-8bb8-4e98-8c92-0372f63a9d3b",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2016,
+        96
+      ],
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      }
+    },
+    {
+      "id": "bb7f4608-ba2b-4e17-8d75-975b3640b4e5",
+      "name": "Build Skip Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "language": "javaScript",
+        "jsCode": "var prep = {};\ntry { prep = $('Prep Commit').item.json || {}; } catch (e) { prep = {}; }\nreturn { json: { filename: prep.filename || '', pushed: false, commit_sha: '', reason: prep.reason || 'skipped' } };"
+      }
+    },
+    {
+      "id": "65f6a5ab-433c-4043-98fb-3e3792742787",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var items = $input.all().map(function (i) { return i.json || {}; });\nreturn items.map(function (j) { return { json: { filename: j.filename || '', pushed: !!j.pushed, commit_sha: j.commit_sha || '', reason: j.reason || '' } }; });"
+      }
+    }
+  ],
+  "connections": {
+    "Run Once": {
+      "main": [
+        [
+          {
+            "node": "List Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Files": {
+      "main": [
+        [
+          {
+            "node": "Get File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File": {
+      "main": [
+        [
+          {
+            "node": "Decode File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode File": {
+      "main": [
+        [
+          {
+            "node": "Claude Opus 4.7 Polish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Opus 4.7 Polish": {
+      "main": [
+        [
+          {
+            "node": "Prep Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Commit": {
+      "main": [
+        [
+          {
+            "node": "Push OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push OK?": {
+      "main": [
+        [
+          {
+            "node": "Push To GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Skip Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push To GitHub": {
+      "main": [
+        [
+          {
+            "node": "Build Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Result": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Results": {
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Skip Result": {
+      "main": [
+        [
+          {
+            "node": "Merge Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

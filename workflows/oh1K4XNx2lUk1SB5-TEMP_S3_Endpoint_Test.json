@@ -1,0 +1,86 @@
+{
+  "name": "TEMP S3 Endpoint Test",
+  "nodes": [
+    {
+      "id": "s3t00001-0000-0000-0000-000000000001",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "s3t00001-0000-0000-0000-000000000002",
+      "name": "Make Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { note: 's3 endpoint connectivity test' } }];"
+      }
+    },
+    {
+      "id": "s3t00001-0000-0000-0000-000000000003",
+      "name": "S3 Test Upload",
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "upload",
+        "bucketName": "job-apps-backup",
+        "fileName": "s3_endpoint_test.txt",
+        "binaryData": false,
+        "fileContent": "={{ 's3 endpoint connectivity test ' + $now.toISO() }}",
+        "additionalFields": {},
+        "tagsUi": {}
+      },
+      "credentials": {
+        "s3": {
+          "id": "wIs6CoHxqzpDHZlS",
+          "name": "S3 account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Make Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Make Text": {
+      "main": [
+        [
+          {
+            "node": "S3 Test Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

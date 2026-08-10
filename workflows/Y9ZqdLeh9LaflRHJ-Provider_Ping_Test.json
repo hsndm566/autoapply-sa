@@ -1,0 +1,177 @@
+{
+  "name": "Provider Ping Test",
+  "nodes": [
+    {
+      "id": "start",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "ping-sf",
+      "name": "Ping SiliconFlow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -180,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.siliconflow.cn/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'Qwen/Qwen2.5-7B-Instruct', messages: [{ role: 'user', content: 'Ping' }], max_tokens: 5 }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "JJtn6I6Dn0JjhcF8",
+          "name": "Silicon flow"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ping-cb",
+      "name": "Ping Cerebras",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        40,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.cerebras.ai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'llama-3.3-70b', messages: [{ role: 'user', content: 'Ping' }], max_tokens: 5 }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "q18eCPTyfdCpPlV1",
+          "name": "cerebras key"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ping-zai",
+      "name": "Ping Z.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.z.ai/api/paas/v4/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'glm-4.5-flash', messages: [{ role: 'user', content: 'Ping' }], max_tokens: 5 }) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "Ff0G1ve73IkZFnLh",
+          "name": "Bearer Auth account 3"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "results",
+      "name": "Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "function check(name){\n  try {\n    const items = $(name).all();\n    const j = (items[0] && items[0].json) || {};\n    if (j.error) return { alive:false, detail: String(typeof j.error==='object'?JSON.stringify(j.error):j.error).slice(0,240) };\n    if (j.choices || j.id || j.output) return { alive:true, detail:'ok' };\n    return { alive:false, detail: JSON.stringify(j).slice(0,240) };\n  } catch(e){ return { alive:false, detail:'no output: '+e.message }; }\n}\nreturn [{ json: { siliconflow: check('Ping SiliconFlow'), cerebras: check('Ping Cerebras'), zai: check('Ping Z.ai') } }];"
+      }
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Ping SiliconFlow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping SiliconFlow": {
+      "main": [
+        [
+          {
+            "node": "Ping Cerebras",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping Cerebras": {
+      "main": [
+        [
+          {
+            "node": "Ping Z.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ping Z.ai": {
+      "main": [
+        [
+          {
+            "node": "Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

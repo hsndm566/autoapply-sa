@@ -1,0 +1,129 @@
+{
+  "name": "Restore hsndm.tech broken pages",
+  "nodes": [
+    {
+      "id": "a3bea0c1-3df2-4f8f-a1ce-549b15bd5c40",
+      "name": "Start Restore",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "241bb29b-7067-405e-bf09-3b4f3fe864c1",
+      "name": "Build File List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "jsCode": "\nconst owner = 'hsndm566';\nconst repo = 'hsndm.tech';\n// Last genuinely complete (non-truncated, no Claude preamble) commit per file\nconst files = [\n  { filePath: 'index.html',     goodSha: '50ccd07f61d153838594c49e3ad3b2ebc438f45f' },\n  { filePath: 'dashboard.html', goodSha: '499be56e7d7482f41f91b6cd61e471be575d0e38' },\n  { filePath: 'cv.html',        goodSha: 'b1e73993f9da16c84841dfd68d9f2a2f267d429c' },\n];\nreturn files.map(f => ({\n  json: {\n    owner,\n    repo,\n    filePath: f.filePath,\n    goodSha: f.goodSha,\n    goodUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${f.goodSha}/${f.filePath}`,\n  },\n}));\n"
+      }
+    },
+    {
+      "id": "778b4f87-a92b-465f-a5a8-2f65c1d01a2c",
+      "name": "Fetch Last-Good Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.goodUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "03ebc7a6-1cc8-470a-86f9-98c94a9ff135",
+      "name": "Commit Restored File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $(\"Build File List\").item.json.owner }}"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "={{ $(\"Build File List\").item.json.repo }}"
+        },
+        "filePath": "={{ $(\"Build File List\").item.json.filePath }}",
+        "fileContent": "={{ $json.data }}",
+        "commitMessage": "=Restore {{ $(\"Build File List\").item.json.filePath }} to last complete version ({{ $(\"Build File List\").item.json.goodSha.substring(0,7) }}) — fix truncated Claude Opus output",
+        "additionalParameters": {
+          "branch": {
+            "branch": "main"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "68ba75a2-37f7-4216-bac0-f9a8abba501a"
+    }
+  ],
+  "connections": {
+    "Start Restore": {
+      "main": [
+        [
+          {
+            "node": "Build File List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build File List": {
+      "main": [
+        [
+          {
+            "node": "Fetch Last-Good Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Last-Good Content": {
+      "main": [
+        [
+          {
+            "node": "Commit Restored File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

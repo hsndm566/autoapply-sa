@@ -1,0 +1,203 @@
+{
+  "name": "TEMP add-job branch test",
+  "nodes": [
+    {
+      "id": "b0000000-0000-4000-8000-000000000000",
+      "name": "Manual Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "b1111111-1111-4111-8111-111111111111",
+      "name": "Simulate Webhook Body",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1",
+              "name": "body",
+              "type": "object",
+              "value": "={{ { company: 'Dummy Corp (add-job test)', email: 'hasanadam506@gmail.com', cv_url: 'https://example.com/cv.pdf', job_type: 'full-time', industry_preference: 'Manufacturing', target_volume: 50 } }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "a2222222-2222-4222-8222-222222222222",
+      "name": "Map Job Fields",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const body = ($json && $json.body) ? $json.body : {};\n\nreturn {\n  json: {\n    company: body.company || \"\",\n    email: body.email || \"\",\n    cv_url: body.cv_url || \"\",\n    job_type: body.job_type || \"\",\n    industry: body.industry_preference || \"\",\n    target_volume: (body.target_volume !== undefined && body.target_volume !== null && body.target_volume !== \"\") ? Number(body.target_volume) : null,\n    status: \"new\",\n    date_added: new Date().toISOString(),\n  }\n};"
+      }
+    },
+    {
+      "id": "a3333333-3333-4333-8333-333333333333",
+      "name": "Insert Job Row",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "company": "={{ $json.company }}",
+            "email": "={{ $json.email }}",
+            "cv_url": "={{ $json.cv_url }}",
+            "job_type": "={{ $json.job_type }}",
+            "industry": "={{ $json.industry }}",
+            "target_volume": "={{ $json.target_volume }}",
+            "status": "={{ $json.status }}",
+            "date_added": "={{ $json.date_added }}"
+          },
+          "schema": [
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cv_url",
+              "displayName": "cv_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_type",
+              "displayName": "job_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "industry",
+              "displayName": "industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "target_volume",
+              "displayName": "target_volume",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_added",
+              "displayName": "date_added",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Manual Start": {
+      "main": [
+        [
+          {
+            "node": "Simulate Webhook Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simulate Webhook Body": {
+      "main": [
+        [
+          {
+            "node": "Map Job Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Job Fields": {
+      "main": [
+        [
+          {
+            "node": "Insert Job Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

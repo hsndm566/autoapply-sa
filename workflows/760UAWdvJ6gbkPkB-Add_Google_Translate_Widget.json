@@ -1,0 +1,175 @@
+{
+  "name": "Add Google Translate Widget",
+  "nodes": [
+    {
+      "id": "8835f6b4-cd76-4546-9784-43ce97827e86",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f9695bef-0ebf-4a82-9505-8154a8fe550b",
+      "name": "List Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [\n  { json: { filename: \"index.html\" } },\n  { json: { filename: \"dashboard.html\" } },\n  { json: { filename: \"cv.html\" } },\n];"
+      }
+    },
+    {
+      "id": "78b90f8f-5166-42b2-852e-fb0ae7c87a4a",
+      "name": "Get File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "1aa0b24a-199f-427f-bc55-74bea14c360d"
+    },
+    {
+      "id": "53d271a4-ca03-45f3-a461-907e2b67457b",
+      "name": "Inject Widget",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const api = $json;\nconst filename = api.name || api.path;\n// GitHub get returns base64-encoded content when asBinaryProperty is false\nconst raw = (api.content || \"\").replace(/\\n/g, \"\");\nlet html = Buffer.from(raw, \"base64\").toString(\"utf8\");\n\nconst widget = [\n  '<div id=\"google_translate_element\" style=\"position:fixed; top:10px; right:10px; z-index:70;\"></div>',\n  '<script>',\n  String.fromCharCode(32,32) + \"function googleTranslateElementInit() {\",\n  String.fromCharCode(32,32,32,32) + \"new google.translate.TranslateElement({\",\n  String.fromCharCode(32,32,32,32,32,32) + \"pageLanguage: \" + String.fromCharCode(39) + \"en\" + String.fromCharCode(39) + \",\",\n  String.fromCharCode(32,32,32,32,32,32) + \"includedLanguages: \" + String.fromCharCode(39) + \"ar,en\" + String.fromCharCode(39) + \",\",\n  String.fromCharCode(32,32,32,32,32,32) + \"layout: google.translate.TranslateElement.InlineLayout.HORIZONTAL\",\n  String.fromCharCode(32,32,32,32) + \"}, \" + String.fromCharCode(39) + \"google_translate_element\" + String.fromCharCode(39) + \");\",\n  String.fromCharCode(32,32) + \"}\",\n  '</script>',\n  '<script src=\"//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit\"></script>',\n].join(\"\\n\");\n\nlet changed = false;\nif (html.indexOf(\"google_translate_element\") === -1) {\n  const idx = html.lastIndexOf(\"</body>\");\n  if (idx !== -1) {\n    html = html.slice(0, idx) + widget + \"\\n\" + html.slice(idx);\n  } else {\n    html = html + \"\\n\" + widget + \"\\n\";\n  }\n  changed = true;\n}\n\nreturn { filename: filename, html: html, changed: changed };"
+      }
+    },
+    {
+      "id": "9ac0d29d-5a42-43a8-9fea-b1469704bbef",
+      "name": "Push File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.html }}",
+        "commitMessage": "=Add Google Translate widget to {{ $json.filename }} via n8n",
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "d54b49fd-8d91-413e-9308-b380d8343d92"
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "List Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Files": {
+      "main": [
+        [
+          {
+            "node": "Get File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File": {
+      "main": [
+        [
+          {
+            "node": "Inject Widget",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Inject Widget": {
+      "main": [
+        [
+          {
+            "node": "Push File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

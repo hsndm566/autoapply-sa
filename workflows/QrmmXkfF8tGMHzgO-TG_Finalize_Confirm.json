@@ -1,0 +1,62 @@
+{
+  "name": "TG Finalize Confirm",
+  "nodes": [
+    {
+      "id": "tg000000-0000-4000-8000-000000000001",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "tg000000-0000-4000-8000-000000000002",
+      "name": "Send Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "System update complete.\n\nMain pipeline (the new one): self-healing stale-lock reset + GET /client-status endpoint + full daily Telegram run summary.\n\nNew workflows live:\n- Health Check — daily 7AM, error/audit metrics, loud vs quiet alerts.\n- Daily CSV Backup — midnight export (note: Cloud disk is ephemeral, not a durable backup).\n\nAll new nodes have Continue-on-Error. All three workflows published.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "0428cf17-7a4f-4ad8-bcab-dbf826c37811"
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Send Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

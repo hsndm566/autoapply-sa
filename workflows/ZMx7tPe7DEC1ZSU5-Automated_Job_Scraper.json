@@ -1,0 +1,665 @@
+{
+  "name": "Automated Job Scraper",
+  "nodes": [
+    {
+      "id": "c91d2856-54f8-45a1-98ec-51439342e72a",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        112
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "f1a2b3c4-d5e6-4a7b-8c9d-0e1f2a3b4c5d",
+      "name": "Manual Trigger (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        320
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "scraper-run",
+        "authentication": "none",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "a7c1e3f5-scraper-run-9b2d4f6a8c0e"
+    },
+    {
+      "id": "56ed3149-d60e-49cc-aa35-66d503af4055",
+      "name": "Scraper Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        112
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "key",
+              "name": "jooble_key",
+              "type": "string",
+              "value": " \"8cdbd2a9-1660-4fff-a89c-551c5af8cae5\""
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cd7fb8d4-f351-4046-afc5-eceab680f743",
+      "name": "Build Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        112
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const key = ($input.first().json.jooble_key || \"\").replace(/[^a-zA-Z0-9-]/g, \"\");\nconst KEYWORDS = [\n  \"Industrial Engineer\", \"Safety Officer\", \"HSE\", \"Process Engineer\",\n  \"Quality Engineer\", \"Supply Chain\", \"Internal Auditor\", \"Risk Management\",\n  \"Industrial Engineering Intern\", \"Tamheer\", \"Trainee\", \"Coop\"\n];\nreturn KEYWORDS.map((keyword) => ({ json: { jooble_key: key, keyword } }));"
+      }
+    },
+    {
+      "id": "92fe9631-7e28-4c30-8cb1-b23e4322f275",
+      "name": "Fetch Jooble Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        112
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://jooble.org/api/{{ ($json.jooble_key || '').replace(/[^a-zA-Z0-9-]/g, '') }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\"keywords\":\"{{ $json.keyword }}\",\"location\":\"Saudi Arabia\",\"page\":\"1\",\"ResultOnPage\":\"50\"}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "f2aa3db2-2223-4ddd-b02e-fef6e1d51d58",
+      "name": "Get Existing Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        112
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Greenhouse Tokens",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        -80
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const TOKENS = [\n  \"tamara\",\n];\nreturn TOKENS.map((token) => ({ json: { token } }));"
+      }
+    },
+    {
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Fetch Greenhouse Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        112
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://boards-api.greenhouse.io/v1/boards/{{ $json.token }}/jobs?content=true",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Fetch Careerjet Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        304
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://search.api.careerjet.net/v4/query",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "specifyHeaders": "keypair",
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Referer",
+              "value": "https://hsndm566.app.n8n.cloud"
+            }
+          ]
+        },
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "locale_code",
+              "value": "ar_SA"
+            },
+            {
+              "name": "keywords",
+              "value": "Industrial Engineer OR Quality OR HSE OR Supply Chain"
+            },
+            {
+              "name": "location",
+              "value": "Saudi Arabia"
+            },
+            {
+              "name": "page_size",
+              "value": "100"
+            },
+            {
+              "name": "user_ip",
+              "value": "127.0.0.1"
+            },
+            {
+              "name": "user_agent",
+              "value": "Mozilla/5.0"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "horUOf09u46nE4UX",
+          "name": "Unnamed credential"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b1b2b3b4-0005-4000-8000-000000000005",
+      "name": "Fetch Bayt Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        496
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/agentx~bayt-jobs-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"keyword\": \"Industrial Engineer\",\n  \"country\": \"Saudi Arabia\",\n  \"location\": \"Jeddah\",\n  \"max_results\": 50\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "ShpSAMjCydFSYEhr",
+          "name": "Bearer Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b1b2b3b4-0006-4000-8000-000000000006",
+      "name": "Fetch Indeed Jobs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        688
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/agentx~all-jobs-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"platforms\": [\"Indeed\"],\n  \"keyword\": \"Industrial Engineer\",\n  \"country\": \"Saudi Arabia\",\n  \"location\": \"Jeddah\",\n  \"max_results\": 50\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "ShpSAMjCydFSYEhr",
+          "name": "Bearer Auth account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "dfd290c7-e093-4dc9-9361-1716d760e05f",
+      "name": "Filter & Map",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        112
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const TITLE_INCLUDE = [\n  \"industrial engineer\", \"safety officer\", \"hse\", \"process engineer\",\n  \"quality\", \"supply chain\", \"internal auditor\", \"risk management\"\n];\nconst INTERN_TERMS = [\"intern\", \"internship\", \"coop\", \"co-op\", \"co op\", \"trainee\", \"tamheer\"];\nconst SENIORITY_EXCLUDE = [\"senior\", \"manager\", \"director\", \"vp\", \"lead\", \"head\"];\nconst ACCEPT_LOCATIONS = [\"saudi arabia\", \"ksa\", \"remote\"];\nconst JEDDAH_SIGNALS = [\"jeddah\", \"western region\", \"makkah province\", \"makkah region\"];\nconst existing = new Set();\nconst existingTC = new Set();\nconst tcKey = (t, c) => String(t || \"\").toLowerCase().trim() + \"|\" + String(c || \"\").toLowerCase().trim();\nfor (const it of $(\"Get Existing Jobs\").all()) {\n  const row = it.json || {};\n  const u = row.job_url ? String(row.job_url).trim() : \"\";\n  if (u) { existing.add(u); }\n  if (row.job_title || row.company) { existingTC.add(tcKey(row.job_title, row.company)); }\n}\nconst hasWord = (text, term) => {\n  const t = term.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$&\");\n  return new RegExp(\"(^|[^a-z0-9])\" + t + \"([^a-z0-9]|$)\", \"i\").test(text);\n};\nconst decodeEntities = (s) => String(s || \"\")\n  .replace(/&lt;/g, \"<\").replace(/&gt;/g, \">\")\n  .replace(/&quot;/g, '\"').replace(/&#0?39;/g, \"'\").replace(/&#x27;/gi, \"'\")\n  .replace(/&nbsp;/g, \" \").replace(/&amp;/g, \"&\");\nconst stripHtml = (s) => String(s || \"\").replace(/<[^>]*>/g, \" \").replace(/&nbsp;/g, \" \").replace(/&amp;/g, \"&\").replace(/\\s+/g, \" \").trim();\nconst seen = new Set();\nconst out = [];\nconst tryAccept = ({ title, company, desc, locName, url, email }) => {\n  const titleLc = String(title || \"\").toLowerCase();\n  const hay = (String(title || \"\") + \" \" + String(desc || \"\")).toLowerCase();\n  const loc = String(locName || \"\").toLowerCase();\n  const isIntern = INTERN_TERMS.some((k) => titleLc.includes(k));\n  const titleHit = TITLE_INCLUDE.some((k) => titleLc.includes(k)) || isIntern;\n  if (!titleHit) { return; }\n  if (!isIntern && SENIORITY_EXCLUDE.some((k) => hasWord(titleLc, k))) { return; }\n  const locationHit = ACCEPT_LOCATIONS.some((l) => loc.includes(l))\n    || JEDDAH_SIGNALS.some((s) => hay.includes(s));\n  if (!locationHit) { return; }\n  const dedupeKey = titleLc + \"|\" + String(company || \"\").toLowerCase().trim();\n  if (seen.has(dedupeKey)) { return; }\n  seen.add(dedupeKey);\n  if (url && existing.has(url)) { return; }\n  if (existingTC.has(dedupeKey)) { return; }\n  const jeddahSignal = JEDDAH_SIGNALS.some((s) => hay.includes(s)) || loc.includes(\"jeddah\");\n  out.push({ json: {\n    job_title: title,\n    company: company || \"Unknown\",\n    job_description: desc,\n    location: jeddahSignal ? (locName + \" (Jeddah signal)\") : locName,\n    job_url: url,\n    contact_email: email || \"\",\n    status: \"new\",\n    applied: false,\n  }});\n};\nfor (const respItem of $(\"Fetch Jooble Jobs\").all()) {\n  const resp = respItem.json || {};\n  const jobs = Array.isArray(resp.jobs) ? resp.jobs : [];\n  for (const j of jobs) {\n    tryAccept({\n      title: j.title || \"\",\n      company: j.company || j.source || \"Unknown\",\n      desc: stripHtml(j.snippet),\n      locName: j.location || \"\",\n      url: j.link || \"\",\n    });\n  }\n}\nfor (const respItem of $(\"Fetch Greenhouse Jobs\").all()) {\n  const resp = respItem.json || {};\n  const jobs = Array.isArray(resp.jobs) ? resp.jobs : [];\n  for (const j of jobs) {\n    const loc = (j.location && j.location.name) ? j.location.name : \"\";\n    tryAccept({\n      title: j.title || \"\",\n      company: j.company_name || \"Tamara\",\n      desc: stripHtml(decodeEntities(j.content)),\n      locName: loc,\n      url: j.absolute_url || \"\",\n    });\n  }\n}\nfor (const respItem of $(\"Fetch Careerjet Jobs\").all()) {\n  const resp = respItem.json || {};\n  const jobs = Array.isArray(resp.jobs) ? resp.jobs : [];\n  for (const j of jobs) {\n    tryAccept({\n      title: j.title || \"\",\n      company: j.company || \"Unknown\",\n      desc: stripHtml(decodeEntities(j.description)),\n      locName: j.locations || \"\",\n      url: j.url || \"\",\n    });\n  }\n}\nconst mapApifyJob = (respItem) => {\n  const j = respItem.json || {};\n  const locObj = (j.location && typeof j.location === \"object\") ? j.location : {};\n  const locName = [locObj.raw, locObj.locality, locObj.country]\n    .filter((v) => v && String(v).trim())\n    .join(\", \") || (typeof j.location === \"string\" ? j.location : \"\");\n  const emails = Array.isArray(j.emails) ? j.emails.filter((e) => e && String(e).includes(\"@\")) : [];\n  tryAccept({\n    title: j.title || j.jobTitle || \"\",\n    company: j.company_name || j.company || \"Unknown\",\n    desc: stripHtml(decodeEntities(j.description || j.summary || \"\")),\n    locName: locName,\n    url: j.official_url || j.platform_url || j.url || \"\",\n    email: emails.length ? String(emails[0]).trim() : \"\",\n  });\n};\nfor (const respItem of $(\"Fetch Bayt Jobs\").all()) { mapApifyJob(respItem); }\nfor (const respItem of $(\"Fetch Indeed Jobs\").all()) { mapApifyJob(respItem); }\nreturn out;"
+      }
+    },
+    {
+      "id": "90dcd173-1cf5-4641-9c62-414917289648",
+      "name": "Clean Description",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1568,
+        112
+      ],
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.job_description }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You are a professional industrial engineering data cleaner. Extract only the core job title, location, responsibilities, and key requirements from the text. Remove all HTML tags, legal disclaimers, and website navigation menus. Return plain text only, no preamble."
+            }
+          ]
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b2633c54-b7fc-4aa9-89b2-68c7ccef6832",
+      "name": "Groq Cleaner Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1648,
+        336
+      ],
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {
+          "maxTokensToSample": 400,
+          "temperature": 0.2
+        }
+      },
+      "credentials": {
+        "groqApi": {
+          "id": "um6j4XUI4cKC5WSP",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "id": "62a61b80-738b-4b9a-b4d8-41d9684dcfa3",
+      "name": "Merge Cleaned",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        112
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const bases = $('Filter & Map').all();\nconst cleanedItems = $('Clean Description').all();\nconst NON_ANSWER_PATTERNS = [\n  /no information found/i,\n  /please provide (?:the )?(?:full |more )?(?:text|information|details|content)/i,\n  /no (?:relevant )?(?:job )?(?:information|content|details|text) (?:was )?(?:found|provided|available)/i,\n  /unable to (?:extract|find|process)/i,\n  /i (?:cannot|can't|could not|couldn't) (?:extract|find|process|help)/i,\n  /there is no (?:text|information|content|job)/i,\n  /the (?:provided )?text (?:is empty|does not contain|contains no)/i,\n  /^n\\/?a$/i,\n  /^none$/i,\n];\nconst isNonAnswer = (s) => {\n  if (!s) { return true; }\n  if (s.length < 25) { return true; }\n  return NON_ANSWER_PATTERNS.some((re) => re.test(s));\n};\nconst out = [];\nfor (let i = 0; i < bases.length; i++) {\n  const base = bases[i].json || {};\n  const original = (base.job_description || \"\").trim();\n  const cleanedJson = (cleanedItems[i] && cleanedItems[i].json) ? cleanedItems[i].json : {};\n  const cleaned = (cleanedJson.text || \"\").trim();\n  const finalDescription = isNonAnswer(cleaned) ? (original || cleaned) : cleaned;\n  out.push({ json: { ...base, job_description: finalDescription } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "cc8269b6-7214-4ef4-ae38-b9ec53f3f0a2",
+      "name": "Add Scraped Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2144,
+        112
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_title": "={{ $json.job_title }}",
+            "company": "={{ $json.company }}",
+            "job_description": "={{ $json.job_description }}",
+            "location": "={{ $json.location }}",
+            "job_url": "={{ $json.job_url }}",
+            "contact_email": "={{ $json.contact_email }}",
+            "status": "={{ $json.status }}",
+            "applied": "={{ $json.applied }}"
+          },
+          "schema": [
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_description",
+              "displayName": "job_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_url",
+              "displayName": "job_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contact_email",
+              "displayName": "contact_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "applied",
+              "displayName": "applied",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Scraper Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Scraper Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scraper Config": {
+      "main": [
+        [
+          {
+            "node": "Build Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Queries": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jooble Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Jooble Jobs": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Jobs": {
+      "main": [
+        [
+          {
+            "node": "Greenhouse Tokens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Greenhouse Tokens": {
+      "main": [
+        [
+          {
+            "node": "Fetch Greenhouse Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Greenhouse Jobs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Careerjet Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Careerjet Jobs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Bayt Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Bayt Jobs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Indeed Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Indeed Jobs": {
+      "main": [
+        [
+          {
+            "node": "Filter & Map",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Map": {
+      "main": [
+        [
+          {
+            "node": "Clean Description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Description": {
+      "main": [
+        [
+          {
+            "node": "Merge Cleaned",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Cleaner Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Clean Description",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Cleaned": {
+      "main": [
+        [
+          {
+            "node": "Add Scraped Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "errorWorkflow": "zN6y0EneCaQyQwci",
+    "availableInMCP": true
+  },
+  "staticData": {
+    "node:Every Day 07:00": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    },
+    "node:Every 6 Hours": {
+      "recurrenceRules": [
+        12
+      ],
+      "recurrenceRuleSignatures": [
+        "hours:6"
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 2,
+  "meta": null
+}

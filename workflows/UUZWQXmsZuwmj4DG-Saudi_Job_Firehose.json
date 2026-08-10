@@ -1,0 +1,317 @@
+{
+  "name": "Saudi Job Firehose",
+  "nodes": [
+    {
+      "id": "6b6f5c9d-cfa1-41c2-9a99-1f54aa439907",
+      "name": "Every Day 8AM Riyadh",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 5 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "5bec261e-5f3b-4097-bcf8-0a6b2ae21b16",
+      "name": "Jooble Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Emit one item per keyword bucket. Fetch Jooble runs once per item.\n// IMPORTANT: Jooble matches location on COUNTRY reliably; \"Jeddah\" alone\n// returns 0 results, so we query \"Saudi Arabia\" and let Merge keep Saudi rows.\n// Broad keyword coverage (engineering + general + sales + part-time) drives\n// volume toward the 100/day target.\nconst buckets = [\n  'engineer OR industrial OR mechanical OR operations',\n  'supply chain OR logistics OR procurement OR warehouse',\n  'process OR quality OR lean OR production OR maintenance',\n  'sales OR sales representative OR business development',\n  'retail OR store OR merchandiser OR cashier',\n  'customer service OR call center OR support OR receptionist',\n  'coordinator OR administrator OR assistant OR data entry',\n  'part time OR night shift OR driver OR delivery OR security',\n];\nreturn buckets.map((k) => ({ json: { keywords: k, location: 'Saudi Arabia', date: '7', page: '1' } }));\n"
+      }
+    },
+    {
+      "id": "1a8e90fb-f57b-44bb-a51e-b1ff78b80c0d",
+      "name": "Fetch Jooble",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://jooble.org/api/8cdbd2a9-1660-4fff-a89c-551c5af8cae5",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\"keywords\":\"{{ $json.keywords }}\",\"location\":\"{{ $json.location }}\",\"date\":\"{{ $json.date }}\",\"page\":\"{{ $json.page }}\"}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c16ef55a-a1aa-44b6-a707-4016d2112132",
+      "name": "Collapse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "return [{ json: { ok: true } }];"
+      }
+    },
+    {
+      "id": "56048e35-3a1b-42ae-8445-896eae3c1dab",
+      "name": "Get Existing Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fdf1e8e5-c3fd-4cdb-bd52-36d0d1335088",
+      "name": "Merge & Dedup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst stripHtml = (s) => String(s || '')\n  .replace(/<[^>]*>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&lt;/g, '<')\n  .replace(/&gt;/g, '>')\n  .replace(/&quot;/g, '\"')\n  .replace(/&#0?39;/g, \"'\")\n  .replace(/\\s+/g, ' ')\n  .trim();\n\n// location relevance: whole-word match only (avoid \"ksa\" matching inside\n// German compound words). Accept genuine Saudi/Jeddah signals.\nconst ACCEPT = ['saudi', 'saudi arabia', 'jeddah', 'ksa', 'riyadh', 'makkah', 'mecca', 'dammam', 'khobar', 'jubail', 'medina', 'madinah', 'جدة', 'السعودية'];\nconst hasWord = (text, term) => {\n  const t = term.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');\n  return new RegExp('(^|[^\\\\p{L}0-9])' + t + '([^\\\\p{L}0-9]|$)', 'iu').test(text);\n};\nconst locationOk = (loc, desc) => {\n  const hay = String(loc || '') + ' ' + String(desc || '');\n  return ACCEPT.some((k) => hasWord(hay, k));\n};\n\n// Jooble (and similar) URLs carry per-run tracking query params (elckey, aq,\n// pos, scr...) that change every run, so the SAME job produces a different full\n// URL each time. Dedup on a normalized key: strip the query string so the\n// stable path (e.g. jooble.org/desc/<id>) is what we compare on.\nconst normUrl = (u) => String(u || '').trim().split('?')[0].replace(/\\/+$/, '').toLowerCase();\n\n// existing job keys (dedup against table)\nconst existingUrls = new Set();\ntry {\n  for (const it of $('Get Existing Jobs').all()) {\n    const u = it.json && it.json.job_url ? normUrl(it.json.job_url) : '';\n    if (u) existingUrls.add(u);\n  }\n} catch (e) {}\n\nconst seen = new Set();\nconst out = [];\nconst push = (title, company, desc, url, loc) => {\n  const t = String(title || '').trim();\n  const u = String(url || '').trim();\n  if (!t || !u) return;\n  const key = normUrl(u);\n  const cleanDesc = stripHtml(desc);\n  if (!cleanDesc || cleanDesc.length < 20) return;\n  if (!locationOk(loc, cleanDesc)) return;\n  if (existingUrls.has(key) || seen.has(key)) return;\n  seen.add(key);\n  out.push({ json: {\n    job_title: t,\n    company: String(company || 'Unknown').trim(),\n    job_description: cleanDesc,\n    location: String(loc || 'Saudi Arabia').trim(),\n    job_url: u,\n    contact_email: '',\n    status: 'new',\n    job_type: 'general',\n    industry: 'General',\n  }});\n};\n\n// Jooble (runs once per keyword bucket) -> resp.jobs[]\ntry {\n  for (const r of $('Fetch Jooble').all()) {\n    const resp = r.json || {};\n    const jobs = Array.isArray(resp.jobs) ? resp.jobs : [];\n    for (const j of jobs) push(j.title, j.company || j.source, j.snippet, j.link, j.location);\n  }\n} catch (e) {}\n\nreturn out;\n"
+      }
+    },
+    {
+      "id": "838a372e-3ac3-4da1-ad9b-2a9d34567ea0",
+      "name": "Get Agencies",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "lhvfLt3w9HL2fNY9",
+          "cachedResultName": "agency_targets"
+        },
+        "returnAll": true
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ae3d1d9c-fce2-49cf-b30e-541ef83155d8",
+      "name": "Agency Match",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Fill contact_email for jobs that have none, by matching the job's title +\n// description keywords against each agency's specialties. Jobs that ALREADY\n// have a contact_email pass through UNCHANGED (existing path). Load is spread\n// across agencies (per-agency cap + least-loaded pick) so no single agency\n// inbox gets flooded in one run — important for deliverability / warm-up.\nconst jobs = $('Merge & Dedup').all().map((i) => i.json || {});\nconst agencies = $('Get Agencies').all()\n  .map((i) => i.json || {})\n  .filter((a) => a && a.contact_email && String(a.contact_email).trim())\n  .map((a) => ({\n    name: String(a.agency_name || 'Agency').trim(),\n    email: String(a.contact_email).trim(),\n    region: String(a.region || 'Saudi Arabia').trim(),\n    specialties: String(a.specialties || '')\n      .toLowerCase()\n      .split(',')\n      .map((s) => s.trim())\n      .filter(Boolean),\n    assigned: 0,\n  }));\n\nconst PER_AGENCY_CAP = 3; // max jobs routed to one agency per run\n\nconst out = [];\nfor (const j of jobs) {\n  // Existing path: job already has an email -> keep untouched.\n  if (j.contact_email && String(j.contact_email).trim()) {\n    out.push({ json: j });\n    continue;\n  }\n\n  const hay = (String(j.job_title || '') + ' ' + String(j.job_description || '')).toLowerCase();\n\n  // Score every agency by how many of its specialty terms appear in the job.\n  const matches = [];\n  for (const a of agencies) {\n    let score = 0;\n    for (const sp of a.specialties) {\n      if (sp && hay.includes(sp)) score++;\n    }\n    if (score > 0) matches.push({ a, score });\n  }\n\n  if (!matches.length) {\n    // No agency specialty matched: keep row as-is (no email). It is still\n    // inserted like before, but the applier cannot email it. This preserves\n    // the original behaviour and never fabricates an email.\n    out.push({ json: j });\n    continue;\n  }\n\n  // Prefer under-cap agencies; among candidates pick highest specialty score,\n  // then least-loaded, to spread volume.\n  const underCap = matches.filter((m) => m.a.assigned < PER_AGENCY_CAP);\n  const pool = underCap.length ? underCap : matches;\n  pool.sort((x, y) => (y.score - x.score) || (x.a.assigned - y.a.assigned));\n  const pick = pool[0].a;\n  pick.assigned++;\n\n  out.push({ json: {\n    ...j,\n    contact_email: pick.email,\n    location: j.location || pick.region,\n    job_description: String(j.job_description || '').trim() + ' [via agency: ' + pick.name + ']',\n    status: 'new',\n    job_type: 'general',\n  }});\n}\n\nreturn out;\n"
+      }
+    },
+    {
+      "id": "e1e2e171-232b-44ed-876a-6fae0dfa2989",
+      "name": "Add New Jobs",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_title": "={{ $json.job_title }}",
+            "company": "={{ $json.company }}",
+            "job_description": "={{ $json.job_description }}",
+            "location": "={{ $json.location }}",
+            "job_url": "={{ $json.job_url }}",
+            "contact_email": "={{ $json.contact_email }}",
+            "status": "={{ $json.status }}",
+            "job_type": "={{ $json.job_type }}",
+            "industry": "={{ $json.industry }}"
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "1ea4326f-7747-4d4b-bc66-2f9977e9c059",
+      "name": "Manual Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every Day 8AM Riyadh": {
+      "main": [
+        [
+          {
+            "node": "Jooble Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jooble Queries": {
+      "main": [
+        [
+          {
+            "node": "Fetch Jooble",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Jooble": {
+      "main": [
+        [
+          {
+            "node": "Collapse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collapse": {
+      "main": [
+        [
+          {
+            "node": "Get Existing Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Existing Jobs": {
+      "main": [
+        [
+          {
+            "node": "Merge & Dedup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge & Dedup": {
+      "main": [
+        [
+          {
+            "node": "Get Agencies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Agencies": {
+      "main": [
+        [
+          {
+            "node": "Agency Match",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agency Match": {
+      "main": [
+        [
+          {
+            "node": "Add New Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Run": {
+      "main": [
+        [
+          {
+            "node": "Jooble Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": {
+    "node:Every Day 8AM Riyadh": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": null
+}

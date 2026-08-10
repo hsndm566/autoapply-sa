@@ -1,0 +1,565 @@
+{
+  "name": "Autopilot",
+  "nodes": [
+    {
+      "id": "315d73ae-5d12-40d4-8ab3-43b6f2dfdc2b",
+      "name": "Every 4 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        384
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "23abb8e6-4c9a-4974-9ae5-7b898c3f92b5",
+      "name": "Build Targets",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const base = 'https://hsndm566.app.n8n.cloud/api/v1';\nconst targets = [\n  { wf_id: '9xBPxYPpxIEmQdjI', wf_name: 'Job Engine Pro' },\n  { wf_id: 'ruWrLnz5TVYoJRwz', wf_name: 'SiteForge' },\n  { wf_id: 'FNDaY5ZxgKtVQww9', wf_name: 'AI Hub & Health' },\n];\nreturn targets.map(function (t) {\n  return { json: { wf_id: t.wf_id, wf_name: t.wf_name, base_url: base } };\n});"
+      }
+    },
+    {
+      "id": "ebef731b-f1b7-4db0-8573-c2bac631b4ce",
+      "name": "Get Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        384
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.base_url }}/workflows/{{ $json.wf_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {},
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "4b461a86-69e4-4340-b028-e28e3842bfae",
+      "name": "Get Executions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        384
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Build Targets').item.json.base_url }}/executions?workflowId={{ $('Build Targets').item.json.wf_id }}&limit=5",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {},
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "b08cc659-2992-4c5c-83ed-a413489ba259",
+      "name": "Analyze Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const targets = $('Build Targets').all();\nlet wfs = [];\nlet exs = [];\ntry { wfs = $('Get Workflow').all(); } catch (e) { wfs = []; }\ntry { exs = $('Get Executions').all(); } catch (e) { exs = []; }\nconst out = [];\nfor (let i = 0; i < targets.length; i++) {\n  const t = targets[i].json || {};\n  const wf = (wfs[i] && wfs[i].json) ? wfs[i].json : {};\n  const exResp = (exs[i] && exs[i].json) ? exs[i].json : {};\n  const active = (wf.active === true);\n  const list = Array.isArray(exResp.data) ? exResp.data : (Array.isArray(exResp) ? exResp : []);\n  let consecutiveFailures = 0;\n  for (let k = 0; k < list.length; k++) {\n    const st = String(list[k].status || (list[k].finished === false ? 'running' : 'success')).toLowerCase();\n    if (st === 'error' || st === 'crashed' || st === 'failed') consecutiveFailures++;\n    else break;\n  }\n  out.push({ name: t.wf_name, id: t.wf_id, active: active, unpublished: !active, consecutive_failures: consecutiveFailures });\n}\nconst unpublished = out.filter(function (w) { return w.unpublished; });\nconst failing = out.filter(function (w) { return w.consecutive_failures > 3; });\nreturn [{ json: { workflows: out, unpublished: unpublished, failing: failing, checked_at: new Date().toISOString() } }];"
+      }
+    },
+    {
+      "id": "9559ed9b-7b2f-4eb8-9f4a-51c653ce1aaf",
+      "name": "Check Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        384
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://hsndm.tech",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "cb86c6fa-1523-4a19-b2ac-f18cfd95fc65",
+      "name": "Decision Engine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        384
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const analysis = $('Analyze Status').first().json || {};\nconst web = $input.first().json || {};\nlet webStatus = 0;\nif (web.statusCode !== undefined) webStatus = Number(web.statusCode);\nelse if (web.status !== undefined) webStatus = Number(web.status);\nelse if (web.body !== undefined || web.data !== undefined) webStatus = 200;\nconst workflows = analysis.workflows || [];\nconst unpublished = analysis.unpublished || [];\nconst failing = analysis.failing || [];\n\n// Provider failure signal: AI Hub & Health failing repeatedly is treated as a provider problem.\nconst aiHub = workflows.filter(function (w) { return w.id === 'FNDaY5ZxgKtVQww9'; })[0];\nconst providerTrouble = aiHub && aiHub.consecutive_failures > 3;\n\nlet action = 'none';\nlet target = '';\nlet target_id = '';\nlet provider = '';\nlet alert = false;\n\nif (unpublished.length > 0) {\n  action = 'republish';\n  target = unpublished[0].name;\n  target_id = unpublished[0].id;\n  alert = true;\n} else if (providerTrouble) {\n  action = 'reorder_fallbacks';\n  provider = 'groq';\n  alert = true;\n} else if (webStatus !== 200) {\n  action = 'repush_website';\n  alert = true;\n} else if (failing.length > 0) {\n  action = 'alert';\n  alert = true;\n}\n\nconst aliveProviders = webStatus === 200 ? 'website OK' : 'website DOWN (' + webStatus + ')';\nconst wfLines = workflows.map(function (w) {\n  return (w.active ? 'OK ' : 'DOWN ') + w.name + (w.consecutive_failures > 0 ? (' (' + w.consecutive_failures + ' recent failures)') : '');\n}).join('\\n');\n\nreturn [{ json: {\n  action: action, target: target, target_id: target_id, provider: provider, alert: alert,\n  web_status: webStatus, website_ok: webStatus === 200,\n  workflows: workflows, unpublished_count: unpublished.length, failing_count: failing.length,\n  base_url: 'https://hsndm566.app.n8n.cloud/api/v1',\n  summary_workflows: wfLines, summary_web: aliveProviders,\n} }];"
+      }
+    },
+    {
+      "id": "cd2f768d-7f0f-4a37-833e-b48646af03ca",
+      "name": "Action Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1568,
+        176
+      ],
+      "parameters": {
+        "mode": "rules",
+        "rules": {
+          "values": [
+            {
+              "renameOutput": true,
+              "outputKey": "republish",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "republish",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "reorder",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "reorder_fallbacks",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "renameOutput": true,
+              "outputKey": "repush",
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "loose"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "repush_website",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      }
+    },
+    {
+      "id": "030bad17-c23e-4970-8ef4-4dada36cd466",
+      "name": "Execute Republish",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url }}/workflows/{{ $json.target_id }}/activate",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {},
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "fcd84ab3-af05-4c31-9965-b2615d618f0a",
+      "name": "Execute Reorder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://hsndm566.app.n8n.cloud/webhook/ai-hub",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ task_type: \"reorder\", provider: $json.provider }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "870b8543-9df9-43ae-a1ee-79b9186e5ccf",
+      "name": "Repush: Get index.html",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        384
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.github.com/repos/hsndm566/hsndm.tech/contents/index.html",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-autopilot"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "0cc15e22-dc28-4495-9444-220aced24c9e",
+      "name": "Repush: Put index.html",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2016,
+        384
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "https://api.github.com/repos/hsndm566/hsndm.tech/contents/index.html",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-autopilot"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: \"Autopilot: repush index.html (recovery)\", content: ($json.content || \"\"), sha: ($json.sha || \"\") }) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "af0673a3-09be-4ea9-9ea0-84e1f931320c",
+      "name": "Prep Digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        576
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const d = $('Decision Engine').first().json || {};\n// Current hour in Asia/Riyadh (UTC+3)\nconst nowUtc = new Date();\nconst riyadhHour = (nowUtc.getUTCHours() + 3) % 24;\nconst isDigestHour = riyadhHour === 21;\nconst alert = d.alert === true;\nif (!isDigestHour && !alert) { return []; }\n\nlet actionLine;\nswitch (d.action) {\n  case 'republish': actionLine = 'Republished workflow: ' + d.target; break;\n  case 'reorder_fallbacks': actionLine = 'Reordered fallbacks: demoted provider ' + d.provider; break;\n  case 'repush_website': actionLine = 'Re-pushed website index.html (was returning ' + d.web_status + ')'; break;\n  case 'alert': actionLine = 'Flagged: ' + d.failing_count + ' workflow(s) failing repeatedly'; break;\n  default: actionLine = 'All systems nominal';\n}\nconst header = isDigestHour ? 'Autopilot Daily Digest' : 'Autopilot Alert';\nconst lines = [\n  header + ' - ' + new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC',\n  '',\n  'Workflows:',\n  d.summary_workflows || '(none)',\n  '',\n  'Website: ' + d.summary_web,\n  '',\n  'Action this run: ' + actionLine,\n];\nreturn [{ json: { chat_id: '8890901423', message: lines.join('\\n') } }];"
+      }
+    },
+    {
+      "id": "4dd86845-6257-420f-b9f2-d165160c849b",
+      "name": "Send Digest",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1792,
+        576
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "1e28b532-c267-4d6d-945e-0983af72231f"
+    }
+  ],
+  "connections": {
+    "Every 4 Hours": {
+      "main": [
+        [
+          {
+            "node": "Build Targets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Targets": {
+      "main": [
+        [
+          {
+            "node": "Get Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get Executions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Executions": {
+      "main": [
+        [
+          {
+            "node": "Analyze Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Status": {
+      "main": [
+        [
+          {
+            "node": "Check Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Website": {
+      "main": [
+        [
+          {
+            "node": "Decision Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decision Engine": {
+      "main": [
+        [
+          {
+            "node": "Action Router",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prep Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Router": {
+      "main": [
+        [
+          {
+            "node": "Execute Republish",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Reorder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Repush: Get index.html",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Repush: Get index.html": {
+      "main": [
+        [
+          {
+            "node": "Repush: Put index.html",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Digest": {
+      "main": [
+        [
+          {
+            "node": "Send Digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

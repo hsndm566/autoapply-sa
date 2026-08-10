@@ -1,0 +1,413 @@
+{
+  "name": "Kimi Delegation — Batch Send (All New Rows)",
+  "nodes": [
+    {
+      "id": "125a37ab-c5f5-4ee5-aced-02eb7652f137",
+      "name": "Run Batch Now",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        80
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "f9db1d57-47fb-4cc5-b60c-6fad2518aab2",
+      "name": "Drive Folder Search",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "searchMethod": "name",
+        "queryString": "Job Applications",
+        "returnAll": false,
+        "limit": 5,
+        "filter": {
+          "whatToSearch": "folders"
+        },
+        "options": {}
+      },
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "34dJpcQH8s7EzLLJ",
+          "name": "Google Drive account 2"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "041c5224-e828-4b81-bc49-c29c268f64dd",
+      "name": "Drive Folder ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var all = $input.all();\nvar id = '';\nfor (var i = 0; i < all.length; i++) { var j = all[i].json || {}; if (j && j.id) { id = j.id; break; } }\nreturn [{ json: { drive_folder_id: id } }];"
+      }
+    },
+    {
+      "id": "5a0a049c-283a-4e28-bdc9-478a02eb0e81",
+      "name": "Get New Rows",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "new"
+            }
+          ]
+        },
+        "returnAll": true
+      }
+    },
+    {
+      "id": "98048b35-5a62-4c63-ba8f-26a002eeaed5",
+      "name": "Filter Emailable",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        192
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var all = $input.all();\nvar out = [];\nfor (var i = 0; i < all.length; i++) {\n  var r = all[i].json || {};\n  var email = (r.contact_email || r.email || '').toString().trim();\n  if (email) { out.push({ json: { row_id: r.id, company: r.company || 'the company', industry: r.industry || 'Engineering', recipient: email, job_description: r.job_description || '' } }); }\n}\nvar total = out.length;\nfor (var k = 0; k < out.length; k++) { out[k].json.total = total; out[k].json.processed_index = k + 1; }\nreturn out;"
+      }
+    },
+    {
+      "id": "2a3bd935-22a6-4957-b215-eb58b1ad5ab0",
+      "name": "Get Sent Count",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "sent"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "7b1014ce-66e2-47eb-b2ec-069976130097",
+      "name": "Build Final Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var all = $input.all();\nvar sent = 0;\nfor (var i = 0; i < all.length; i++) { if (all[i].json && Object.keys(all[i].json).length > 0) sent++; }\nvar tgText = 'Batch complete. Total rows marked \"sent\" in job_applications: ' + sent + '. (Cumulative, includes any prior sends.)';\nreturn [{ json: { sent_total: sent, tgText: tgText } }];"
+      }
+    },
+    {
+      "id": "7138ecc0-9c1c-42b1-af32-3d0f7b783d62",
+      "name": "Telegram Batch Complete",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "={{ $json.tgText }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "a4c609d8-60f4-4ef6-a927-47153649e209"
+    },
+    {
+      "id": "e0b9865a-0270-4f0c-aa5d-da99fb7f657a",
+      "name": "Process Row",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1344,
+        192
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FUL8M9AOLSG0KLFJ",
+          "cachedResultName": "Kimi — Process One Row"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "matchingColumns": [],
+          "value": {
+            "row_id": "={{ $json.row_id }}",
+            "company": "={{ $json.company }}",
+            "industry": "={{ $json.industry }}",
+            "recipient": "={{ $json.recipient }}",
+            "job_description": "={{ $json.job_description }}",
+            "drive_folder_id": "={{ $('Drive Folder ID').first().json.drive_folder_id }}",
+            "processed_index": "={{ $json.processed_index }}",
+            "total": "={{ $json.total }}"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "d75fd2d5-b466-4bbc-883c-11ff1272c027",
+      "name": "Wait 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        272
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "webhookId": "bc33ed1d-5969-4e62-b7db-10b1342958b2"
+    },
+    {
+      "id": "25df5249-2848-46f8-8152-dd47684c4979",
+      "name": "Loop Rows",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1120,
+        192
+      ],
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      }
+    },
+    {
+      "id": "fe020c10-597a-4eca-a2e8-fc540bc55ab5",
+      "name": "Auto Run (hourly, dedup-safe)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        272
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Run Batch Now": {
+      "main": [
+        [
+          {
+            "node": "Drive Folder Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Folder Search": {
+      "main": [
+        [
+          {
+            "node": "Drive Folder ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive Folder ID": {
+      "main": [
+        [
+          {
+            "node": "Get New Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get New Rows": {
+      "main": [
+        [
+          {
+            "node": "Filter Emailable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Emailable": {
+      "main": [
+        [
+          {
+            "node": "Loop Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sent Count": {
+      "main": [
+        [
+          {
+            "node": "Build Final Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Summary": {
+      "main": [
+        [
+          {
+            "node": "Telegram Batch Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Row": {
+      "main": [
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s": {
+      "main": [
+        [
+          {
+            "node": "Loop Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Rows": {
+      "main": [
+        [
+          {
+            "node": "Get Sent Count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto Run (hourly, dedup-safe)": {
+      "main": [
+        [
+          {
+            "node": "Drive Folder Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": {
+    "node:Auto Run (hourly, dedup-safe)": {
+      "recurrenceRules": [
+        null
+      ],
+      "recurrenceRuleSignatures": [
+        null
+      ]
+    }
+  },
+  "pinData": {},
+  "triggerCount": 1,
+  "meta": null
+}

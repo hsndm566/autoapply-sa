@@ -1,0 +1,1618 @@
+{
+  "name": "AI Website Builder",
+  "nodes": [
+    {
+      "id": "9c1cb936-b138-4119-9b1d-1a2047ecea87",
+      "name": "Site Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "siteforge",
+        "responseMode": "lastNode"
+      },
+      "webhookId": "674e5afe-d305-4c8a-aa9f-67a0b4212671"
+    },
+    {
+      "id": "80adc1ed-8660-40c6-93dd-828d759d85d3",
+      "name": "Prep Site",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var b = ($json && $json.body) ? $json.body : ($json || {});\nvar name = b.business_name || 'My Business';\nvar tagline = b.tagline || '';\nvar servicesRaw = b.services;\nvar services = '';\nif (Array.isArray(servicesRaw)) { services = servicesRaw.filter(function(s){ return s !== null && s !== undefined && String(s).trim(); }).map(function(s){ return String(s).trim(); }).join(', '); }\nelse { services = servicesRaw ? String(servicesRaw) : ''; }\nvar logoUrl = b.logo_url || '';\nvar colorPref = b.color_preference || '';\nvar brandHex = '';\nif (b.brand_hex_color && String(b.brand_hex_color).trim()) {\n  var bh = String(b.brand_hex_color).trim();\n  if (bh.charAt(0) !== '#') { bh = '#' + bh; }\n  if (/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(bh)) { brandHex = bh; }\n}\nvar menuRaw = b.menu_photo_urls;\nvar menuPhotos = [];\nif (Array.isArray(menuRaw)) { menuPhotos = menuRaw; }\nelse if (menuRaw && String(menuRaw).trim()) { menuPhotos = String(menuRaw).split(','); }\nmenuPhotos = menuPhotos.map(function(u){ return String(u == null ? '' : u).trim(); }).filter(function(u){ return u.length > 0; });\nvar socialRaw = (b.social_links && typeof b.social_links === 'object' && !Array.isArray(b.social_links)) ? b.social_links : {};\nvar socialLinks = {};\nvar socialParts = [];\nvar socialKeys = Object.keys(socialRaw);\nfor (var i = 0; i < socialKeys.length; i++) {\n  var k = socialKeys[i];\n  var v = socialRaw[k];\n  if (v && String(v).trim()) { socialLinks[k] = String(v).trim(); socialParts.push(k + ': ' + String(v).trim()); }\n}\nvar accent = brandHex || colorPref || '';\nvar descParts = [];\nif (accent) descParts.push('Preferred brand/accent color: ' + accent + '.');\nif (logoUrl) descParts.push('Use this logo image at the top of the page: ' + logoUrl + '.');\nif (menuPhotos.length) descParts.push('Include a menu gallery section rendering these ' + menuPhotos.length + ' menu photos.');\nif (socialParts.length) descParts.push('Add social media links in the footer.');\nvar description = descParts.join(' ');\nvar sys = 'You are an expert web designer and front-end developer. Generate a COMPLETE, professional, production-ready single-file HTML web page for the given business. Requirements: valid HTML5 document starting with <!DOCTYPE html>; all CSS embedded in a <style> tag and all JavaScript embedded in a <script> tag (no external build steps, though loading fonts/icons from a public CDN is allowed); mobile-responsive layout using modern CSS (Grid/Flexbox, CSS variables); include a hero section with the business name and tagline, a services/features section, an about section, and a contact/footer section; use contextual, industry-appropriate real copy (never Lorem Ipsum); include SEO meta tags and accessibility attributes; tasteful animations. If a logo URL is provided, place it in the header. If a brand/accent color is provided, use it as the primary brand color (as a CSS variable) overriding any default. If menu photo URLs are provided, add a dedicated \"Menu\" gallery section that renders each photo as a responsive <img> in a CSS grid with lazy loading and alt text. If social media links are provided, render matching social icons/links in the footer. Only include sections for which data is actually provided; when a field is absent, do not mention or fabricate it. Output ONLY the raw HTML document. Do not wrap it in markdown code fences, do not add any commentary before or after.';\nvar usr = 'Business Name: ' + name + '\\nTagline: ' + tagline + '\\nServices: ' + services;\nif (logoUrl) usr += '\\nLogo URL (place in header): ' + logoUrl;\nif (accent) usr += '\\nBrand/Accent Color (use as primary, override default): ' + accent;\nif (menuPhotos.length) usr += '\\nMenu Photo URLs (render as a responsive gallery section):\\n- ' + menuPhotos.join('\\n- ');\nif (socialParts.length) usr += '\\nSocial Links (render as icons in footer):\\n- ' + socialParts.join('\\n- ');\nif (description) usr += '\\nNotes: ' + description;\nvar slug = String(name).toLowerCase().trim().replace(/[\\u2019'\".]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');\nreturn [{ json: { business_name: name, tagline: tagline, services: services, logo_url: logoUrl, color_preference: colorPref, brand_hex_color: brandHex, menu_photo_urls: menuPhotos, social_links: socialLinks, description: description, slug: slug, sys: sys, usr: usr } }];"
+      }
+    },
+    {
+      "id": "8bb1c558-b568-4a94-b026-a3fa862fb283",
+      "name": "Generate HTML (AI Hub)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Hub & Health"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Prep Site').first().json.sys }}",
+            "user": "={{ $('Prep Site').first().json.usr }}",
+            "max_tokens": "={{ 8000 }}",
+            "temperature": "={{ 0.6 }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "66a77aaa-88ca-46da-8855-9cf86ded19aa",
+      "name": "Extract HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Site').first().json || {};\nvar src = $input.first().json || {};\nvar raw = String(src.text || '');\nvar source = src.provider_used || src.provider || 'hub';\nfunction clean(s){ s=String(s||'').trim(); if(s.indexOf('```')!==-1){ s=s.replace(/```html/gi,'').replace(/```/g,'').trim(); } return s; }\nvar c = clean(raw); var lc = c.toLowerCase();\nvar ok = (lc.indexOf('<html')!==-1 || lc.indexOf('<!doctype')!==-1) && c.length>=120;\nreturn [{ json: { business_name: prep.business_name, slug: prep.slug, html: ok?c:'', ai_source: ok?source:'none', html_ok: ok } }];"
+      }
+    },
+    {
+      "id": "3566e6ab-6373-4e1f-9e6d-a2892e6263b5",
+      "name": "Finalize HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var m = $input.first().json || {};\nvar prep = $('Prep Site').first().json || {};\nvar name = prep.business_name || m.business_name || 'My Business';\nvar slug = prep.slug || m.slug || 'site';\nvar tagline = prep.tagline || '';\nvar services = prep.services || '';\nvar html = String(m.html || '').trim();\nvar source = m.ai_source || 'none';\nvar lc = html.toLowerCase();\nvar valid = (lc.indexOf('<html')!==-1 || lc.indexOf('<!doctype')!==-1) && html.length >= 120;\nif (!valid) {\n  var svcItems = String(services).split(',').map(function(s){ return s.trim(); }).filter(function(s){ return s.length; });\n  var svcHtml = svcItems.length ? svcItems.map(function(s){ return '<li>' + s + '</li>'; }).join('') : '<li>Quality products and services</li>';\n  html = '<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><meta name=\"description\" content=\"' + name + ' - ' + tagline + '\"><title>' + name + '</title><style>:root{--brand:#b5651d}*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,Segoe UI,Roboto,sans-serif;color:#222;line-height:1.6}header{background:var(--brand);color:#fff;text-align:center;padding:80px 20px}header h1{font-size:2.5rem}header p{font-size:1.25rem;margin-top:10px}main{max-width:900px;margin:0 auto;padding:40px 20px}section{margin-bottom:40px}h2{color:var(--brand);margin-bottom:15px}ul{list-style:none;display:grid;gap:12px}li{background:#f7f2ec;padding:14px 18px;border-radius:8px}footer{background:#222;color:#fff;text-align:center;padding:30px 20px}</style></head><body><header><h1>' + name + '</h1><p>' + tagline + '</p></header><main><section><h2>Our Services</h2><ul>' + svcHtml + '</ul></section><section><h2>About Us</h2><p>Welcome to ' + name + '. ' + tagline + '. We are dedicated to delivering the very best to our community every day.</p></section></main><footer><p>&copy; ' + name + '. Get in touch to learn more.</p></footer></body></html>';\n  source = 'hardcoded_fallback';\n}\nreturn [{ json: { business_name: name, slug: slug, ai_source: source, file_path: 'sites/' + slug + '/index.html', live_url: 'https://hsndm.tech/sites/' + slug + '/', html: html } }];"
+      }
+    },
+    {
+      "id": "d44fdd12-0d07-47ed-bd0d-3243cdd1493d",
+      "name": "Get File SHA",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1120,
+        0
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ \"https://api.github.com/repos/hsndm566/hsndm.tech/contents/\" + $json.file_path }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-siteforge"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "90fbcff0-f2d8-4630-a11e-de8029cf91dd",
+      "name": "Build Commit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var fin = $('Finalize HTML').first().json || {};\nvar shaResp = $input.first().json || {};\nvar sha = '';\ntry { if (shaResp && typeof shaResp.sha === 'string' && shaResp.sha.length) sha = shaResp.sha; } catch (e) { sha = ''; }\nvar contentB64 = Buffer.from(String(fin.html || ''), 'utf8').toString('base64');\nvar body = { message: 'Add generated site for ' + (fin.business_name || 'site') + ' (AI: ' + (fin.ai_source || 'none') + ')', content: contentB64 };\nif (sha) { body.sha = sha; }\nreturn [{ json: { business_name: fin.business_name, slug: fin.slug, ai_source: fin.ai_source, file_path: fin.file_path, live_url: fin.live_url, sha: sha, existed: !!sha, putUrl: 'https://api.github.com/repos/hsndm566/hsndm.tech/contents/' + fin.file_path, putBody: body } }];"
+      }
+    },
+    {
+      "id": "7b85042d-cf02-4e18-87ba-829f9b58a549",
+      "name": "Push To GitHub",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1568,
+        0
+      ],
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ $json.putUrl }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "githubApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "n8n-siteforge"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.putBody) }}",
+        "options": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      }
+    },
+    {
+      "id": "694bda3b-29f4-4f1c-9e86-b7ab786e4f04",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1792,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "business_name",
+              "type": "string",
+              "value": "={{ $('Finalize HTML').item.json.business_name }}"
+            },
+            {
+              "id": "a2",
+              "name": "live_url",
+              "type": "string",
+              "value": "={{ $('Finalize HTML').item.json.live_url }}"
+            },
+            {
+              "id": "a3",
+              "name": "repo_path",
+              "type": "string",
+              "value": "={{ $('Finalize HTML').item.json.file_path }}"
+            },
+            {
+              "id": "a4",
+              "name": "ai_source",
+              "type": "string",
+              "value": "={{ $('Finalize HTML').item.json.ai_source }}"
+            },
+            {
+              "id": "a5",
+              "name": "commit_sha",
+              "type": "string",
+              "value": "={{ $json.commit && $json.commit.sha ? $json.commit.sha : \"\" }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "54eddbb8-aa00-4990-8029-1a02bb3ff266",
+      "name": "Build Static Pages",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        224
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "dd90952e-8d22-41a0-bcf3-c0e71dc2509a",
+      "name": "Build Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const dashboard = \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n  <meta charset=\\\"UTF-8\\\" />\\n  <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\" />\\n  <meta name=\\\"description\\\" content=\\\"Live job application dashboard.\\\" />\\n  <title>Job Search Dashboard</title>\\n  <script src=\\\"https://cdn.tailwindcss.com\\\"></script>\\n  <script src=\\\"https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js\\\"></script>\\n</head>\\n<body class=\\\"bg-slate-50 text-slate-800 min-h-screen\\\">\\n  <nav class=\\\"bg-white border-b sticky top-0 z-30\\\"><div class=\\\"max-w-6xl mx-auto px-4 py-3 flex items-center justify-between\\\"><span class=\\\"font-bold text-lg\\\">Job Dashboard</span><div class=\\\"flex gap-2 text-sm\\\"><a href=\\\"index.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Home</a><a href=\\\"dashboard.html\\\" class=\\\"px-3 py-1.5 rounded bg-slate-900 text-white\\\">Dashboard</a><a href=\\\"cv.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Submit CV</a></div></div></nav>\\n  <main class=\\\"max-w-6xl mx-auto px-4 py-8\\\"><h1 class=\\\"text-2xl font-bold mb-6\\\">Live Job Stats</h1><section class=\\\"grid grid-cols-2 md:grid-cols-4 gap-4 mb-8\\\"><div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Total</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statTotal\\\">-</div></div><div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Applied</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statApplied\\\">-</div></div><div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Interviews</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statInterview\\\">-</div></div><div class=\\\"bg-white rounded-xl shadow-sm p-5\\\"><div class=\\\"text-slate-500 text-sm\\\">Offers</div><div class=\\\"text-3xl font-bold mt-1\\\" id=\\\"statOffer\\\">-</div></div></section><section class=\\\"bg-white rounded-xl shadow-sm p-6\\\"><canvas id=\\\"statusChart\\\"></canvas></section></main>\\n  <script>\\n    var SHEET_ID=\\\"1rivD5luGlZqq6MCEUVvlT263OfUKXrzH6cr9cf0nG3A\\\";var SHEET_NAME=\\\"Job Applications Log\\\";\\n    function gvizUrl(){return \\\"https://docs.google.com/spreadsheets/d/\\\"+SHEET_ID+\\\"/gviz/tq?sheet=\\\"+encodeURIComponent(SHEET_NAME)+\\\"&tqx=out:json\\\";}\\n    function parseGviz(t){var s=t.indexOf(\\\"{\\\");var e=t.lastIndexOf(\\\"}\\\");var o=JSON.parse(t.substring(s,e+1));var cols=o.table.cols.map(function(c){return (c.label||c.id||\\\"\\\").toString();});return o.table.rows.map(function(r){var x={};(r.c||[]).forEach(function(c,i){x[cols[i]||(\\\"col\\\"+i)]=c?c.v:null;});return x;});}\\n    function classify(s){s=(s||\\\"\\\").toString().toLowerCase();if(s.indexOf(\\\"offer\\\")!==-1)return \\\"offer\\\";if(s.indexOf(\\\"interview\\\")!==-1)return \\\"interview\\\";if(s.indexOf(\\\"reject\\\")!==-1)return \\\"rejected\\\";return \\\"applied\\\";}\\n    async function load(){try{var res=await fetch(gvizUrl());var rows=parseGviz(await res.text());var c={applied:0,interview:0,offer:0,rejected:0};rows.forEach(function(r){var k=Object.keys(r).find(function(x){return x.toLowerCase().indexOf(\\\"status\\\")!==-1;});c[classify(k?r[k]:\\\"\\\")]++;});document.getElementById(\\\"statTotal\\\").textContent=rows.length;document.getElementById(\\\"statApplied\\\").textContent=c.applied;document.getElementById(\\\"statInterview\\\").textContent=c.interview;document.getElementById(\\\"statOffer\\\").textContent=c.offer;new Chart(document.getElementById(\\\"statusChart\\\"),{type:\\\"doughnut\\\",data:{labels:[\\\"Applied\\\",\\\"Interview\\\",\\\"Offer\\\",\\\"Rejected\\\"],datasets:[{data:[c.applied,c.interview,c.offer,c.rejected],backgroundColor:[\\\"#3b82f6\\\",\\\"#f59e0b\\\",\\\"#22c55e\\\",\\\"#ef4444\\\"]}]},options:{plugins:{legend:{position:\\\"bottom\\\"}}}});}catch(e){}}\\n    load();\\n  </script>\\n</body>\\n</html>\\n\";\nconst cv = \"<!DOCTYPE html>\\n<html lang=\\\"en\\\">\\n<head>\\n  <meta charset=\\\"UTF-8\\\" />\\n  <meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1.0\\\" />\\n  <meta name=\\\"description\\\" content=\\\"Submit your CV for a target role.\\\" />\\n  <title>Submit Your CV</title>\\n  <script src=\\\"https://cdn.tailwindcss.com\\\"></script>\\n</head>\\n<body class=\\\"bg-slate-50 text-slate-800 min-h-screen\\\">\\n  <nav class=\\\"bg-white border-b sticky top-0 z-30\\\"><div class=\\\"max-w-6xl mx-auto px-4 py-3 flex items-center justify-between\\\"><span class=\\\"font-bold text-lg\\\">Submit CV</span><div class=\\\"flex gap-2 text-sm\\\"><a href=\\\"index.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Home</a><a href=\\\"dashboard.html\\\" class=\\\"px-3 py-1.5 rounded hover:bg-slate-100\\\">Dashboard</a><a href=\\\"cv.html\\\" class=\\\"px-3 py-1.5 rounded bg-slate-900 text-white\\\">Submit CV</a></div></div></nav>\\n  <main class=\\\"max-w-2xl mx-auto px-4 py-10\\\"><h1 class=\\\"text-2xl font-bold mb-6\\\">Submit your CV</h1><form id=\\\"cvForm\\\" class=\\\"bg-white rounded-xl shadow-sm p-6 space-y-5\\\"><div><label class=\\\"block text-sm font-medium mb-1\\\" for=\\\"target_role\\\">Target role</label><input id=\\\"target_role\\\" required class=\\\"w-full border rounded-lg px-3 py-2\\\" /></div><div><label class=\\\"block text-sm font-medium mb-1\\\" for=\\\"email\\\">Email</label><input id=\\\"email\\\" type=\\\"email\\\" required class=\\\"w-full border rounded-lg px-3 py-2\\\" /></div><div><label class=\\\"block text-sm font-medium mb-1\\\" for=\\\"cv_text\\\">CV text</label><textarea id=\\\"cv_text\\\" required rows=\\\"10\\\" class=\\\"w-full border rounded-lg px-3 py-2\\\"></textarea></div><button id=\\\"submitBtn\\\" type=\\\"submit\\\" class=\\\"w-full bg-blue-600 text-white font-medium py-2.5 rounded-lg hover:bg-blue-700\\\">Submit CV</button><p id=\\\"formError\\\" class=\\\"hidden text-sm text-red-600\\\"></p></form><div id=\\\"successCard\\\" class=\\\"hidden bg-white rounded-xl shadow-sm p-10 text-center\\\"><h2 class=\\\"text-xl font-semibold mb-1\\\">CV submitted!</h2><p class=\\\"text-slate-500\\\">Thanks - we have received your CV.</p></div></main>\\n  <script>\\n    var SUBMIT_ENDPOINT=\\\"https://hsndm566.app.n8n.cloud/webhook/submit-cv\\\";\\n    document.getElementById(\\\"cvForm\\\").addEventListener(\\\"submit\\\",async function(e){e.preventDefault();var err=document.getElementById(\\\"formError\\\");err.classList.add(\\\"hidden\\\");var btn=document.getElementById(\\\"submitBtn\\\");btn.disabled=true;btn.textContent=\\\"Submitting...\\\";var payload={cv_text:document.getElementById(\\\"cv_text\\\").value,target_role:document.getElementById(\\\"target_role\\\").value,email:document.getElementById(\\\"email\\\").value};try{var res=await fetch(SUBMIT_ENDPOINT,{method:\\\"POST\\\",headers:{\\\"Content-Type\\\":\\\"application/json\\\"},body:JSON.stringify(payload)});if(!res.ok)throw new Error(\\\"Server \\\"+res.status);document.getElementById(\\\"cvForm\\\").classList.add(\\\"hidden\\\");document.getElementById(\\\"successCard\\\").classList.remove(\\\"hidden\\\");}catch(e2){err.textContent=\\\"Submission failed: \\\"+e2.message;err.classList.remove(\\\"hidden\\\");}finally{btn.disabled=false;btn.textContent=\\\"Submit CV\\\";}});\\n  </script>\\n</body>\\n</html>\\n\";\nreturn [\n  { json: { filename: \"dashboard.html\", html: dashboard } },\n  { json: { filename: \"cv.html\", html: cv } },\n];"
+      }
+    },
+    {
+      "id": "b30b5556-8997-42b6-b1ba-a7da5ccb68b0",
+      "name": "Push Static To GitHub",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        224
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.html }}",
+        "commitMessage": "=Update {{ $json.filename }}",
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "3dd95173-5997-4da4-aeec-e248bed2bb27"
+    },
+    {
+      "id": "3caebdeb-823b-4e62-8872-d752afeea958",
+      "name": "Verify Live",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        672,
+        224
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://hsndm.tech/{{ $('Build Pages').item.json.filename }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          }
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "5bfad991-33a1-4e58-a17c-2143252cc532",
+      "name": "Static Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        224
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pages = $(\"Build Pages\").all();\nconst verify = $(\"Verify Live\").all();\nconst out = [];\nfor (let i = 0; i < pages.length; i++) {\n  const v = verify[i] ? verify[i].json : {};\n  const status = (v.statusCode !== undefined) ? v.statusCode : (v.error ? \"error\" : \"unknown\");\n  out.push({ json: { filename: pages[i].json.filename, url: \"https://hsndm.tech/\" + pages[i].json.filename, live_http_status: status, is_live: status === 200 } });\n}\nreturn out;"
+      }
+    },
+    {
+      "id": "b2ac2c38-aa67-403e-9ffe-d475084e0bb5",
+      "name": "Add Translate Widget",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        448
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "34498152-418b-468f-9af9-69e1d3e2ffd5",
+      "name": "Widget: List Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        448
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [\n  { json: { filename: \"index.html\" } },\n  { json: { filename: \"dashboard.html\" } },\n  { json: { filename: \"cv.html\" } },\n];"
+      }
+    },
+    {
+      "id": "474824b9-279b-43b9-912c-b6fa2b8ce02d",
+      "name": "Widget: Get File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        448
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "3d62872c-44b6-4734-abaf-c982b487bb99"
+    },
+    {
+      "id": "c8f7156d-7cc6-42b7-aca0-c9f8828a5862",
+      "name": "Widget: Inject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        448
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const api = $json;\nconst filename = api.name || api.path;\nconst raw = (api.content || \"\").replace(/\\n/g, \"\");\nlet html = Buffer.from(raw, \"base64\").toString(\"utf8\");\n\nconst widget = [\n  '<div id=\"google_translate_element\" style=\"position:fixed; top:10px; right:10px; z-index:70;\"></div>',\n  '<script>',\n  String.fromCharCode(32,32) + \"function googleTranslateElementInit() {\",\n  String.fromCharCode(32,32,32,32) + \"new google.translate.TranslateElement({\",\n  String.fromCharCode(32,32,32,32,32,32) + \"pageLanguage: \" + String.fromCharCode(39) + \"en\" + String.fromCharCode(39) + \",\",\n  String.fromCharCode(32,32,32,32,32,32) + \"includedLanguages: \" + String.fromCharCode(39) + \"ar,en\" + String.fromCharCode(39) + \",\",\n  String.fromCharCode(32,32,32,32,32,32) + \"layout: google.translate.TranslateElement.InlineLayout.HORIZONTAL\",\n  String.fromCharCode(32,32,32,32) + \"}, \" + String.fromCharCode(39) + \"google_translate_element\" + String.fromCharCode(39) + \");\",\n  String.fromCharCode(32,32) + \"}\",\n  '</script>',\n  '<script src=\"//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit\"></script>',\n].join(\"\\n\");\n\nlet changed = false;\nif (html.indexOf(\"google_translate_element\") === -1) {\n  const idx = html.lastIndexOf(\"</body>\");\n  if (idx !== -1) {\n    html = html.slice(0, idx) + widget + \"\\n\" + html.slice(idx);\n  } else {\n    html = html + \"\\n\" + widget + \"\\n\";\n  }\n  changed = true;\n}\n\nreturn { filename: filename, html: html, changed: changed };"
+      }
+    },
+    {
+      "id": "74b99fb1-ef91-444a-b4a7-d8b8aec061e7",
+      "name": "Widget: Push File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        896,
+        448
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.html }}",
+        "commitMessage": "=Add Google Translate widget to {{ $json.filename }}",
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "bbfc5602-28c1-4207-86c0-76158d4e9524"
+    },
+    {
+      "id": "beb3fdcf-1cab-4f36-94d1-59f4e8dc4fed",
+      "name": "Deploy Julie Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        672
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "deploy-julie",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "64a082de-8c1d-4101-a414-d6c088a96a91"
+    },
+    {
+      "id": "da606fac-1302-429f-8138-f43b7a666c97",
+      "name": "Julie: Get index.html",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        672
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm.tech"
+        },
+        "filePath": "index.html",
+        "asBinaryProperty": false,
+        "additionalParameters": {
+          "reference": "main"
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "73035844-4dbf-40cc-9496-a76abb47f229"
+    },
+    {
+      "id": "bd460de7-e6e4-4a07-9456-d9231c0ba29e",
+      "name": "Julie: Insert Snippet",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        672
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Julie chatbot snippet (base64) — inserted verbatim before </body>.\nconst SNIPPET_B64 = 'PCEtLSBKdWxpZSBDaGF0Ym90IC0tPgo8c3R5bGU+CiAgI2pvdWxpZS1idWJibGUgewogICAgcG9zaXRpb246IGZpeGVkOyBib3R0b206IDIwcHg7IHJpZ2h0OiAyMHB4OyB6LWluZGV4OiAxMDAwOwogICAgd2lkdGg6IDYwcHg7IGhlaWdodDogNjBweDsgYm9yZGVyLXJhZGl1czogNTAlOwogICAgYmFja2dyb3VuZDogdmFyKC0tYWNjZW50KTsgYm9yZGVyOiBub25lOyBjdXJzb3I6IHBvaW50ZXI7CiAgICBib3gtc2hhZG93OiAwIDRweCAxNXB4IHJnYmEoMzcsOTksMjM1LDAuNSk7CiAgICBkaXNwbGF5OiBmbGV4OyBhbGlnbi1pdGVtczogY2VudGVyOyBqdXN0aWZ5LWNvbnRlbnQ6IGNlbnRlcjsKICAgIHRyYW5zaXRpb246IHRyYW5zZm9ybSAwLjNzIGVhc2U7CiAgfQogICNqb3VsaWUtYnViYmxlOmhvdmVyIHsgdHJhbnNmb3JtOiBzY2FsZSgxLjEpOyB9CiAgI2pvdWxpZS1idWJibGUgaW1nIHsKICAgIHdpZHRoOiA1NHB4OyBoZWlnaHQ6IDU0cHg7IGJvcmRlci1yYWRpdXM6IDUwJTsgb2JqZWN0LWZpdDogY292ZXI7CiAgfQogICNqb3VsaWUtY2hhdCB7CiAgICBwb3NpdGlvbjogZml4ZWQ7IGJvdHRvbTogOTBweDsgcmlnaHQ6IDIwcHg7IHotaW5kZXg6IDk5OTsKICAgIHdpZHRoOiAzMjBweDsgbWF4LWhlaWdodDogNDUwcHg7CiAgICBiYWNrZ3JvdW5kOiB2YXIoLS1iZy1lbGV2YXRlZCk7IGJvcmRlcjogMXB4IHNvbGlkIHZhcigtLWJvcmRlcik7CiAgICBib3JkZXItcmFkaXVzOiAxNnB4OyBib3gtc2hhZG93OiB2YXIoLS1zaGFkb3cpOwogICAgZGlzcGxheTogbm9uZTsgZmxleC1kaXJlY3Rpb246IGNvbHVtbjsgb3ZlcmZsb3c6IGhpZGRlbjsKICB9CiAgI2pvdWxpZS1jaGF0Lm9wZW4geyBkaXNwbGF5OiBmbGV4OyB9CiAgI2pvdWxpZS1oZWFkZXIgewogICAgYmFja2dyb3VuZDogdmFyKC0tYWNjZW50KTsgcGFkZGluZzogMTBweCAxNXB4OyBjb2xvcjogd2hpdGU7CiAgICBkaXNwbGF5OiBmbGV4OyBhbGlnbi1pdGVtczogY2VudGVyOyBnYXA6IDEwcHg7CiAgfQogICNqb3VsaWUtaGVhZGVyIGltZyB7CiAgICB3aWR0aDogMzZweDsgaGVpZ2h0OiAzNnB4OyBib3JkZXItcmFkaXVzOiA1MCU7IG9iamVjdC1maXQ6IGNvdmVyOwogIH0KICAjam91bGllLWhlYWRlciBzcGFuIHsgZm9udC13ZWlnaHQ6IDYwMDsgfQogICNqb3VsaWUtbWVzc2FnZXMgewogICAgZmxleDogMTsgcGFkZGluZzogMTBweDsgb3ZlcmZsb3cteTogYXV0bzsgbWF4LWhlaWdodDogMzAwcHg7CiAgICBkaXNwbGF5OiBmbGV4OyBmbGV4LWRpcmVjdGlvbjogY29sdW1uOyBnYXA6IDhweDsKICB9CiAgLm1zZyB7CiAgICBtYXgtd2lkdGg6IDgwJTsgcGFkZGluZzogOHB4IDEycHg7IGJvcmRlci1yYWRpdXM6IDE0cHg7CiAgICBmb250LXNpemU6IDAuOXJlbTsgbGluZS1oZWlnaHQ6IDEuNDsKICB9CiAgLm1zZy51c2VyIHsgYWxpZ24tc2VsZjogZmxleC1lbmQ7IGJhY2tncm91bmQ6IHZhcigtLWFjY2VudCk7IGNvbG9yOiB3aGl0ZTsgfQogIC5tc2cuYm90IHsgYWxpZ24tc2VsZjogZmxleC1zdGFydDsgYmFja2dyb3VuZDogdmFyKC0tYmctZWxldmF0ZWQtMik7IGNvbG9yOiB2YXIoLS10ZXh0KTsgfQogICNqb3VsaWUtaW5wdXQtYXJlYSB7CiAgICBkaXNwbGF5OiBmbGV4OyBib3JkZXItdG9wOiAxcHggc29saWQgdmFyKC0tYm9yZGVyKTsKICB9CiAgI2pvdWxpZS1pbnB1dCB7CiAgICBmbGV4OiAxOyBwYWRkaW5nOiAxMHB4OyBib3JkZXI6IG5vbmU7IGJhY2tncm91bmQ6IHZhcigtLWJnLWVsZXZhdGVkLTIpOwogICAgY29sb3I6IHZhcigtLXRleHQpOyBvdXRsaW5lOiBub25lOwogIH0KICAjam91bGllLXNlbmQgewogICAgYmFja2dyb3VuZDogdmFyKC0tYWNjZW50KTsgY29sb3I6IHdoaXRlOyBib3JkZXI6IG5vbmU7IHBhZGRpbmc6IDAgMTVweDsKICAgIGN1cnNvcjogcG9pbnRlcjsgZm9udC13ZWlnaHQ6IDYwMDsKICB9Cjwvc3R5bGU+Cgo8ZGl2IGlkPSJqb3VsaWUtYnViYmxlIiBvbmNsaWNrPSJ0b2dnbGVDaGF0KCkiPgogIDxpbWcgc3JjPSJodHRwczovL3Jhdy5naXRodWJ1c2VyY29udGVudC5jb20vaHNuZG01NjYvaHNuZG0udGVjaC9tYWluL2pvdWxpZS5wbmciIGFsdD0iSnVsaWUiPgo8L2Rpdj4KPGRpdiBpZD0iam91bGllLWNoYXQiPgogIDxkaXYgaWQ9ImpvdWxpZS1oZWFkZXIiPgogICAgPGltZyBzcmM9Imh0dHBzOi8vcmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbS9oc25kbTU2Ni9oc25kbS50ZWNoL21haW4vam91bGllLnBuZyIgYWx0PSJKdWxpZSI+CiAgICA8c3Bhbj5KdWxpZTwvc3Bhbj4KICA8L2Rpdj4KICA8ZGl2IGlkPSJqb3VsaWUtbWVzc2FnZXMiPjwvZGl2PgogIDxkaXYgaWQ9ImpvdWxpZS1pbnB1dC1hcmVhIj4KICAgIDxpbnB1dCB0eXBlPSJ0ZXh0IiBpZD0iam91bGllLWlucHV0IiBwbGFjZWhvbGRlcj0iQXNrIEp1bGllIGFueXRoaW5nLi4uIiBvbmtleXByZXNzPSJpZihldmVudC5rZXk9PT0nRW50ZXInKSBzZW5kTWVzc2FnZSgpIj4KICAgIDxidXR0b24gaWQ9ImpvdWxpZS1zZW5kIiBvbmNsaWNrPSJzZW5kTWVzc2FnZSgpIj5TZW5kPC9idXR0b24+CiAgPC9kaXY+CjwvZGl2PgoKPHNjcmlwdD4KICBmdW5jdGlvbiB0b2dnbGVDaGF0KCkgewogICAgZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2pvdWxpZS1jaGF0JykuY2xhc3NMaXN0LnRvZ2dsZSgnb3BlbicpOwogIH0KICBhc3luYyBmdW5jdGlvbiBzZW5kTWVzc2FnZSgpIHsKICAgIGNvbnN0IGlucHV0ID0gZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoJ2pvdWxpZS1pbnB1dCcpOwogICAgY29uc3QgbXNnID0gaW5wdXQudmFsdWUudHJpbSgpOwogICAgaWYgKCFtc2cpIHJldHVybjsKICAgIGFkZE1lc3NhZ2UobXNnLCAndXNlcicpOwogICAgaW5wdXQudmFsdWUgPSAnJzsKICAgIHRyeSB7CiAgICAgIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKCdodHRwczovL2hzbmRtNTY2LmFwcC5uOG4uY2xvdWQvd2ViaG9vay9qb3VsaWUtY2hhdCcsIHsKICAgICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgICBoZWFkZXJzOiB7ICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicgfSwKICAgICAgICBib2R5OiBKU09OLnN0cmluZ2lmeSh7IG1lc3NhZ2U6IG1zZyB9KQogICAgICB9KTsKICAgICAgY29uc3QgZGF0YSA9IGF3YWl0IHJlcy5qc29uKCk7CiAgICAgIGFkZE1lc3NhZ2UoZGF0YS5yZXBseSB8fCAiSSdtIGhlcmUhIEJ1dCBJIGRpZG4ndCB1bmRlcnN0YW5kIHRoYXQuIiwgJ2JvdCcpOwogICAgfSBjYXRjaChlKSB7CiAgICAgIGFkZE1lc3NhZ2UoIkp1bGllIGlzIHJlY2hhcmdpbmcuLi4gdHJ5IGFnYWluIGluIGEgbW9tZW50ISIsICdib3QnKTsKICAgIH0KICB9CiAgZnVuY3Rpb24gYWRkTWVzc2FnZSh0ZXh0LCBzZW5kZXIpIHsKICAgIGNvbnN0IGRpdiA9IGRvY3VtZW50LmNyZWF0ZUVsZW1lbnQoJ2RpdicpOwogICAgZGl2LmNsYXNzTmFtZSA9ICdtc2cgJyArIHNlbmRlcjsKICAgIGRpdi50ZXh0Q29udGVudCA9IHRleHQ7CiAgICBkb2N1bWVudC5nZXRFbGVtZW50QnlJZCgnam91bGllLW1lc3NhZ2VzJykuYXBwZW5kQ2hpbGQoZGl2KTsKICAgIGRpdi5zY3JvbGxJbnRvVmlldyh7IGJlaGF2aW9yOiAnc21vb3RoJyB9KTsKICB9Cjwvc2NyaXB0Pg==';\nconst snippet = Buffer.from(SNIPPET_B64, 'base64').toString('utf8');\n\nconst file = $('Julie: Get index.html').first().json;\n\nlet html;\nif (file.content) {\n  html = Buffer.from(String(file.content), 'base64').toString('utf8');\n} else if (typeof file.data === 'string') {\n  html = file.data;\n} else {\n  throw new Error('Could not read index.html content from GitHub get output.');\n}\n\nlet updated;\nif (html.includes('<!-- Julie Chatbot -->')) {\n  updated = html;\n} else if (html.includes('</body>')) {\n  updated = html.replace('</body>', snippet + '\\n</body>');\n} else {\n  updated = html + '\\n' + snippet;\n}\n\nreturn [{ json: { fileContent: updated, sha: file.sha, already_present: html.includes('<!-- Julie Chatbot -->') } }];\n"
+      }
+    },
+    {
+      "id": "bffaa854-1c68-423e-ae56-a88e3c0c9dfb",
+      "name": "Julie: Update index.html",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        672
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "mode": "name",
+          "value": "hsndm.tech"
+        },
+        "filePath": "index.html",
+        "binaryData": false,
+        "fileContent": "={{ $json.fileContent }}",
+        "commitMessage": "Add Julie chatbot",
+        "additionalParameters": {
+          "branch": {
+            "branch": "main"
+          }
+        }
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "webhookId": "e843528d-dddf-4f58-91bb-5aa595929f7c"
+    },
+    {
+      "id": "9492ea7e-04ce-47ba-8695-ba30834c6c20",
+      "name": "Julie: Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        672
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true }"
+      }
+    },
+    {
+      "id": "8a6c180f-6b51-4ea2-8d5a-9f524ebc4bb3",
+      "name": "On Translation Request",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        0,
+        992
+      ],
+      "parameters": {
+        "formTitle": "Site Translator",
+        "formDescription": "Paste any content and choose a target language. The AI Hub returns the translated copy.",
+        "responseMode": "lastNode",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Text to translate",
+              "fieldName": "content",
+              "fieldType": "textarea",
+              "placeholder": "Paste the website/page content you want translated",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Target language",
+              "fieldName": "target_language",
+              "fieldType": "text",
+              "placeholder": "e.g. Arabic, Spanish, French",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "webhookId": "0404eae5-332f-49d3-882b-05a762797eb9"
+    },
+    {
+      "id": "50e43e3c-8282-4434-abbf-746341318374",
+      "name": "Translate: Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        992
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var j = $json || {};\nvar content = String(j.content || j['Text to translate'] || j.text || '').trim();\nvar target = String(j.target_language || j['Target language'] || j.language || '').trim();\nvar valid = content.length > 0 && target.length > 0;\nvar system = 'You are a professional translator. Translate the user-provided text into ' + (target || 'the requested language') + '. Preserve the original meaning, tone, formatting and line breaks. Return ONLY the translated text with no preamble, notes, or explanation.';\nvar user = content;\nreturn [{ json: { valid: valid, content: content, target_language: target, system: system, user: user } }];"
+      }
+    },
+    {
+      "id": "5cf024fa-61ad-4015-94e5-4a355f8ea919",
+      "name": "Translate: Has Content?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        992
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "4acaf5c1-e7f9-40f6-a6b2-8e0ce6fd93da",
+      "name": "Translate (AI Hub)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        672,
+        896
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Hub & Health"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Translate: Validate Input').first().json.system }}",
+            "user": "={{ $('Translate: Validate Input').first().json.user }}",
+            "max_tokens": "={{ 2000 }}",
+            "temperature": "={{ 0.3 }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "ee5661fc-cb9b-460e-b200-c0435fade5de",
+      "name": "Translate: Format Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        896
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var hub = $input.first().json || {};\nvar v = $('Translate: Validate Input').first().json || {};\nvar text = String(hub.text || '').trim();\nvar ok = hub.ok === true && text.length > 0;\nvar provider = hub.provider_used || 'none';\nvar title, message;\nif (ok) {\n  title = 'Translation complete (' + v.target_language + ')';\n  message = text;\n} else {\n  title = 'Translation failed';\n  message = 'Sorry, the translation could not be completed right now (provider: ' + provider + '). Please try again in a moment.';\n}\nreturn [{ json: { ok: ok, provider_used: provider, target_language: v.target_language, original_content: v.content, text: text, title: title, message: message } }];"
+      }
+    },
+    {
+      "id": "fa415451-8359-42ca-adb2-e85f8000ce18",
+      "name": "Translate: Show Result",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1120,
+        896
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "={{ $json.title }}",
+        "completionMessage": "={{ $json.message }}"
+      },
+      "webhookId": "0dadc060-fa09-4c1b-a912-0aefec953516"
+    },
+    {
+      "id": "1fe79289-e97d-464c-b0fc-ecfb65352ef3",
+      "name": "Translate: Invalid Input",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        672,
+        1088
+      ],
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "Missing input",
+        "completionMessage": "Please provide both the text to translate and a target language, then submit again."
+      },
+      "webhookId": "f0e0a5cb-9d46-401c-aa6f-6839de3c66fb"
+    },
+    {
+      "id": "a2b200b3-9620-42be-9802-da01f3bda7f1",
+      "name": "Julie Chat Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        1312
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "julie-chat",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "a1b2c3d4-0000-4000-8000-juliechat001"
+    },
+    {
+      "id": "ad19c3c0-3670-4ab7-93a3-219b38ca7c3f",
+      "name": "Julie Chat Prep",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        1312
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var b = ($json && $json.body) ? $json.body : ($json || {});\nvar msg = String(b.message || b.text || b.chatInput || '').trim();\nvar system = \"You are Julie, a warm and concise assistant for the hsndm.tech job-search website. Answer helpfully in 1-3 sentences. If you are unsure, say so briefly.\";\nvar user = msg || '(no message provided)';\nreturn [{ json: { message: msg, has_message: msg.length > 0, system: system, user: user } }];"
+      }
+    },
+    {
+      "id": "da8386db-7460-4e04-8d1d-4581d7ec16ed",
+      "name": "Julie Chat (AI Hub)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        448,
+        1312
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Hub & Health"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Julie Chat Prep').first().json.system }}",
+            "user": "={{ $('Julie Chat Prep').first().json.user }}",
+            "max_tokens": "={{ 500 }}",
+            "temperature": "={{ 0.5 }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "c28d6eb7-de8f-4c97-bbe6-beb3627c47e6",
+      "name": "Julie Chat Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        1312
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var hub = $input.first().json || {};\nvar prep = $('Julie Chat Prep').first().json || {};\nvar text = String(hub.text || '').trim();\nvar reply;\nif (!prep.has_message) { reply = \"Hi! I'm Julie. Ask me anything about your job search.\"; }\nelse if (text.length) { reply = text; }\nelse { reply = \"I'm here, but I'm having trouble thinking right now. Please try again in a moment.\"; }\nreturn [{ json: { reply: reply } }];"
+      }
+    },
+    {
+      "id": "cec4ed2a-cf07-449e-b6f7-5965a2b73fbe",
+      "name": "Julie Chat Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        1312
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ reply: $json.reply }) }}"
+      }
+    },
+    {
+      "id": "268546c4-646f-428c-88f1-cbc743fdc5f2",
+      "name": "Submit CV Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        1632
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "submit-cv",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "b2c3d4e5-0000-4000-8000-submitcv0001"
+    },
+    {
+      "id": "e87d5514-7f0b-4b21-ae5b-f374c255b5d3",
+      "name": "Submit CV Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        1632
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var b = ($json && $json.body) ? $json.body : ($json || {});\nvar role = String(b.target_role || b.role || '').trim();\nvar email = String(b.email || '').trim();\nvar cv = String(b.cv_text || b.cv || '').trim();\nvar emailOk = /^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(email);\nvar valid = role.length > 0 && emailOk && cv.length > 0;\nreturn [{ json: { valid: valid, target_role: role, email: email, cv_text: cv } }];"
+      }
+    },
+    {
+      "id": "b070a3ee-c925-42f0-bdaf-fc701db50a8b",
+      "name": "Submit CV Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        1632
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "valid",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "c30f6b4f-03db-4378-b23f-c15743d43a3b",
+      "name": "Submit CV Insert",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        1536
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "job_title": "={{ $json.target_role }}",
+            "job_description": "={{ $json.cv_text }}",
+            "email": "={{ $json.email }}",
+            "status": "new",
+            "applied": "={{ false }}",
+            "date_added": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_description",
+              "displayName": "job_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "applied",
+              "displayName": "applied",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_added",
+              "displayName": "date_added",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "2d323e99-679b-487c-96a2-f741cadd6255",
+      "name": "Submit CV Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        896,
+        1536
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": true }"
+      }
+    },
+    {
+      "id": "a1e1ab37-d713-4559-b489-431ba15376c8",
+      "name": "Submit CV Respond Fail",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        1728
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"success\": false, \"message\": \"Please provide a target role, a valid email, and your CV text.\" }",
+        "options": {
+          "responseCode": 400
+        }
+      }
+    },
+    {
+      "id": "fe97a2f0-d4ca-4164-b2ae-c7642d2538e1",
+      "name": "Normalize Site Endpoints",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1952
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "108f02ba-5b0c-4800-8d63-dd8388d9eed5",
+      "name": "Normalize: List Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        1952
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [\n  { json: { filename: \"index.html\" } },\n  { json: { filename: \"dashboard.html\" } },\n  { json: { filename: \"cv.html\" } },\n];"
+      }
+    },
+    {
+      "id": "54f71409-ff05-432f-9c27-3c7bb011dd9f",
+      "name": "Normalize: Get File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        1952
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "5e97b64b-2074-45d0-883f-42841dad91f6"
+    },
+    {
+      "id": "3cc62e49-4150-426c-a70d-35414372fbba",
+      "name": "Normalize: Fix Endpoints",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        1952
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const api = $json;\nconst filename = api.name || api.path;\nconst raw = (api.content || \"\").replace(/\\n/g, \"\");\nlet html = \"\";\ntry { html = Buffer.from(raw, \"base64\").toString(\"utf8\"); } catch (e) { html = \"\"; }\nif (!html) { return { filename: filename, html: \"\", changed: false }; }\nconst before = html;\n// Canonical chat endpoint is julie-chat; fix the joulie-chat typo everywhere.\nhtml = html.split(\"webhook/joulie-chat\").join(\"webhook/julie-chat\");\nconst changed = html !== before;\nreturn { filename: filename, html: html, changed: changed };"
+      }
+    },
+    {
+      "id": "82c31943-5cab-4941-89b6-62e10d9b4921",
+      "name": "Normalize: Changed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        1952
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "changed",
+              "leftValue": "={{ $json.changed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "7cef4707-c99b-42b7-94ad-7a998c945f1c",
+      "name": "Normalize: Push File",
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        1952
+      ],
+      "parameters": {
+        "resource": "file",
+        "operation": "edit",
+        "owner": {
+          "__rl": true,
+          "value": "hsndm566",
+          "mode": "list",
+          "cachedResultName": "hsndm566",
+          "cachedResultUrl": "https://github.com/hsndm566"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "hsndm.tech",
+          "mode": "list",
+          "cachedResultName": "hsndm.tech",
+          "cachedResultUrl": "https://github.com/hsndm566/hsndm.tech"
+        },
+        "filePath": "={{ $json.filename }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.html }}",
+        "commitMessage": "=Wire live chat endpoint on {{ $json.filename }}",
+        "additionalParameters": {}
+      },
+      "credentials": {
+        "githubApi": {
+          "id": "qajjhSrFSiWuIH7o",
+          "name": "GitHub account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "5e1c2d8b-642f-49c3-9d30-fc5ef63afa87"
+    }
+  ],
+  "connections": {
+    "Site Request Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prep Site",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Site": {
+      "main": [
+        [
+          {
+            "node": "Generate HTML (AI Hub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate HTML (AI Hub)": {
+      "main": [
+        [
+          {
+            "node": "Extract HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract HTML": {
+      "main": [
+        [
+          {
+            "node": "Finalize HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize HTML": {
+      "main": [
+        [
+          {
+            "node": "Get File SHA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get File SHA": {
+      "main": [
+        [
+          {
+            "node": "Build Commit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Commit": {
+      "main": [
+        [
+          {
+            "node": "Push To GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push To GitHub": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Static Pages": {
+      "main": [
+        [
+          {
+            "node": "Build Pages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Pages": {
+      "main": [
+        [
+          {
+            "node": "Push Static To GitHub",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Static To GitHub": {
+      "main": [
+        [
+          {
+            "node": "Verify Live",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Live": {
+      "main": [
+        [
+          {
+            "node": "Static Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Translate Widget": {
+      "main": [
+        [
+          {
+            "node": "Widget: List Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Widget: List Files": {
+      "main": [
+        [
+          {
+            "node": "Widget: Get File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Widget: Get File": {
+      "main": [
+        [
+          {
+            "node": "Widget: Inject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Widget: Inject": {
+      "main": [
+        [
+          {
+            "node": "Widget: Push File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deploy Julie Webhook": {
+      "main": [
+        [
+          {
+            "node": "Julie: Get index.html",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Julie: Get index.html": {
+      "main": [
+        [
+          {
+            "node": "Julie: Insert Snippet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Julie: Insert Snippet": {
+      "main": [
+        [
+          {
+            "node": "Julie: Update index.html",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Julie: Update index.html": {
+      "main": [
+        [
+          {
+            "node": "Julie: Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On Translation Request": {
+      "main": [
+        [
+          {
+            "node": "Translate: Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate: Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Translate: Has Content?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate: Has Content?": {
+      "main": [
+        [
+          {
+            "node": "Translate (AI Hub)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Translate: Invalid Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate (AI Hub)": {
+      "main": [
+        [
+          {
+            "node": "Translate: Format Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Translate: Format Result": {
+      "main": [
+        [
+          {
+            "node": "Translate: Show Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Julie Chat Webhook": {
+      "main": [
+        [
+          {
+            "node": "Julie Chat Prep",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Julie Chat Prep": {
+      "main": [
+        [
+          {
+            "node": "Julie Chat (AI Hub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Julie Chat (AI Hub)": {
+      "main": [
+        [
+          {
+            "node": "Julie Chat Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Julie Chat Reply": {
+      "main": [
+        [
+          {
+            "node": "Julie Chat Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit CV Webhook": {
+      "main": [
+        [
+          {
+            "node": "Submit CV Validate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit CV Validate": {
+      "main": [
+        [
+          {
+            "node": "Submit CV Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit CV Valid?": {
+      "main": [
+        [
+          {
+            "node": "Submit CV Insert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Submit CV Respond Fail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit CV Insert": {
+      "main": [
+        [
+          {
+            "node": "Submit CV Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Site Endpoints": {
+      "main": [
+        [
+          {
+            "node": "Normalize: List Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize: List Files": {
+      "main": [
+        [
+          {
+            "node": "Normalize: Get File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize: Get File": {
+      "main": [
+        [
+          {
+            "node": "Normalize: Fix Endpoints",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize: Fix Endpoints": {
+      "main": [
+        [
+          {
+            "node": "Normalize: Changed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize: Changed?": {
+      "main": [
+        [
+          {
+            "node": "Normalize: Push File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true,
+    "timezone": "Asia/Riyadh"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 3,
+  "meta": null
+}

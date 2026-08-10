@@ -1,0 +1,62 @@
+{
+  "name": "TG Batch Summary",
+  "nodes": [
+    {
+      "id": "tg300000-0000-4000-8000-000000000001",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "tg300000-0000-4000-8000-000000000002",
+      "name": "Send Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "Daily Run Summary\n\nClients processed: 1\nApplications sent: 0\nErrors logged: 0\nSaved for review: 2\n\nNext steps:\n2 application(s) saved for manual review — no employer contact email on these rows, so nothing was emailed to companies. Check the job applications table.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "7655689e-90ca-447b-9d8b-1bd3f1191e06"
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Send Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

@@ -1,0 +1,62 @@
+{
+  "name": "TG Self Test Report",
+  "nodes": [
+    {
+      "id": "tg200000-0000-4000-8000-000000000001",
+      "name": "Run",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "tg200000-0000-4000-8000-000000000002",
+      "name": "Send Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        300
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "8890901423",
+        "text": "Self-test completed\n\nStatus: SUCCESS\nExecution #123 — full pipeline ran end-to-end, lock acquired and released cleanly.\nErrors encountered: none (0 logged).\n\nResult: 1 application processed and sent to hasanadam506@gmail.com.\nFit score: 80/100 (reviewer 90/100, approved).\n\nBrevo messageIds:\n- Application email: <202607230913.74000759891@smtp-relay.mailin.fr>\n- Client confirmation: <202607230913.26892435221@smtp-relay.mailin.fr>\n- Delivery report: <202607230913.32001192790@smtp-relay.mailin.fr>\n\nNo other companies were contacted. Awaiting your green light for the full batch.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "webhookId": "d40ff402-2e84-4bb4-8a05-de84139bce54"
+    }
+  ],
+  "connections": {
+    "Run": {
+      "main": [
+        [
+          {
+            "node": "Send Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

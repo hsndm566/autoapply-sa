@@ -1,0 +1,149 @@
+{
+  "name": "Provider Test (temp)",
+  "nodes": [
+    {
+      "id": "ef5eb3b7-41d7-4706-808f-0611711bbe75",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        192
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c45bb5a0-6073-4fdc-9598-3c4b0ae7044a",
+      "name": "NVIDIA Test",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"nvidia/llama-3.1-nemotron-70b-instruct\", \"max_tokens\": 40, \"messages\": [ { \"role\": \"user\", \"content\": \"Say hello and name your model in one sentence.\" } ] } }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "574db747-21b7-4223-a914-f7509580430e",
+      "name": "NVIDIA Test 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        192
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"meta/llama-3.3-70b-instruct\", \"max_tokens\": 40, \"messages\": [ { \"role\": \"user\", \"content\": \"Say hello in one sentence.\" } ] } }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "8ac9e6a7-f85f-401e-92f8-83f6f9b317a0",
+      "name": "NVIDIA Test 3",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        224,
+        384
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "nvidiaApi",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"model\": \"meta/llama-3.1-8b-instruct\", \"max_tokens\": 40, \"messages\": [ { \"role\": \"user\", \"content\": \"Say hello in one sentence.\" } ] } }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "credentials": {
+        "nvidiaApi": {
+          "id": "duEOE3J8LmcWPu22",
+          "name": "NVIDIA Nemotron account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "NVIDIA Test",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "NVIDIA Test 2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "NVIDIA Test 3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

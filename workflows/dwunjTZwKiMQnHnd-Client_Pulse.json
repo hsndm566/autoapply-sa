@@ -1,0 +1,147 @@
+{
+  "name": "Client Pulse",
+  "nodes": [
+    {
+      "id": "fcd8222a-9f53-4260-84e4-8ac8c2e3c658",
+      "name": "Every Monday 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "df10b58c-865b-460d-ae1c-ac1af51e6970",
+      "name": "Get Sent Applications",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "yrDJL5narftty8xm",
+          "cachedResultName": "job_applications"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "sent"
+            }
+          ]
+        },
+        "returnAll": true
+      },
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "80609fef-59ad-4528-a1b1-cef4f34dba1f",
+      "name": "Build Weekly Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "// Filter to rows sent within the last 7 days, group by company (client proxy),\n// and compose the weekly summary message.\nvar rows = $input.all().map(function(i){ return i.json || {}; }).filter(function(r){ return r && Object.keys(r).length > 0; });\nvar now = Date.now();\nvar weekAgo = now - 7 * 24 * 60 * 60 * 1000;\nfunction ts(r){\n  var d = r.processed_at || r.date_added;\n  var p = d ? Date.parse(d) : NaN;\n  return isNaN(p) ? null : p;\n}\nvar recent = rows.filter(function(r){ var t = ts(r); return t !== null && t >= weekAgo && t <= now; });\n// If no timestamps parse (older test data), fall back to all sent rows so the report still fires.\nif (!recent.length && rows.length) { recent = rows; }\nvar count = recent.length;\n// Group by company (client proxy until client_id exists).\nvar groups = {};\nrecent.forEach(function(r){\n  var company = (r.company && String(r.company).trim()) ? String(r.company).trim() : 'Unknown';\n  if (!groups[company]) groups[company] = { company: company, count: 0, bestFit: -1, bestJob: '' };\n  groups[company].count++;\n  var fit = r.fit_score;\n  if (fit === undefined || fit === null || String(fit).trim() === '') fit = r.adjusted_fit_score;\n  var fitNum = parseFloat(fit);\n  if (!isNaN(fitNum) && fitNum > groups[company].bestFit) { groups[company].bestFit = fitNum; groups[company].bestJob = (r.job_title && String(r.job_title).trim()) ? String(r.job_title).trim() : 'a role'; }\n});\n// Rank individual applications by fit for the Top 3 list.\nvar ranked = recent.map(function(r){\n  var fit = r.fit_score;\n  if (fit === undefined || fit === null || String(fit).trim() === '') fit = r.adjusted_fit_score;\n  var fitNum = parseFloat(fit);\n  return { job: (r.job_title && String(r.job_title).trim()) ? String(r.job_title).trim() : 'a role', company: (r.company && String(r.company).trim()) ? String(r.company).trim() : 'Unknown', fit: isNaN(fitNum) ? null : fitNum };\n}).sort(function(a, b){ return (b.fit === null ? -1 : b.fit) - (a.fit === null ? -1 : a.fit); });\nvar top3 = ranked.slice(0, 3);\nvar parts = [];\nfor (var i = 0; i < top3.length; i++) {\n  var t = top3[i];\n  var fitStr = (t.fit === null) ? 'N/A' : t.fit;\n  parts.push((i + 1) + '. ' + t.job + ' at ' + t.company + ' (' + fitStr + '%)');\n}\nvar topLine = parts.length ? ('Top 3 matches: ' + parts.join(', ')) : 'No matches to highlight this week.';\nvar message = '\\uD83D\\uDCCA Weekly Report: Sent ' + count + ' applications this week. ' + topLine;\nreturn [{ json: { message: message, chat_id: '8890901423', total_sent: count, groups: Object.keys(groups).map(function(k){ return groups[k]; }) } }];"
+      }
+    },
+    {
+      "id": "0ef4d3f7-8624-4429-94dd-e84fd4cb0146",
+      "name": "Send Weekly Report",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        672,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "telegramApi": {
+          "id": "vw48hr1C0Ix4VQPK",
+          "name": "Telegram Bot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "webhookId": "5de744a9-16fc-4fdc-a3f3-a24011dd4822"
+    }
+  ],
+  "connections": {
+    "Every Monday 09:00": {
+      "main": [
+        [
+          {
+            "node": "Get Sent Applications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Sent Applications": {
+      "main": [
+        [
+          {
+            "node": "Build Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Send Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

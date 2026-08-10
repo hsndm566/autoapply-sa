@@ -1,0 +1,536 @@
+{
+  "name": "AI Social Video Maker",
+  "nodes": [
+    {
+      "id": "1b11c2db-8533-4493-9692-9ac6f9a37b4f",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        96
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "social-video-maker",
+        "responseMode": "responseNode"
+      },
+      "webhookId": "6ce605c0-b78b-4a5f-8e22-789123ed3705"
+    },
+    {
+      "id": "683e4edb-2c27-44ad-b685-32b43527b141",
+      "name": "Prep Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var body = ($json.body || $json) || {};\nvar topic = body.topic || 'General topic';\nvar sys = 'You are an expert short-form video scriptwriter for YouTube Shorts / TikTok / Reels. Given a TOPIC, write a vertical (9:16) short-form voiceover script of about 100 words with three parts: (1) a strong hook in the first line, (2) an informative body that delivers the promised value, and (3) a looping ending that connects back to the hook so the clip loops naturally. Write in a punchy, spoken style with no stage directions, emojis, or markdown. Then generate exactly 8 concise stock-footage visual search terms (2-4 words each) that visually match the script and are likely to exist on stock video sites like Pexels. Return ONLY JSON with keys \"script\" (string) and \"search_terms\" (array of exactly 8 strings). No markdown, no code fences.';\nvar usr = 'Topic: ' + topic;\nreturn [{ json: { topic: topic, sys: sys, usr: usr } }];"
+      }
+    },
+    {
+      "id": "hub-call",
+      "name": "Generate Script (AI Hub)",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        96
+      ],
+      "parameters": {
+        "mode": "once",
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "FNDaY5ZxgKtVQww9",
+          "cachedResultName": "AI Provider Hub"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "system": "={{ $('Prep Script').first().json.sys }}",
+            "user": "={{ $('Prep Script').first().json.usr }}",
+            "max_tokens": "={{ 1200 }}",
+            "temperature": "={{ 0.7 }}"
+          }
+        },
+        "options": {}
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "extract-script",
+      "name": "Extract Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var prep = $('Prep Script').first().json || {};\nvar src = $input.first().json || {};\nvar raw = String(src.text || '');\nvar source = src.provider_used || 'hub';\nfunction clean(s){ s=String(s||'').trim(); if(s.indexOf('\\u0060\\u0060\\u0060')!==-1){ s=s.replace(/\\u0060\\u0060\\u0060json/gi,'').replace(/\\u0060\\u0060\\u0060/g,'').trim(); } return s; }\nfunction parseCand(rawStr){ var c=clean(rawStr); if(!c) return null; var obj=null; try{ obj=JSON.parse(c); }catch(e){ var a=c.indexOf('{'); var b=c.lastIndexOf('}'); if(a!==-1&&b!==-1&&b>a){ try{ obj=JSON.parse(c.slice(a,b+1)); }catch(e2){ obj=null; } } } if(!obj) return null; var script=String(obj.script||'').trim(); var terms=Array.isArray(obj.search_terms)?obj.search_terms.map(function(x){return String(x);}).filter(function(x){return x.length;}):[]; if(script.length<20||terms.length<1) return null; return { script: script, search_terms: terms }; }\nvar p = parseCand(raw);\nvar ok = !!p;\nreturn [{ json: { topic: prep.topic, script: ok?p.script:'', search_terms: ok?p.search_terms:[], ai_source: ok?source:'none', script_ok: ok } }];"
+      }
+    },
+    {
+      "id": "05e137c1-0ccd-4b64-a774-f60be52e5190",
+      "name": "Finalize Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var m = $input.first().json || {};\nvar prep = $('Prep Script').first().json || {};\nvar topic = prep.topic || m.topic || 'this topic';\nvar script = String(m.script || '').trim();\nvar terms = Array.isArray(m.search_terms) ? m.search_terms.filter(function(x){ return String(x).trim().length; }) : [];\nvar source = m.ai_source || 'none';\nif (script.length < 20 || terms.length < 1) {\n  script = 'Top tips on ' + topic + '. First, master the fundamentals before anything else. Next, apply them consistently every single day. Then measure your results and adjust fast. Small improvements compound into big wins. Follow these tips on ' + topic + ' and watch your results grow.';\n  terms = ['industrial engineering','factory production line','team meeting office','warehouse robots','engineer blueprint','data dashboard','manufacturing workflow','business handshake'];\n  source = 'hardcoded_fallback';\n}\nvar generic = ['industrial engineering','factory production line','team meeting office','warehouse robots','engineer blueprint','data dashboard','manufacturing workflow','business handshake'];\nvar gi = 0;\nwhile (terms.length < 8) { terms.push(generic[gi % generic.length]); gi++; }\nterms = terms.slice(0, 8);\nreturn [{ json: { topic: topic, script: script, search_terms: terms, ai_source: source } }];"
+      }
+    },
+    {
+      "id": "7555947d-7d3b-4320-95ff-e7978e3bce22",
+      "name": "Split Search Terms",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var terms = $json.search_terms || [];\nreturn terms.slice(0, 8).map(function(t, i){ return { json: { term: String(t), idx: i + 1 } }; });"
+      }
+    },
+    {
+      "id": "372db66f-a643-4ed2-988c-40023fef20ef",
+      "name": "Search Pexels Videos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1344,
+        96
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.pexels.com/videos/search",
+        "sendQuery": true,
+        "specifyQuery": "keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.term }}"
+            },
+            {
+              "name": "orientation",
+              "value": "portrait"
+            },
+            {
+              "name": "per_page",
+              "value": "1"
+            },
+            {
+              "name": "size",
+              "value": "medium"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth"
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "xjf7MOiIv4WpdtTj",
+          "name": "Header Auth account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "bee55931-1463-4497-bd6c-ef90bcc91eb2",
+      "name": "Build Render Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        96
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "var items = $input.all();\nvar fin = $('Finalize Script').first().json || {};\nvar script = fin.script || '';\nvar topic = fin.topic || '';\nfunction pickLink(resp){ var v=(resp&&resp.videos&&resp.videos[0])||null; if(!v||!Array.isArray(v.video_files)||v.video_files.length===0) return null; var under50=v.video_files.filter(function(f){ return !f.file_size || f.file_size < 50*1024*1024; }); var pool=under50.length?under50:v.video_files; var portrait=pool.filter(function(f){ return (f.height||0)>=(f.width||0); }); var chosen=(portrait.length?portrait:pool).sort(function(a,b){ return (b.height||0)-(a.height||0); })[0]; return chosen?chosen.link:null; }\nvar modifications = { Text: script };\nvar n = 0;\nfor (var i=0;i<items.length;i++){ var link=pickLink(items[i].json); if(link){ n+=1; modifications['Background-'+n]=link; } }\nreturn [{ json: { topic: topic, script: script, ai_source: fin.ai_source || '', modifications: modifications } }];"
+      }
+    },
+    {
+      "id": "ee4918ab-c58c-4b79-ba0c-a621e6f72402",
+      "name": "Create Short",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        96
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.creatomate.com/v1/renders",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ template_id: \"d813e6d8-ec99-47aa-a5fc-71783cb70004\", modifications: $json.modifications }) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth"
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "MRRo4FKRqhs7tqsH",
+          "name": "creatomate"
+        }
+      }
+    },
+    {
+      "id": "39622bde-7bb1-49be-9f58-50cea91196af",
+      "name": "Wait For Render",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2016,
+        96
+      ],
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 10,
+        "unit": "seconds"
+      },
+      "webhookId": "1b002120-3917-4051-bf6d-6d4087323980"
+    },
+    {
+      "id": "da287680-043a-4c1f-a623-6ab07da711d5",
+      "name": "Check Video Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2240,
+        32
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.creatomate.com/v1/renders/{{ $json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth"
+      },
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "MRRo4FKRqhs7tqsH",
+          "name": "creatomate"
+        }
+      }
+    },
+    {
+      "id": "d4fa422b-1986-42ee-a990-e66ec0144c59",
+      "name": "Render Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2464,
+        96
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "status-check",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "succeeded",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "e84db432-e2c8-4811-ae0c-c0d3878f5239",
+      "name": "Save Video To Table",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2688,
+        96
+      ],
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "LxZrWOdNhLrPwwHk",
+          "cachedResultName": "social_videos"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "topic": "={{ $('Finalize Script').first().json.topic }}",
+            "script": "={{ $('Finalize Script').first().json.script }}",
+            "video_url": "={{ $json.url }}",
+            "render_id": "={{ $json.id }}",
+            "status": "={{ $json.status }}",
+            "style": "={{ 'ai-short (' + $('Finalize Script').first().json.ai_source + ')' }}",
+            "created_ts": "={{ $now.toISO() }}"
+          },
+          "schema": [
+            {
+              "id": "topic",
+              "displayName": "topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "script",
+              "displayName": "script",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "video_url",
+              "displayName": "video_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "render_id",
+              "displayName": "render_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "style",
+              "displayName": "style",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_ts",
+              "displayName": "created_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "date",
+              "canBeUsedToMatch": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "ed0193c1-863f-4771-a082-a4d53209f510",
+      "name": "Respond video_url",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2912,
+        96
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ video_url: $(\"Check Video Status\").first().json.url }) }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Prep Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Script": {
+      "main": [
+        [
+          {
+            "node": "Generate Script (AI Hub)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Script (AI Hub)": {
+      "main": [
+        [
+          {
+            "node": "Extract Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Script": {
+      "main": [
+        [
+          {
+            "node": "Finalize Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Script": {
+      "main": [
+        [
+          {
+            "node": "Split Search Terms",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Search Terms": {
+      "main": [
+        [
+          {
+            "node": "Search Pexels Videos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Pexels Videos": {
+      "main": [
+        [
+          {
+            "node": "Build Render Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Render Payload": {
+      "main": [
+        [
+          {
+            "node": "Create Short",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Short": {
+      "main": [
+        [
+          {
+            "node": "Wait For Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For Render": {
+      "main": [
+        [
+          {
+            "node": "Check Video Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Video Status": {
+      "main": [
+        [
+          {
+            "node": "Render Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Save Video To Table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait For Render",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Video To Table": {
+      "main": [
+        [
+          {
+            "node": "Respond video_url",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}

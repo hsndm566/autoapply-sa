@@ -1,0 +1,90 @@
+{
+  "name": "Job Applier — Error Alerts",
+  "nodes": [
+    {
+      "id": "a3ea2147-eaf5-44d8-94b1-c5c191b9b40a",
+      "name": "On Workflow Error",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "a46f9bc3-3c19-4f86-9bac-c80325cb2afe",
+      "name": "Build Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const e = $input.first().json || {};\nconst wf = e.workflow || {};\nconst ex = e.execution || {};\nconst err = ex.error || e.error || {};\nconst wfName = wf.name || \"Unknown workflow\";\nconst wfId = wf.id || \"unknown\";\nconst failedNode = err.node && err.node.name ? err.node.name : (ex.lastNodeExecuted || \"unknown node\");\nconst message = err.message || \"No error message provided\";\nconst mode = ex.mode || \"unknown\";\nconst when = ex.startedAt || new Date().toISOString();\nconst execUrl = ex.url || \"\";\nconst subject = `⚠️ Workflow failed: ${wfName} (${failedNode})`;\nconst lines = [\n  `Workflow: ${wfName} (${wfId})`,\n  `Failed node: ${failedNode}`,\n  `Error: ${message}`,\n  `Execution mode: ${mode}`,\n  `Time: ${when}`,\n];\nif (execUrl) { lines.push(`Execution: ${execUrl}`); }\nconst body = lines.join(\"\\n\");\nreturn [{ json: { subject, body, wfName, failedNode, message } }];"
+      }
+    },
+    {
+      "id": "9308362f-f70e-4244-9e72-025f814a1617",
+      "name": "Send Alert",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        0
+      ],
+      "parameters": {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "hasanadam506@gmail.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pT6ZfpwQkTrfQhkt",
+          "name": "Gmail account"
+        }
+      },
+      "webhookId": "2d2de3c6-1263-4f58-b6f3-6821068e2153"
+    }
+  ],
+  "connections": {
+    "On Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "Build Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Alert": {
+      "main": [
+        [
+          {
+            "node": "Send Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "availableInMCP": true
+  },
+  "staticData": null,
+  "pinData": {},
+  "triggerCount": 0,
+  "meta": null
+}
