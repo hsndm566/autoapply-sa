@@ -856,6 +856,29 @@ def run_application(client, query, cv_text, prof=None):
     log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)",
             platform="Greenhouse", method="tailored-CV portal submit", salary=salary)
     db.set_status(h, "queued_submit")
+    # SEND the tailored application to the client via Gmail (retry-wrapped)
+    try:
+        _keys = load_keys()
+        _u, _p = _keys.get("GMAIL_USER"), _keys.get("GMAIL_APP_PASSWORD")
+        if _u and _p:
+            from email.message import EmailMessage
+            import smtplib, ssl as _ssl
+            _m = EmailMessage()
+            _m["From"] = _u
+            _m["To"] = _u
+            _m["Subject"] = f"AutoApply SA — {j['title']} @ {j['company']} (Draft Ready)"
+            _m.set_content(f"Role: {j['title']} @ {j['company']}\n\n{draft}\n\n--\nAutoApply SA (Railway 24/7)")
+            _ctx = _ssl.create_default_context()
+            @retry.with_retry(max_attempts=3, base_delay=2.0, stage="email_send", client_id=client)
+            def _send():
+                _s = smtplib.SMTP_SSL("smtp.gmail.com", 465, context=_ctx)
+                _s.login(_u, _p); _s.send_message(_m); _s.quit()
+            _send()
+            db.set_status(h, "emailed")
+            tg(f"📧 Emailed draft for {j['title']} @ {j['company']}")
+    except Exception as e:
+        db.dead_letter(client, h, "email_send", str(e)[:300])
+        tg(f"⚠️ Email send failed (logged to dead-letter): {e}")
     # NETWORK INTELLIGENCE: record outcome (PII-STRIPPED: company+board+format only)
     try:
         import network_intelligence as NI
