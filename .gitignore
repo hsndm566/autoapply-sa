@@ -1,0 +1,9 @@
+# never commit secrets or local venv
+.env
+cvgen-env/
+__pycache__/
+*.pyc
+.factcheck_model
+night_send_run.log
+send_test3.log
+_*.sh
