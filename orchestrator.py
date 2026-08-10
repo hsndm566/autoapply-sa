@@ -775,7 +775,11 @@ def run_application(client, query, cv_text, prof=None):
             tg("🌐 Network: top-performing board weighted higher")
     except Exception:
         priors = {}
-    jobs = scraper_agent(query, limit=5)
+    try:
+        import apify_scraper
+        jobs = apify_scraper.scrape(query, max_results=100)
+    except Exception:
+        jobs = scraper_agent(query, limit=5)
     if not jobs:
         tg("No jobs found. Try broader query.")
         return None

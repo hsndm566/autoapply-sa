@@ -1,0 +1,21 @@
+{
+  "company_activity": {
+    "LiveCorp0": 1,
+    "SendCorp0": 1,
+    "AwayCorp0": 1,
+    "": 1
+  },
+  "cv_format_perf": {
+    "standard-format": {
+      "n": 4,
+      "resp": 0
+    }
+  },
+  "board_perf": {
+    "Greenhouse": {
+      "n": 4,
+      "interviews": 0
+    }
+  },
+  "batches": 4
+}

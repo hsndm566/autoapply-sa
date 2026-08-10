@@ -16,3 +16,11 @@ JSON sidecar: `skills/.network_state.json` (machine-readable). This doc is the h
 ## Aggregate log
 
 - 2026-08-07 | company=AcmeCorp | board=Greenhouse | format=junior-format | response=True | interview=False
+
+- 2026-08-10 | company=LiveCorp0 | board=Greenhouse | format=standard-format | response=False | interview=False
+
+- 2026-08-10 | company=SendCorp0 | board=Greenhouse | format=standard-format | response=False | interview=False
+
+- 2026-08-10 | company=AwayCorp0 | board=Greenhouse | format=standard-format | response=False | interview=False
+
+- 2026-08-10 | company= | board=Greenhouse | format=standard-format | response=False | interview=False
