@@ -19,6 +19,7 @@ Budget: tracks up to 500 applications. DeepSeek used ONLY as final reviewer
 to conserve its quota.
 """
 import os, json, csv, urllib.request, urllib.parse, subprocess, datetime, time
+import retry
 
 _is_ci = os.environ.get("CI", "false") == "true"
 if _is_ci:
