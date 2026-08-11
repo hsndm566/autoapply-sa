@@ -1,0 +1,7 @@
+Notion auth: ntn_5348... (set)
+Notion connected as: Production token
+WORKING (verified master): 331
+BATCH3: 100
+DOMAINS_TO_CHECK: 108
+Using existing DB: 3b9c73d3-e534-819a-942f-dc317637344f
+Added rows -> WORKING:331 SENDING_NOW:408 QUEUED:101 BATCH3:100 DOMAINS:108

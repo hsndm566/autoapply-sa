@@ -1,0 +1,5 @@
+SELF-HEAL 2026-08-10 23:19
+sent_today=0 target=200
+action=SWITCH_MODEL->nvidia
+
+MODEL_KEY: invalid key for ['groq']. Switching fact-check model.

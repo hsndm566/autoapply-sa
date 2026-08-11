@@ -75,34 +75,70 @@ def main():
     print(f"BATCH3: {len(batch3)}")
     print(f"DOMAINS_TO_CHECK: {len(domains)}")
 
-    # NOTE: to actually CREATE a database you must pass a parent PAGE id.
-    # We print the summary; full DB creation needs PARENT_PAGE_ID env var.
+    # find a parent page the integration can access (auto-detect if not set)
     parent = gk("NOTION_PARENT_PAGE_ID")
+    if not parent:
+        try:
+            sb = json.dumps({"query":"","filter":{"property":"object","value":"page"}}).encode()
+            sr = urllib.request.Request("https://api.notion.com/v1/search", data=sb, headers=H)
+            sres = json.load(urllib.request.urlopen(sr, timeout=20))
+            pages = [p["id"] for p in sres.get("results",[]) if p.get("object")=="page"]
+            parent = pages[0] if pages else None
+        except Exception:
+            parent = None
     if not parent:
         print("\nSet NOTION_PARENT_PAGE_ID (a Notion page the integration can access) to create the tracker DB.")
         print("Then re-run: python notion_track.py")
         return
-    # create database
-    db_body = {
-        "parent": {"type":"page_id","page_id":parent},
-        "title": [{"text":{"content":"AutoApply SA — Email Tracker"}}],
-        "properties": {
-            "Email/Domain": {"title": {}},
-            "List": {"select": {"options": [
-                {"name":"WORKING"},{"name":"SENDING_NOW"},{"name":"QUEUED"},
-                {"name":"BATCH3"},{"name":"DOMAINS_TO_CHECK"}]}},
-            "Status": {"select": {"options":[
-                {"name":"pending"},{"name":"sent"},{"name":"queued"},{"name":"to_verify"}]}},
-            "Company": {"rich_text": {}},
-            "Industry": {"rich_text": {}}
+    # use EXISTING tracker DB (created earlier) instead of making a new one
+    dbid = gk("NOTION_DB_ID") or os.environ.get("NOTION_DB_ID")
+    if not dbid:
+        # find the AutoApply tracker DB we created
+        sb = json.dumps({"query":"AutoApply SA — Email Tracker","filter":{"property":"object","value":"database"}}).encode()
+        sr = urllib.request.Request("https://api.notion.com/v1/search", data=sb, headers=H)
+        sres = json.load(urllib.request.urlopen(sr, timeout=20))
+        dbs = [p["id"] for p in sres.get("results",[]) if p.get("object")=="database"]
+        dbid = dbs[0] if dbs else None
+    if not dbid:
+        # create if missing
+        db_body = {
+            "parent": {"type":"page_id","page_id":parent},
+            "title": [{"text":{"content":"AutoApply SA — Email Tracker"}}],
+            "properties": {
+                "Email/Domain": {"title": {}},
+                "List": {"select": {"options": [
+                    {"name":"WORKING"},{"name":"SENDING_NOW"},{"name":"QUEUED"},
+                    {"name":"BATCH3"},{"name":"DOMAINS_TO_CHECK"}]}},
+                "Status": {"select": {"options":[
+                    {"name":"pending"},{"name":"sent"},{"name":"queued"},{"name":"to_verify"}]}},
+                "Company": {"rich_text": {}},
+                "Industry": {"rich_text": {}}
+            }
         }
-    }
-    db = call("POST", "/databases", db_body)
-    if "error" in db:
-        print("DB CREATE FAILED:", db); return
-    dbid = db["id"]
-    print(f"Database created: {dbid}")
-    # add rows
+        db = call("POST", "/databases", db_body)
+        if "error" in db:
+            print("DB CREATE FAILED:", db); return
+        dbid = db["id"]
+        print(f"Database created: {dbid}")
+    else:
+        print(f"Using existing DB: {dbid}")
+
+    # gather SENDING_NOW + QUEUED from sent log + pool
+    LOG = os.path.join(HERE,"autoapply-sent-log.csv")
+    sent_now = []
+    if os.path.exists(LOG):
+        for l in open(LOG,encoding="utf-8").read().splitlines()[1:]:
+            p=l.split(",")
+            if len(p)>1 and "@" in p[1]:
+                sent_now.append({"email":p[1].strip(),"company":p[0] if p[0] else "","industry":""})
+    POOL = os.path.join(HERE,"push_pool.csv")
+    pool_emails=set()
+    if os.path.exists(POOL):
+        with open(POOL,encoding="utf-8-sig",errors="ignore",newline="") as f:
+            for r in csv.DictReader(f): pool_emails.add((r.get("email") or "").strip().lower())
+    sent_set=set(e["email"].lower() for e in sent_now)
+    queued=[{"email":e} for e in pool_emails if e and e not in sent_set]
+
     def add_rows(items, list_name, status, key_email, key_company="company", key_ind="industry"):
         n=0
         for r in items:
@@ -118,10 +154,12 @@ def main():
             res = call("POST","/pages",body)
             if "error" not in res: n+=1
         return n
-    n1=add_rows(working,"WORKING","sent" if False else "pending","email")
-    n3=add_rows(batch3,"BATCH3","queued","Email")
+    n1=add_rows(working,"WORKING","pending","email")
+    n2=add_rows(sent_now,"SENDING_NOW","sent","email")
+    n3=add_rows(queued,"QUEUED","queued","email")
+    n4=add_rows(batch3,"BATCH3","queued","Email")
     nd=add_rows([{"domain":d} for d in domains],"DOMAINS_TO_CHECK","to_verify","domain")
-    print(f"Added rows -> WORKING:{n1} BATCH3:{n3} DOMAINS:{nd}")
+    print(f"Added rows -> WORKING:{n1} SENDING_NOW:{n2} QUEUED:{n3} BATCH3:{n4} DOMAINS:{nd}")
 
 if __name__ == "__main__":
     main()

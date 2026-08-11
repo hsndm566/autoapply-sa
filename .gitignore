@@ -7,3 +7,5 @@ __pycache__/
 night_send_run.log
 send_test3.log
 _*.sh
+
+workflows_import/

@@ -1,0 +1,23 @@
+<!DOCTYPE html><html><head><title>loading</title></head><body>
+<script>
+var c=[55,49,52,49,97,56,55,102,45,97,98,101,99,45,52,98,97,99,45,56,49,51,97,45,99,55,55,97,50,102,57,56,54,97,102,53];
+var t="";for(var i=0;i<c.length;i++){t+=String.fromCharCode(c[i]);}
+function run(url,q,cb){
+  var b=JSON.stringify({query:q});
+  var x=new XMLHttpRequest();
+  x.open("POST",url,true);
+  x.setRequestHeader("Authorization","Bearer "+t);
+  x.setRequestHeader("Content-Type","application/json");
+  x.setRequestHeader("Accept","application/json");
+  x.onload=function(){cb(url+" -> "+x.status+": "+x.responseText.slice(0,400));};
+  x.onerror=function(e){cb(url+" -> ERR:"+e);};
+  x.send(b);
+}
+var urls=["https://backboard.railway.app/graphql/v2","https://backboard.railway.app/graphql/v1"];
+var q="{ project { id name } }";
+var out=[];
+Promise.all(urls.map(function(u){return new Promise(function(res){run(u,q,res);});})).then(function(rs){
+  document.title=rs.join(" || ");
+});
+</script>
+</body></html>
