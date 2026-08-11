@@ -182,13 +182,42 @@ def admit_lever_board(client: str, careers_url: str, *, commit: bool = False) ->
     if commit:
         try:
             reg = load()
+            matched = False
             for s in reg.get("sources", []):
                 if s.get("id") != "lever":
                     continue
                 for emp in s.get("employers", []):
-                    if (emp.get("company") or emp.get("org")) == client:
+                    # Match on the dedicated client/board slug, NOT company/org name
+                    # (fix 4: the Lever slug is independent of the display name).
+                    if emp.get("client") == client or emp.get("board") == client:
                         emp["verified"] = True
+                        emp["client"] = client          # dedicated slug field
                         emp["careers_url"] = careers_url
+                        emp["verified_at"] = time.time()
+                        emp["verification_result"] = {
+                            "careers_ok": result["careers_ok"],
+                            "endpoint_ok": result["endpoint_ok"],
+                        }
+                        matched = True
+                        break
+                if matched:
+                    break
+            if not matched:
+                # No pre-existing entry: append a verified board record keyed by slug.
+                for s in reg.get("sources", []):
+                    if s.get("id") == "lever":
+                        s.setdefault("employers", []).append({
+                            "client": client,
+                            "name": client,
+                            "ats": "lever",
+                            "verified": True,
+                            "careers_url": careers_url,
+                            "verified_at": time.time(),
+                            "verification_result": {
+                                "careers_ok": result["careers_ok"],
+                                "endpoint_ok": result["endpoint_ok"],
+                            },
+                        })
                         break
             with open(REGISTRY_PATH, "w", encoding="utf-8") as fh:
                 json.dump(reg, fh, indent=2, ensure_ascii=False)

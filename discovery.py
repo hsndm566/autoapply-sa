@@ -139,12 +139,14 @@ def _lever_employer_key(emp: dict[str, Any]) -> str:
 
 
 def fetch_lever(employer: dict[str, Any]) -> list[dict[str, Any]]:
-    company = _lever_employer_key(employer)
-    if not company:
+    # The Lever CLIENT slug is a dedicated field and is NOT assumed to equal the
+    # company or org name (fix 4). Fall back through explicit fields.
+    client = employer.get("client") or employer.get("board") or employer.get("company") or employer.get("name", "")
+    if not client:
         return []
-    url = f"https://api.lever.co/v0/postings/{company}?mode=json"
+    url = f"https://api.lever.co/v0/postings/{client}?mode=json"
     data, reason, retries = _fetch_bytes(url)
-    name = employer.get("name", company) if isinstance(employer, dict) else company
+    name = employer.get("name", client) if isinstance(employer, dict) else client
     _log(name, url, ok=(data != b""), reason=reason, count=0, retries=retries)
     parsed = _maybe_json(data)
     if parsed is None:
@@ -159,15 +161,17 @@ def fetch_lever(employer: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         cats = j.get("categories") or {}
         loc = cats.get("location", "") if isinstance(cats, dict) else ""
+        # Fix 2: prefer the actual application URL (applyUrl) over the hosted detail page.
+        apply = j.get("applyUrl") or j.get("hostedUrl", "")
         out.append(js.normalize_job(
             source="lever",
-            employer_key=company,
+            employer_key=client,
             posting_id=jid,
             company=name,
             title=j.get("text", ""),
             location=str(loc or ""),
             job_url=j.get("hostedUrl", ""),
-            apply_url=j.get("hostedUrl", j.get("applyUrl", "")),
+            apply_url=apply,
             raw=j,
         ))
     if _FETCH_LOG:
@@ -211,6 +215,8 @@ def fetch_ashby(employer: dict[str, Any]) -> list[dict[str, Any]]:
         org_name = j.get("organization")
         if isinstance(org_name, dict):
             org_name = org_name.get("name")
+        # Fix 2: prefer the actual application URL (applyUrl) over the job-detail page.
+        apply = j.get("applyUrl") or j.get("jobUrl", "")
         out.append(js.normalize_job(
             source="ashby",
             employer_key=org,
@@ -219,7 +225,7 @@ def fetch_ashby(employer: dict[str, Any]) -> list[dict[str, Any]]:
             title=j.get("title", ""),
             location=_norm_loc(j.get("location")),
             job_url=j.get("jobUrl", ""),
-            apply_url=j.get("jobUrl") or j.get("applyUrl", ""),
+            apply_url=apply,
             raw=j,
         ))
     if _FETCH_LOG:
@@ -231,13 +237,16 @@ _FETCHERS = {"greenhouse": fetch_greenhouse, "lever": fetch_lever, "ashby": fetc
 
 
 def discover_source(source_id: str, fetch: bool = False) -> list[dict[str, Any]]:
-    """Discover all employers for one source. Returns records only (fail-closed)."""
+    """Discover all employers for one source. Returns records only (fail-closed).
+
+    Honors the GENERAL source ``status`` from the registry: a source whose
+    status is not "active" (e.g. Lever while unverified) is skipped entirely.
+    No special-case Lever condition — the registry is the single source of truth.
+    """
     source = sr.source_by_id(source_id)
     if not source:
         return []
-    # Lever stays DISABLED in the live set until independently verified boards
-    # exist (see source_registry.lever_enabled). Guessing slugs is forbidden.
-    if source_id == "lever" and not sr.lever_enabled():
+    if source.get("status") != "active":
         return []
     fn = _FETCHERS.get(source_id)
     if fn is None:

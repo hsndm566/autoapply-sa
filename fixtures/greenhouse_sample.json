@@ -1,0 +1,12 @@
+{
+  "jobs": [
+    {"id": "GH1001", "title": "Industrial Engineer, Manufacturing", "location": "Riyadh, Saudi Arabia",
+     "absolute_url": "https://boards.greenhouse.io/sampleco/jobs/GH1001"},
+    {"id": "GH1002", "title": "Process Engineer", "location": "Jeddah, Saudi Arabia",
+     "absolute_url": "https://boards.greenhouse.io/sampleco/jobs/GH1002"},
+    {"id": "GH1003", "title": "Industrial Engineer, Manufacturing", "location": "Riyadh, Saudi Arabia",
+     "absolute_url": "https://boards.greenhouse.io/sampleco/jobs/GH1003"},
+    {"id": "GH1004", "title": "Supply Chain Analyst", "location": "Remote",
+     "absolute_url": "https://boards.greenhouse.io/sampleco/jobs/GH1004"}
+  ]
+}

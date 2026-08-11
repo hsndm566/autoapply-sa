@@ -158,11 +158,10 @@ class PathVerifierTests(unittest.TestCase):
         self.assertFalse(d.eligible_for_submit)
 
     def test_direct_email_lane(self):
-        # Email contacts route to a SEPARATE audited email lane, not a portal
-        # submit state. The verifier records it as portal_complex (held) with the
-        # email-lane blocker so it is never routed to a portal submit adapter.
+        # Fix 3: a verified employer/recruiter address MUST return direct_email,
+        # routed to the existing audited email lane. Ineligible for portal submit.
         d = pv.verify(self._rec(), email_address="careers@acme.com")
-        self.assertEqual(d.state, "portal_complex")
+        self.assertEqual(d.state, "direct_email")
         self.assertFalse(d.eligible_for_submit)
         self.assertIn("email lane", d.blocker)
 
@@ -172,18 +171,20 @@ class PathVerifierTests(unittest.TestCase):
 
     def test_upload_unproven_source_fails_closed(self):
         # Resume input seen BUT source not yet proven -> portal_upload_unverified
-        # (held, not eligible). This is the new split: it is NOT portal_complex.
+        # (held, not eligible). Fix 3: keep unverified blocked.
         d = pv.verify(self._rec(source="greenhouse"), resume_input_seen=True,
                       required_fields=["name", "email"])
         self.assertEqual(d.state, "portal_upload_unverified")
         self.assertFalse(d.eligible_for_submit)
 
     def test_upload_proven_source_eligible(self):
+        # Fix 3: a source that has passed a real CV-upload E2E returns
+        # portal_upload_verified (NOT portal_upload_unverified) and is eligible.
         pv.clear_verified_uploads()
         pv.mark_source_upload_verified("greenhouse")
         d = pv.verify(self._rec(source="greenhouse"), resume_input_seen=True,
                       required_fields=["name", "email"])
-        self.assertEqual(d.state, "portal_upload_unverified")
+        self.assertEqual(d.state, "portal_upload_verified")
         self.assertTrue(d.eligible_for_submit)
         pv.clear_verified_uploads()
 
@@ -245,6 +246,124 @@ class LeverAcceptanceTests(unittest.TestCase):
         res = sr.verify_lever_board("this-client-does-not-exist-xyz", "https://example.com/careers")
         self.assertFalse(res["accepted"])
         self.assertFalse(res["endpoint_ok"])
+
+
+class FixVerificationTests(unittest.TestCase):
+    """Regression tests for the four independent-review fixes."""
+
+    def _rec(self, source="greenhouse", company="Acme", title="Engineer"):
+        return js.normalize_job(source=source, employer_key=company, posting_id="1",
+                                 company=company, title=title)
+
+    # --- Fix 2: apply URL preference (actual application URL, not detail page) ---
+    def test_lever_prefers_applyurl(self):
+        def fetcher(url: str) -> bytes:
+            if "api.lever.co" in url:
+                return fixture_bytes("lever_sample.json")
+            return b""
+        disc.set_fetcher(fetcher)
+        try:
+            recs = disc.fetch_lever({"name": "SampleCo", "client": "sampleco"})
+            by_id = {r["posting_id"]: r for r in recs}
+            # LV2001 has both hostedUrl and applyUrl -> apply_url must be applyUrl.
+            self.assertEqual(by_id["LV2001"]["apply_url"], "https://jobs.lever.co/sampleco/LV2001/apply")
+            self.assertNotEqual(by_id["LV2001"]["apply_url"], by_id["LV2001"]["job_url"])
+            # LV2003 has only hostedUrl -> falls back to hostedUrl.
+            self.assertEqual(by_id["LV2003"]["apply_url"], "https://jobs.lever.co/sampleco/LV2003")
+        finally:
+            disc.set_fetcher(None)
+
+    def test_ashby_prefers_applyurl(self):
+        def fetcher(url: str) -> bytes:
+            if "ashbyhq.com/posting-api" in url:
+                return fixture_bytes("ashby_sample.json")
+            return b""
+        disc.set_fetcher(fetcher)
+        try:
+            recs = disc.fetch_ashby({"name": "SampleCo", "org": "sampleco"})
+            by_id = {r["posting_id"]: r for r in recs}
+            # AS3001 has both jobUrl and applyUrl -> apply_url must be applyUrl.
+            self.assertEqual(by_id["AS3001"]["apply_url"], "https://jobs.ashbyhq.com/sampleco/AS3001/apply")
+            self.assertNotEqual(by_id["AS3001"]["apply_url"], by_id["AS3001"]["job_url"])
+            # AS3003 has only jobUrl -> falls back to jobUrl.
+            self.assertEqual(by_id["AS3003"]["apply_url"], "https://jobs.ashbyhq.com/sampleco/AS3003")
+        finally:
+            disc.set_fetcher(None)
+
+    # --- Fix 3: state semantics ---
+    def test_verified_email_returns_direct_email(self):
+        d = pv.verify(self._rec(), email_address="talent@acme.com")
+        self.assertEqual(d.state, "direct_email")
+        self.assertFalse(d.eligible_for_submit)
+        self.assertIn("email lane", d.blocker)
+
+    def test_unverified_upload_blocked(self):
+        pv.clear_verified_uploads()
+        d = pv.verify(self._rec(source="greenhouse"), resume_input_seen=True,
+                      required_fields=["name", "email"])
+        self.assertEqual(d.state, "portal_upload_unverified")
+        self.assertFalse(d.eligible_for_submit)
+
+    def test_proven_upload_returns_verified(self):
+        pv.clear_verified_uploads()
+        pv.mark_source_upload_verified("greenhouse")
+        d = pv.verify(self._rec(source="greenhouse"), resume_input_seen=True,
+                      required_fields=["name", "email"])
+        self.assertEqual(d.state, "portal_upload_verified")
+        self.assertTrue(d.eligible_for_submit)
+        pv.clear_verified_uploads()
+
+    # --- Fix 4: Lever registry persistence + general source status ---
+    def test_lever_status_honored_general(self):
+        # Lever source status is "disabled" in the registry -> discover_source skips it
+        # via the general status check (not a special-case Lever flag).
+        self.assertEqual(disc.discover_source("lever", fetch=True), [])
+
+    def test_admit_lever_persists_slug_and_meta(self):
+        # Verify the persistence contract: dedicated client slug, careers URL,
+        # verification timestamp, and verification result are written after BOTH
+        # checks pass. Runs against a TEMP registry copy so the real registry is
+        # never polluted (no committed test slug). Fully offline/deterministic.
+        import tempfile, shutil, os as _os
+        src = sr.REGISTRY_PATH
+        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False).name
+        shutil.copyfile(src, tmp)
+        old_path = sr.REGISTRY_PATH
+        sr.REGISTRY_PATH = tmp
+        sr.reload()
+        try:
+            # Patch admit's internal verify to pass (both checks ok).
+            def fake_verify(client, careers_url):
+                return {"accepted": True, "client": client, "careers_url": careers_url,
+                        "careers_ok": True, "endpoint_ok": True}
+
+            orig = sr.verify_lever_board
+            sr.verify_lever_board = fake_verify
+            try:
+                # Admit a slug that does NOT match any existing employer name.
+                res = sr.admit_lever_board("acme-real-slug", "https://careers.acme.com", commit=True)
+                self.assertTrue(res["accepted"])
+            finally:
+                sr.verify_lever_board = orig
+
+            reg = sr.load()
+            lever = next(s for s in reg["sources"] if s["id"] == "lever")
+            persisted = [e for e in lever["employers"] if e.get("client") == "acme-real-slug"]
+            self.assertTrue(persisted, "dedicated client slug not persisted")
+            e = persisted[0]
+            self.assertEqual(e["careers_url"], "https://careers.acme.com")
+            self.assertIn("verified_at", e)
+            self.assertIn("verification_result", e)
+            self.assertTrue(e["verified"])
+            # Slug is independent of an existing employer's display name.
+            patreon = next((x for x in lever["employers"] if x.get("client") == "patreon"), None)
+            self.assertIsNotNone(patreon)
+            self.assertEqual(patreon["name"], "Patreon")  # name preserved, not the slug
+            self.assertNotEqual(patreon.get("name"), "acme-real-slug")
+        finally:
+            sr.REGISTRY_PATH = old_path
+            sr.reload()
+            _os.unlink(tmp)
 
 
 if __name__ == "__main__":

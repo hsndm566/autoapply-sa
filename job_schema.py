@@ -26,8 +26,8 @@ STATES = (
 
 # Path Verifier classifications.
 PATH_STATES = (
-    "portal_upload_unverified", "portal_complex",
-    "login_or_captcha", "expired_or_duplicate",
+    "direct_email", "portal_upload_verified", "portal_upload_unverified",
+    "portal_complex", "login_or_captcha", "expired_or_duplicate",
 )
 
 

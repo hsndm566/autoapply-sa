@@ -6,9 +6,14 @@ verifier performs READ-ONLY checks only; it never opens a session, submits a
 form, or spends browser/captcha capacity.
 
 States (per governance, this revision):
-  portal_upload_unverified  a resume <input type=file> was observed on the form,
-                            but the source has NOT yet proven real CV file upload
-                            via a source-specific E2E. Held — not eligible.
+  direct_email              a verified employer/recruiter address exists -> routed
+                            to the existing AUDITED EMAIL LANE. Ineligible for any
+                            portal submission. Never reaches a portal submit adapter.
+  portal_upload_verified    a resume <input type=file> was observed AND the source
+                            has PROVEN real CV file upload via a source-specific E2E.
+                            Eligible for a source-specific submit adapter.
+  portal_upload_unverified  a resume <input type=file> was observed, but the source
+                            has NOT proven real CV file upload via E2E. Held — blocked.
   portal_complex            unsupported conditional steps (extra questions, consent,
                             EEO, salary expectation, cover-letter required) OR
                             insufficient evidence to classify — fails closed.
@@ -17,8 +22,7 @@ States (per governance, this revision):
   expired_or_duplicate      closed listing or already attempted in repost window.
 
 A job becomes eligible for a source-specific submit adapter only after it is
-classified ``portal_upload_unverified`` AND an adapter has proven a real CV file
-upload for that source (mark_source_upload_verified).
+classified ``portal_upload_verified`` (requires a proven real CV upload E2E).
 """
 from __future__ import annotations
 
@@ -99,23 +103,28 @@ def verify(
                             "anti-bot/login marker detected", blocker="login or captcha control present",
                             notes=["Detected login/CAPTCHA; per governance, record and stop."])
 
-    # 3. Direct email lane (Tier C / recruiter contact) -> routed to audited email, not portal.
+    # 3. Direct email lane (verified employer/recruiter address) -> routed to
+    #    the EXISTING AUDITED EMAIL LANE, NOT portal submission. Ineligible for
+    #    any portal submit adapter. (Fix 3: must be direct_email, not portal_complex.)
     if email_address and _EMAIL_RE.match(email_address):
-        return PathDecision("portal_complex", source, company, title,
+        return PathDecision("direct_email", source, company, title,
                             f"verified address {email_address}",
                             blocker="routed to separate audited email lane",
-                            notes=["Email lane is handled by the email adapter, not portal submit."])
+                            notes=["Email lane handled by the email adapter, never portal submit."])
 
-    # 4. Portal upload unverified — resume input positively observed but the
-    #    source has not yet proven real CV file upload via E2E.
+    # 4. Portal upload. Two sub-states:
+    #    - portal_upload_verified: resume input seen AND source has PROVEN real
+    #      CV upload via a source-specific E2E -> eligible for submit adapter.
+    #    - portal_upload_unverified: resume input seen but source NOT proven ->
+    #      held, ineligible (fails closed). (Fix 3: keep unverified blocked.)
     if resume_input_seen and required_fields is not None:
         if source in _VERIFIED_UPLOAD_SOURCES:
-            return PathDecision("portal_upload_unverified", source, company, title,
-                                "resume <input type=file> confirmed; source upload proven",
+            return PathDecision("portal_upload_verified", source, company, title,
+                                "resume <input type=file> confirmed; source upload proven via E2E",
                                 eligible_for_submit=True,
                                 notes=[f"Required fields: {', '.join(required_fields) or 'unknown'}."])
         return PathDecision("portal_upload_unverified", source, company, title,
-                            "resume <input type=file> confirmed; source upload NOT yet proven",
+                            "resume <input type=file> confirmed; source upload NOT yet proven via E2E",
                             blocker="source CV upload not yet proven via E2E",
                             notes=["Held pending source-specific upload proof."])
 
