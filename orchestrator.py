@@ -77,6 +77,11 @@ def load_keys():
                 keys["GROQ_API_KEY"] = _k
         except Exception:
             pass
+    # export all loaded keys into os.environ so child modules
+    # (browserbase_submit, captcha_solver) can read them via os.environ.get
+    for _k, _v in keys.items():
+        if _k and _v and not os.environ.get(_k):
+            os.environ[_k] = _v
     return keys
 
 def chat(provider, model, prompt, temperature=0.4, timeout=60):
@@ -394,7 +399,18 @@ def reinvestment_plan(budget_usd):
 
 
 def tg(text):
-    data = urllib.parse.urlencode({"chat_id": CID, "text": text}).encode()
+    """SILENCED. Commander ruled: Telegram gets ONLY portal-submit results.
+    All status/scraping/diagnosis spam is suppressed here. Use tg_submit()."""
+    return
+
+def tg_submit(ok, title, company, reason=""):
+    """The ONLY Telegram messages allowed: successful or failed portal applications.
+    ok=True -> success. ok=False -> failure with reason."""
+    if ok:
+        msg = f"✅ Applied online: {title} @ {company}"
+    else:
+        msg = f"❌ Online apply FAILED: {title} @ {company}" + (f" — {reason}" if reason else "")
+    data = urllib.parse.urlencode({"chat_id": CID, "text": msg}).encode()
     try:
         json.load(urllib.request.urlopen(
             urllib.request.Request(f"https://api.telegram.org/bot{BOT}/sendMessage", data=data), timeout=15))
@@ -757,6 +773,7 @@ def run_application(client, query, cv_text, prof=None):
     """One full application cycle through the agent farm.
     Now: kill-switch aware, DB-deduped before spend, retry-wrapped, state-tracked."""
     import db, caps
+    load_keys()  # populate os.environ with all secrets (Browserbase, Gmail, etc.) before any submit
     if db.kill_switch_on():
         tg("[HALT] RUN_ENABLED=false. Stopping cycle.")
         return None
@@ -863,7 +880,35 @@ def run_application(client, query, cv_text, prof=None):
     log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)",
             platform="Greenhouse", method="tailored-CV portal submit", salary=salary)
     db.set_status(h, "queued_submit")
-    # SEND the tailored application to the client via Gmail (retry-wrapped)
+    # === REAL PORTAL SUBMIT ===
+    # Primary: local/cloud Chromium (Playwright, $0, runs on Railway free compute).
+    # Fallback: Browserbase cloud browser (if local Chromium unavailable).
+    try:
+        import local_submit as bs
+        cv_data = {
+            "cName": "Hasan Adam",
+            "cEmail": "hasanadam506@gmail.com",
+            "cPhoneNumber": "+966571448656",
+            "cCoverLetter": draft[:500] if draft else "Applying via AutoApply SA automated engine."
+        }
+        res = bs.submit_application(j.get("url", ""), cv_data)
+        if not res.get("submitted"):
+            # fallback to Browserbase if local chromium failed
+            try:
+                import browserbase_submit as bbs
+                res = bbs.submit_application(j.get("url", ""), cv_data)
+            except Exception:
+                pass
+        if res.get("submitted"):
+            db.set_status(h, "submitted")
+            tg_submit(True, j["title"], j["company"])
+        else:
+            db.set_status(h, "portal_failed", res.get("note", "unknown"))
+            tg_submit(False, j["title"], j["company"], res.get("note", "submit failed"))
+    except Exception as e:
+        db.set_status(h, "portal_failed", str(e)[:200])
+        tg_submit(False, j["title"], j["company"], str(e)[:120])
+    # SEND the tailored application to the client via Gmail (backup, silent on TG)
     try:
         _keys = load_keys()
         _u, _p = _keys.get("GMAIL_USER"), _keys.get("GMAIL_APP_PASSWORD")
@@ -882,10 +927,8 @@ def run_application(client, query, cv_text, prof=None):
                 _s.login(_u, _p); _s.send_message(_m); _s.quit()
             _send()
             db.set_status(h, "emailed")
-            tg(f"📧 Emailed draft for {j['title']} @ {j['company']}")
     except Exception as e:
         db.dead_letter(client, h, "email_send", str(e)[:300])
-        tg(f"⚠️ Email send failed (logged to dead-letter): {e}")
     # NETWORK INTELLIGENCE: record outcome (PII-STRIPPED: company+board+format only)
     try:
         import network_intelligence as NI
