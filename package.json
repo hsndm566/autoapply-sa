@@ -1,0 +1,12 @@
+{
+  "name": "autoapply-sa-n8n",
+  "version": "1.0.0",
+  "description": "n8n instance running AutoApply SA job-applier workflows",
+  "private": true,
+  "scripts": {
+    "start": "node init-and-run.js"
+  },
+  "dependencies": {
+    "n8n": "^1.90.0"
+  }
+}
