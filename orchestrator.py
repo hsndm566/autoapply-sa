@@ -20,6 +20,7 @@ to conserve its quota.
 """
 import os, json, csv, urllib.request, urllib.parse, subprocess, datetime, time, random
 import retry
+import auditor
 
 _is_ci = os.environ.get("CI", "false") == "true"
 if _is_ci:
@@ -178,11 +179,11 @@ def double_check(draft, original_job):
               "Reply JSON: {\"pass\": true/false, \"issues\": [...]}")
     out = chat("groq", "llama-3.3-70b-versatile", prompt)
     if not out:
-        return {"pass": True, "issues": ["double-check skipped (groq unavailable)"]}
+        return {"pass": False, "issues": ["double-check unavailable — fail closed"]}
     try:
         return json.loads(out[out.find("{"):out.rfind("}")+1])
     except Exception:
-        return {"pass": True, "issues": ["double-check parse-fallback"]}
+        return {"pass": False, "issues": ["double-check response malformed — fail closed"]}
 
 def reviewer_agent(draft):
     """DeepSeek FINAL review/parse ONLY — minimal tokens, 1 call."""
@@ -194,7 +195,7 @@ def reviewer_agent(draft):
     try:
         return json.loads(out[out.find("{"):out.rfind("}")+1])
     except Exception:
-        return {"approved": True, "score": 7, "fix": "parse-fallback"}
+        return {"approved": False, "score": 0, "fix": "review unavailable or malformed — fail closed"}
 
 def scraper_agent(query, limit=5):
     boards = ["anthropic", "databricks", "robinhood", "discord", "scale", "nvidia",
@@ -866,24 +867,58 @@ def run_application(client, query, cv_text, prof=None):
     # DOUBLE-CHECK pass (independent Groq QA)
     dc = double_check(draft, desc)
     tg(f"Double-check: pass={dc.get('pass')} | issues: {dc.get('issues')}")
-    # CAP ENFORCEMENT before any submit/send
+    # Persist the draft before audit. The Auditor will fail closed if the CV,
+    # personalization, job identity, or independent model review is missing.
+    db.set_status(h, "drafted")
+    path = os.path.join(BASE, f"app_{n+1}_{j['company']}.txt")
+    open(path, "w", encoding="utf-8").write(draft)
+
+    # Current submitters do not upload a CV file; a cover-letter text field is
+    # never treated as a CV. This explicit transport label intentionally blocks
+    # portal execution until local_submit/browserbase_submit implement and test
+    # a genuine file upload, then this value can become portal_file_upload_verified.
+    application_package = {
+        "application_id": h,
+        "job": {"company": j["company"], "role": j["title"], "url": j.get("url", "")},
+        "candidate": {
+            "full_name": os.environ.get("CANDIDATE_FULL_NAME", "Hasan Adam"),
+            "email": os.environ.get("CANDIDATE_EMAIL", "hasanadam506@gmail.com"),
+            "cv_path": CV_PATH,
+            "cv_text": cv_text,
+        },
+        "draft": draft,
+        "destination": {"kind": "job_portal", "url": j.get("url", ""), "is_test_recipient": False},
+        "submission": {"channel": "portal", "mode": "live", "cv_transport": "portal_text_fields_only"},
+        "metadata": {"draft_provider": dprov, "legacy_review": review, "legacy_double_check": dc},
+    }
+    audit_decision = auditor.audit_application(
+        h, application_package, ai_reviewer=auditor.configured_ai_reviewer, require_ai_review=True
+    )
+    if not audit_decision.approved:
+        db.set_status(h, "audit_rejected", audit_decision.summary[:300])
+        db.dead_letter(client, h, "auditor", audit_decision.summary[:300])
+        tg(f"[AUDITOR] BLOCKED: {j['title']} @ {j['company']} — {audit_decision.summary}")
+        return j
+
+    # CAP ENFORCEMENT happens only after quality approval and immediately before
+    # the executor is allowed to interact with a third party.
     try:
         caps.enforce("submit", client)
     except RuntimeError as ce:
         db.set_status(h, "failed", str(ce))
         tg(f"[CAP] blocked submit: {ce}. Application logged, will not send.")
         return j
-    db.set_status(h, "drafted")
-    # save draft
-    path = os.path.join(BASE, f"app_{n+1}_{j['company']}.txt")
-    open(path, "w", encoding="utf-8").write(draft)
-    log_app(client, j["title"], j["company"], "DRAFTED+REVIEWED (awaiting submit)",
-            platform="Greenhouse", method="tailored-CV portal submit", salary=salary)
+    db.set_status(h, "audit_approved")
+    log_app(client, j["title"], j["company"], "AUDIT APPROVED (awaiting verified CV upload)",
+            platform="Greenhouse", method="audited portal submit", salary=salary)
     db.set_status(h, "queued_submit")
     # === REAL PORTAL SUBMIT ===
     # Primary: local/cloud Chromium (Playwright, $0, runs on Railway free compute).
     # Fallback: Browserbase cloud browser (if local Chromium unavailable).
     try:
+        # Re-check the immutable package at the exact execution boundary. A
+        # draft, destination, or CV changed after approval invalidates the token.
+        auditor.assert_execution_allowed(h, application_package, audit_decision.approval_token)
         import local_submit as bs
         cv_data = {
             "cName": "Hasan Adam",
@@ -908,27 +943,11 @@ def run_application(client, query, cv_text, prof=None):
     except Exception as e:
         db.set_status(h, "portal_failed", str(e)[:200])
         tg_submit(False, j["title"], j["company"], str(e)[:120])
-    # SEND the tailored application to the client via Gmail (backup, silent on TG)
-    try:
-        _keys = load_keys()
-        _u, _p = _keys.get("GMAIL_USER"), _keys.get("GMAIL_APP_PASSWORD")
-        if _u and _p:
-            from email.message import EmailMessage
-            import smtplib, ssl as _ssl
-            _m = EmailMessage()
-            _m["From"] = _u
-            _m["To"] = _u
-            _m["Subject"] = f"AutoApply SA — {j['title']} @ {j['company']} (Draft Ready)"
-            _m.set_content(f"Role: {j['title']} @ {j['company']}\n\n{draft}\n\n--\nAutoApply SA (Railway 24/7)")
-            _ctx = _ssl.create_default_context()
-            @retry.with_retry(max_attempts=3, base_delay=2.0, stage="email_send", client_id=client)
-            def _send():
-                _s = smtplib.SMTP_SSL("smtp.gmail.com", 465, context=_ctx)
-                _s.login(_u, _p); _s.send_message(_m); _s.quit()
-            _send()
-            db.set_status(h, "emailed")
-    except Exception as e:
-        db.dead_letter(client, h, "email_send", str(e)[:300])
+    # No email is ever sent from this path without its own audit token. The old
+    # implementation only emailed a self-addressed plain-text preview and then
+    # marked it as an application success; that behavior is removed. Any future
+    # email dispatcher must call auditor.build_approved_email(...) and only send
+    # the returned message after audit_application(...).approved is true.
     # NETWORK INTELLIGENCE: record outcome (PII-STRIPPED: company+board+format only)
     try:
         import network_intelligence as NI
