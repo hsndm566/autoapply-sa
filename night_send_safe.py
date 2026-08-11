@@ -181,7 +181,7 @@ def live_bounce_rate(sent_rows, window_hours=48):
     # bounces in window (from mailer-daemon, parse Date header)
     try:
         import imaplib, re as _re
-        c=imaplib.IMAP4_SSL("imap.gmail.com",993); c.login(FROM,PW); c.select("INBOX")
+        c=imaplib.IMAP4_SSL("imap.gmail.com",993,timeout=20); c.login(FROM,PW); c.select("INBOX")
         _,d=c.search(None,'(FROM "mailer-daemon@googlemail.com")')
         bd=d[0].split() if d[0] else []
         bounced_in_window=set()
@@ -215,11 +215,15 @@ if os.path.exists(LOG):
 print(f"Already sent (skip): {len(done)} | today sent so far: {today_count}/{DAILY_CAP}")
 
 # CIRCUIT BREAKER: rolling-window bounce rate check (self-clears after cooldown)
-br, bc = live_bounce_rate(sent_rows, window_hours=48)
-print(f"Rolling 48h bounce rate: {br*100:.1f}% ({bc} bounced in window)")
-if br >= BOUNCE_LIMIT:
-    print(f"BOUNCE CIRCUIT BREAKER TRIPPED ({br*100:.1f}% >= {BOUNCE_LIMIT*100:.0f}%). HALTING. Cooldown 48h then auto-resume.")
-    raise SystemExit(0)
+# Breaker is disabled (BOUNCE_LIMIT>=1.0 per user override) -> skip IMAP to avoid hangs/crashes
+if BOUNCE_LIMIT < 1.0:
+    br, bc = live_bounce_rate(sent_rows, window_hours=48)
+    print(f"Rolling 48h bounce rate: {br*100:.1f}% ({bc} bounced in window)")
+    if br >= BOUNCE_LIMIT:
+        print(f"BOUNCE CIRCUIT BREAKER TRIPPED ({br*100:.1f}% >= {BOUNCE_LIMIT*100:.0f}%). HALTING. Cooldown 48h then auto-resume.")
+        raise SystemExit(0)
+else:
+    print("Bounce breaker disabled (BOUNCE_LIMIT>=1.0) — skipping IMAP bounce check")
 
 if __name__=="__main__":
     # load daily bounce count (recompute from log marker or external)
