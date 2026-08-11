@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SENDER = os.path.join(HERE, "night_send_safe.py")
 HEAL = os.path.join(HERE, "self_heal.py")
 LOG = os.path.join(HERE, "autoapply-sent-log.csv")
-DAILY_TARGET = 200
+DAILY_TARGET = 500
 
 def count_today():
     if not os.path.exists(LOG): return 0
