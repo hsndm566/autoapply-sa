@@ -21,9 +21,22 @@ from datetime import datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CVR = os.path.join(HERE, "cv_variants")
-ENV = open(r"C:/Users/hasan/AppData/Local/hermes/.env", encoding="utf-8", errors="ignore").read()
+# Portable env loading: prefer real ENV vars (Railway injects), fallback to script-relative .env (local dev only).
+def _load_env_text():
+    v = os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("GMAIL_APP_PASSWORD")
+    if v:
+        # at least one real ENV var present -> don't need the file
+        return None
+    local_env = os.path.join(HERE, ".env")
+    if os.path.exists(local_env):
+        return open(local_env, encoding="utf-8", errors="ignore").read()
+    return None
+ENV = _load_env_text()
 def gk(k):
-    m = re.search(re.escape(k) + r'\s*=\s*"?([^\"\n]+)', ENV)
+    ev = os.environ.get(k)
+    if ev: return ev.strip()
+    if ENV is None: return None
+    m = re.search(re.escape(k) + r'\s*=\s*"?([^"\n]+)', ENV)
     return m.group(1).strip() if m else None
 DS = gk("DEEPSEEK_API_KEY"); GQ = gk("GROQ_API_KEY"); NV = gk("NVIDIA_API_KEY")
 TG_TOKEN = gk("TELEGRAM_BOT_TOKEN")
