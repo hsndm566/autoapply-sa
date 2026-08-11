@@ -39,8 +39,9 @@ def main():
         print(f"[{datetime.datetime.now()}] cycle start — sent today: {today}/{DAILY_TARGET}")
         # run sender one batch (it self-limits via time.sleep per send)
         try:
-            subprocess.run([sys.executable, SENDER], cwd=HERE, timeout=3600,
-                           capture_output=True, text=True)
+            # NOTE: do NOT capture_output — we need the sender's SENT/FAIL lines + tracebacks
+            # in Railway logs for verification (previously hidden by capture_output=True).
+            subprocess.run([sys.executable, SENDER], cwd=HERE, timeout=3600)
         except subprocess.TimeoutExpired:
             print("sender timeout (1h) — will self-heal")
         sent = count_today()
