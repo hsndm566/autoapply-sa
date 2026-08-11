@@ -23,13 +23,18 @@ CVR=os.path.join(HERE,"cv_variants")
 # Cloud-safe secret loading: prefer real ENV vars (Railway/CI injects them),
 # fall back to local .env file for local dev.
 def gk(k):
+    # PRIMARY: real environment variables (Railway injects these in the container).
     v=os.environ.get(k)
     if v: return v.strip()
-    try:
-        ENV=open(r"C:/Users/hasan/AppData/Local/hermes/.env",encoding="utf-8",errors="ignore").read()
-        m=re.search(re.escape(k)+r'\s*=\s*"?([^"\n]+)',ENV); return m.group(1).strip() if m else None
-    except Exception:
-        return None
+    # FALLBACK: local-dev .env ONLY if it exists next to the script (portable, not hardcoded Windows path).
+    local_env=os.path.join(HERE, ".env")
+    if os.path.exists(local_env):
+        try:
+            ENV=open(local_env,encoding="utf-8",errors="ignore").read()
+            m=re.search(re.escape(k)+r'\s*=\s*"?([^"\n]+)',ENV); return m.group(1).strip() if m else None
+        except Exception:
+            return None
+    return None
 PW=gk("GMAIL_APP_PASSWORD"); DS=gk("DEEPSEEK_API_KEY"); NV=gk("NVIDIA_API_KEY"); GM=gk("GEMINI_API_KEY")
 
 DAILY_CAP=100000   # user override: push volume, no daily cap
