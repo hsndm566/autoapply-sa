@@ -42,7 +42,12 @@ def submit_application(url, cv_data=None):
             b = p.chromium.launch(headless=True)
             page = b.new_page()
             page.goto(url, timeout=30000); page.wait_for_timeout(5000)
-            page.click('a:has-text("Apply")'); page.wait_for_timeout(7000)
+            # Breezy chat widget (bzIframe) can intercept the Apply click -> force it
+            try:
+                page.click('a:has-text("Apply")', force=True)
+            except Exception:
+                page.evaluate("""() => { const a=[...document.querySelectorAll('a')].find(x=>/apply/i.test(x.textContent)); if(a) a.click(); }""")
+            page.wait_for_timeout(7000)
             html = page.content()
             if 'recaptcha' in html.lower() or 'captcha' in html.lower() or 'hcaptcha' in html.lower():
                 b.close()
