@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-AutoApply SA — SAFE TAILORED SENDER (reputation-guarded)
+AutoApply SA — SAFE TAILORED SENDER (reputation-guarded) [build-fix-v2 x]
 Rules (set after 10.9% bounce incident 2026-08-09):
 - DAILY_CAP = 40 sends max (Gmail warm safe zone).
 - BOUNCE_BREAKER = if live bounce rate > 5%, STOP immediately, alert.
