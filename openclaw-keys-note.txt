@@ -1,0 +1,3 @@
+OpenClaw provider wiring (masked, do not commit):
+DeepSeek key len: 35
+Groq key len: 56

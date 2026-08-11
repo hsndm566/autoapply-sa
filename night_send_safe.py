@@ -9,9 +9,10 @@ Rules (set after 10.9% bounce incident 2026-08-09):
 - Resume from log (no duplicates).
 - Each app DeepSeek fact-checked; tailored CV attached.
 """
-import csv, re, time, smtplib, ssl, json, os, urllib.request, socket
+import csv, re, time, smtplib, ssl, json, os, urllib.request, socket, sys
 from email.message import EmailMessage
 from datetime import datetime, date
+import industry as IND  # SINGLE SOURCE OF TRUTH for industry resolution
 
 NAME="Hassan Adam"; PHONE="+966 57 144 8656"; FROM="hasanadam506@gmail.com"
 # Cloud-safe paths: use script dir so it works in Railway container AND locally
@@ -67,23 +68,24 @@ def verify_cv(ind):
         if r not in txt: return False, f"missing-{r}"
     return True, "verified"
 
+# ---- industry resolution is now owned entirely by industry.py (single source of truth) ----
+# CV_FACTS kept for fact-check grounding only.
 CV_FACTS=("Industrial Engineer (BSc, UBT Jeddah) with logistics & operations coordination at UBT, purchasing at Aljabr (Dammam), and a Lean KAIA project cutting process time 40%.")
-IND_MAP=[("logistics","logistics"),("supply","supply"),("food","food"),("beverage","beverage"),("retail","retail"),
- ("hospitality","hospitality"),("chemical","chemical"),("manufactur","manufactur"),("construct","construct"),
- ("engineer","engineer"),("oil","oil"),("health","health"),("finance","finance"),("tech","tech")]
-def ind_for(email,dom):
-    blob=(email+dom).lower()
-    for kw,ind in IND_MAP:
-        if kw in blob: return ind
-    return "engineer"
-def draft(email):
-    dom=email.split('@')[-1]; co=dom.split('.')[0].title(); ind=ind_for(email,dom)
-    subj=f"Job Application – Industrial Engineer / Operations – {co}"
+
+def draft(email, ind: IND.Industry):
+    """ind is REQUIRED (no default). Hard-fail if caller didn't resolve it.
+    Letter uses the per-industry skills block so it is genuinely sector-specific."""
+    if not isinstance(ind, IND.Industry):
+        raise TypeError(f"draft() requires an Industry object, got {type(ind)}")
+    dom=email.split('@')[-1]; co=dom.split('.')[0].title()
+    subj=f"Job Application – {ind.name.title()} Operations – {co}"
+    block=ind.block()
     body=(f"Dear {co} Hiring Team,\n\nI am an Industrial Engineer (BSc, UBT Jeddah) with logistics & operations "
-          f"coordination at UBT, purchasing and vendor relations at Aljabr (Dammam), and Lean process optimization "
-          f"(KAIA: 40% faster). I am interested in operations / industrial-engineering opportunities at {co}. "
-          f"My CV (tailored to {ind} operations) is attached.\n\nBest regards,\n{NAME}\n{PHONE}\n{FROM}")
-    return subj,body,ind
+          f"coordination at UBT, purchasing and vendor relations at Aljabr (Dammam), and a Lean KAIA project cutting "
+          f"process time 40%. For a {ind.name} role I bring strengths in {block}\n\n"
+          f"I am interested in {ind.name} opportunities at {co}. My CV (tailored to {ind.name} operations) is attached.\n\n"
+          f"Best regards,\n{NAME}\n{PHONE}\n{FROM}")
+    return subj,body,ind.name
 
 def mx_ok(domain):
     # FAIL-OPEN: only skip if we DEFINITIVELY confirm no mail infrastructure.
@@ -112,8 +114,11 @@ def mx_ok(domain):
 def ds_factcheck(subj,body,ind):
     if not DS: return True,"no-key"
     GROUND=(f"Real: BSc IE UBT, UBT logistics coord, Aljabr purchasing, Piece of Fabric production, AGS ops, KAIA 40 percent faster, "
-            f"OSHA30/ISO9001/BCG certs, Hassan Adam +966571448656 hasanadam506@gmail.com. CV variant '{ind}' only reorders emphasis.")
+            f"OSHA30/ISO9001/BCG certs, Hassan Adam +966****8656 hasanadam506@gmail.com. CV variant '{ind}' only reorders emphasis.")
     prompt=(f"You are a STRICT fact-checker. RULE: reframing/emphasis-reorder allowed; invented job/company/metric/cert = VIOLATION. "
+            f"CONSISTENCY RULE: the cover letter must be framed for industry '{ind}' (matching the attached CV). A letter claiming "
+            f"'tailored to {ind} operations' while describing skills from a DIFFERENT industry, or a generic letter that contradicts "
+            f"the attached CV industry, = VIOLATION. "
             f"Reply ONLY: APPROVE or VIOLATION: <item>.\nREAL FACTS: {GROUND}\n\nSUBJECT: {subj}\nBODY: {body}")
     try:
         p=json.dumps({"model":"deepseek-chat","messages":[{"role":"user","content":prompt}],"temperature":0}).encode()
@@ -122,43 +127,51 @@ def ds_factcheck(subj,body,ind):
         return ("APPROVE" in r), r
     except Exception: return True,f"check-err"
 
-def send(to,subj,body,ind):
+def send(to, subj, body, ind: IND.Industry):
+    # ind is REQUIRED (no default) — fail loud if caller didn't resolve it.
+    if not isinstance(ind, IND.Industry):
+        raise TypeError(f"send() requires an Industry object, got {type(ind)}")
+    # CONSISTENCY ASSERTION (fail loud, before any network call):
+    # the industry used for the letter, the attachment, and the resolved value must agree.
+    letter_ind = None
+    m = re.search(r"tailored to (\w+) operations", body)
+    if m: letter_ind = m.group(1).lower()
+    # attachment industry derived from ind.name
+    attach_ind = ind.name
+    if letter_ind is not None and letter_ind != attach_ind:
+        return False, f"CONSISTENCY_FAIL: letter says '{letter_ind}' but CV/resolved is '{attach_ind}'"
     # HARD GATE: full multi-layer quality_gate must pass before any attachment/send.
-    # If it fails, block the send AND alert Telegram with the exact failing layer.
-    import importlib.util, sys
+    import importlib.util
     spec=importlib.util.spec_from_file_location("quality_gate",os.path.join(os.path.dirname(os.path.abspath(__file__)),"quality_gate.py"))
     qg=importlib.util.module_from_spec(spec); spec.loader.exec_module(qg)
-    ok,res,i,m=qg.run_gate(ind, FACTCHECK_MODEL)
+    ok,res,i,m=qg.run_gate(ind.name, FACTCHECK_MODEL)
     if not ok:
         fails=[f"{k}: {v[1]}" for k,v in res.items() if v[0]=="FAIL"]
         why=" | ".join(fails) or "unknown"
-        # alert owner on Telegram
-        qg.telegram_alert(f"❌ CV BLOCKED from send\ncv_{ind}.pdf\nreason: {why}")
+        qg.telegram_alert(f"❌ CV BLOCKED from send\ncv_{ind.name}.pdf\nreason: {why}")
         return False,f"QUALITY_GATE_FAIL:{why}"
     msg=EmailMessage(); msg["From"]=FROM; msg["To"]=to; msg["Subject"]=subj; msg.set_content(body)
-    cvp=os.path.join(CVR,f"cv_{ind}.pdf")
-    if not os.path.exists(cvp): cvp=os.path.join(CVR,"cv_engineer.pdf")
-    # VERIFY attachment is a real, non-empty PDF (not words/plain text)
+    cvp=ind.cv_file()   # single source: Industry owns the path; no silent fallback
     if not os.path.exists(cvp):
-        return False,"CV PDF missing"
+        return False,f"CV PDF missing: {cvp}"
     sz=os.path.getsize(cvp)
     with open(cvp,"rb") as f: head=f.read(5); data=f.read()
     if head!=b"%PDF-" or sz<500:
         return False,f"CV not valid PDF (head={head!r} size={sz})"
-    msg.add_attachment(data,maintype="application",subtype="pdf",filename=f"Hasan_Adam_CV_{ind}.pdf")
+    # attachment filename must reflect the resolved industry
+    msg.add_attachment(data,maintype="application",subtype="pdf",filename=f"Hasan_Adam_CV_{ind.name}.pdf")
     for _ in range(3):
         try:
             with smtplib.SMTP_SSL("smtp.gmail.com",465,context=ssl.create_default_context()) as s:
                 s.login(FROM,PW); s.send_message(msg)
-                # CONFIRM it really landed in Gmail Sent, then ping Telegram the count
                 try:
                     import importlib.util as _iu
                     spec=_iu.spec_from_file_location("tc",os.path.join(os.path.dirname(os.path.abspath(__file__)),"telegram_counter.py"))
                     tc=_iu.module_from_spec(spec); spec.loader.exec_module(tc)
                     n,st=tc.confirm_and_alert(to)
-                    return True,f"pdf:{ind}:{sz}b:confirmed#{n}"
+                    return True,f"pdf:{ind.name}:{sz}b:confirmed#{n}"
                 except Exception as ce:
-                    return True,f"pdf:{ind}:{sz}b:sent(unverified:{ce})"
+                    return True,f"pdf:{ind.name}:{sz}b:sent(unverified:{ce})"
         except Exception as e: last=str(e)[:80]; time.sleep(5)
     return False,last
 
@@ -226,18 +239,18 @@ else:
     print("Bounce breaker disabled (BOUNCE_LIMIT>=1.0) — skipping IMAP bounce check")
 
 if __name__=="__main__":
+    # BOOT ASSERT: fail loud if any CV missing or map invalid (single check, not mid-send)
+    try:
+        IND.boot_assert_cv_files()
+    except Exception as e:
+        print(f"BOOT ASSERT FAILED: {e}"); raise SystemExit(1)
     # load daily bounce count (recompute from log marker or external)
-    # We track bounces separately; for safety, if today_count already >= CAP, stop.
     if today_count>=DAILY_CAP:
         print(f"DAILY CAP {DAILY_CAP} reached. STOPPING. Resume tomorrow."); raise SystemExit(0)
 
-    # load precise company->industry map (real KSA-corp knowledge)
-    IND_MAP_FILE=os.path.join(os.path.dirname(os.path.abspath(__file__)),"email_industry_map.json")
-    IND_MAP_JSON={}
-    if os.path.exists(IND_MAP_FILE):
-        try: IND_MAP_JSON=json.load(open(IND_MAP_FILE,encoding="utf-8"))
-        except Exception: IND_MAP_JSON={}
-    print(f"Industry map loaded: {len(IND_MAP_JSON)} entries")
+    # NOTE: email_industry_map.json is loaded ONCE inside industry.py (IND._OVERRIDE).
+    # We do NOT reload it here and we do NOT recompute industry — single resolver only.
+    print(f"Industry override map loaded: {len(IND._OVERRIDE)} entries")
 
     leads=[]
     for row in csv.DictReader(open(POOL,encoding="utf-8")):
@@ -252,16 +265,18 @@ if __name__=="__main__":
         dom=em.split('@')[-1]
         if not mx_ok(dom):
             print(f"SKIP (no MX): {em}"); continue
-        s,b,_=draft(em)
-        ind=IND_MAP_JSON.get(em, ind_for(em,dom))   # precise map, fallback to keyword
-        ok,verdict=ds_factcheck(s,b,ind)
+        # SINGLE resolution — once, at top of pipeline. Passed as value everywhere.
+        ind=IND.resolve_industry(em,dom)
+        s,b,_=draft(em,ind)
+        ok,verdict=ds_factcheck(s,b,ind.name)
         if not ok:
             print(f"DEEPSEEK-BLOCK {em}: {verdict}"); continue
         ok2,st=send(em,s,b,ind)
         if ok2:
             sent+=1; today_count+=1
-            open(LOG,"a").write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')},{em},{dom},{s},tailored:{ind}:{st or 'ok'}\n")
-            print(f"SENT {sent} (today {today_count}/{DAILY_CAP}): {em} | cv_{ind}")
+            # log includes resolution REASON so audits catch drift without hand-diffing
+            open(LOG,"a").write(f"{datetime.now().strftime('%Y-%m-%d %H:%M')},{em},{dom},{s},tailored:{ind.name}:{ind.reason}:{st or 'ok'}\n")
+            print(f"SENT {sent} (today {today_count}/{DAILY_CAP}): {em} | cv_{ind.name} [{ind.reason}]")
         else:
             print(f"FAIL {em}: {st}")
         time.sleep(45)
