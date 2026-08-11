@@ -1,0 +1,102 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-08-12T00:00:00Z",
+  "policy": {
+    "employer_cap_per_30d": 2,
+    "source_family_cap_pct": 35,
+    "watchlist_cap_pct": 10,
+    "min_employers_before_50": 20,
+    "min_source_families_before_50": 4,
+    "repost_window_days": 90,
+    "apify_discovery_only": true
+  },
+  "watchlist": ["anthropic", "gitlab", "openai", "notion", "netflix", "stripe"],
+  "sources": [
+    {
+      "id": "greenhouse",
+      "family": "greenhouse",
+      "tier": "A",
+      "discovery": "boards-api.greenhouse.io/v1/boards/{board}/jobs",
+      "detail": "boards-api.greenhouse.io/v1/boards/{board}/jobs/{id}",
+      "auth": false,
+      "cost": "free",
+      "status": "active",
+      "employers": [
+        {"name": "Anthropic", "board": "anthropic", "ats": "greenhouse", "country": "US", "sector": "ai", "tags": ["ai", "ml"]},
+        {"name": "Databricks", "board": "databricks", "ats": "greenhouse", "country": "US", "sector": "data", "tags": ["data", "ml"]},
+        {"name": "Robinhood", "board": "robinhood", "ats": "greenhouse", "country": "US", "sector": "fintech", "tags": ["fintech"]},
+        {"name": "Discord", "board": "discord", "ats": "greenhouse", "country": "US", "sector": "social", "tags": ["social"]},
+        {"name": "Scale AI", "board": "scale", "ats": "greenhouse", "country": "US", "sector": "ai", "tags": ["ai", "ml"]},
+        {"name": "NVIDIA", "board": "nvidia", "ats": "greenhouse", "country": "US", "sector": "hardware", "tags": ["hardware", "ai"]},
+        {"name": "Tesla", "board": "tesla", "ats": "greenhouse", "country": "US", "sector": "hardware", "tags": ["hardware"]},
+        {"name": "Johnson Controls", "board": "johnsoncontrols", "ats": "greenhouse", "country": "US", "sector": "industrial", "tags": ["industrial"]},
+        {"name": "Honeywell", "board": "honeywell", "ats": "greenhouse", "country": "US", "sector": "industrial", "tags": ["industrial"]},
+        {"name": "Siemens", "board": "siemens", "ats": "greenhouse", "country": "DE", "sector": "industrial", "tags": ["industrial"]},
+        {"name": "GE", "board": "ge", "ats": "greenhouse", "country": "US", "sector": "industrial", "tags": ["industrial"]},
+        {"name": "Caterpillar", "board": "caterpillar", "ats": "greenhouse", "country": "US", "sector": "industrial", "tags": ["industrial"]},
+        {"name": "P&G", "board": "pg", "ats": "greenhouse", "country": "US", "sector": "cpg", "tags": ["cpg"]},
+        {"name": "Unilever", "board": "unilever", "ats": "greenhouse", "country": "UK", "sector": "cpg", "tags": ["cpg"]},
+        {"name": "Nestle", "board": "nestle", "ats": "greenhouse", "country": "CH", "sector": "cpg", "tags": ["cpg"]},
+        {"name": "Saudi Aramco", "board": "saudiaramco", "ats": "greenhouse", "country": "SA", "sector": "energy", "tags": ["energy", "ksa"]},
+        {"name": "Airbnb", "board": "airbnb", "ats": "greenhouse", "country": "US", "sector": "marketplace", "tags": ["marketplace"]},
+        {"name": "Stripe", "board": "stripe", "ats": "greenhouse", "country": "US", "sector": "fintech", "tags": ["fintech"]},
+        {"name": "Coinbase", "board": "coinbase", "ats": "greenhouse", "country": "US", "sector": "fintech", "tags": ["fintech", "crypto"]},
+        {"name": "Twitch", "board": "twitch", "ats": "greenhouse", "country": "US", "sector": "social", "tags": ["social"]},
+        {"name": "GitLab", "board": "gitlab", "ats": "greenhouse", "country": "US", "sector": "devtools", "tags": ["devtools"]},
+        {"name": "Roku", "board": "roku", "ats": "greenhouse", "country": "US", "sector": "hardware", "tags": ["hardware"]},
+        {"name": "Snap", "board": "snap", "ats": "greenhouse", "country": "US", "sector": "social", "tags": ["social"]},
+        {"name": "Asana", "board": "asana", "ats": "greenhouse", "country": "US", "sector": "devtools", "tags": ["devtools"]},
+        {"name": "Datadog", "board": "datadog", "ats": "greenhouse", "country": "US", "sector": "devtools", "tags": ["devtools", "observability"]},
+        {"name": "Shopify", "board": "shopify", "ats": "greenhouse", "country": "CA", "sector": "ecommerce", "tags": ["ecommerce"]},
+        {"name": "Lyft", "board": "lyft", "ats": "greenhouse", "country": "US", "sector": "mobility", "tags": ["mobility"]},
+        {"name": "Zoom", "board": "zoom", "ats": "greenhouse", "country": "US", "sector": "comms", "tags": ["comms"]},
+        {"name": "Reddit", "board": "reddit", "ats": "greenhouse", "country": "US", "sector": "social", "tags": ["social"]},
+        {"name": "Slack", "board": "slack", "ats": "greenhouse", "country": "US", "sector": "comms", "tags": ["comms"]},
+        {"name": "Figma", "board": "figma", "ats": "greenhouse", "country": "US", "sector": "design", "tags": ["design"]}
+      ]
+    },
+    {
+      "id": "lever",
+      "family": "lever",
+      "tier": "A",
+      "discovery": "api.lever.co/v0/postings/{company}?mode=json",
+      "detail": "api.lever.co/v0/postings/{company}/{id}?mode=json",
+      "auth": false,
+      "cost": "free",
+      "status": "disabled",
+      "note": "Lever slugs are not guessable. A board is admitted only after source_registry.verify_lever_board() confirms its public careers URL is reachable AND the documented endpoint returns a valid listing. Until then Lever stays disabled in the live set.",
+      "employers": [
+        {"name": "Airbnb", "company": "airbnb", "ats": "lever", "country": "US", "sector": "marketplace", "tags": ["marketplace"], "verified": false},
+        {"name": "Netflix", "company": "netflix", "ats": "lever", "country": "US", "sector": "media", "tags": ["media"], "verified": false},
+        {"name": "Mattermost", "company": "mattermost", "ats": "lever", "country": "US", "sector": "devtools", "tags": ["devtools"], "verified": false},
+        {"name": "Wise", "company": "wise", "ats": "lever", "country": "UK", "sector": "fintech", "tags": ["fintech"], "verified": false},
+        {"name": "Patreon", "company": "patreon", "ats": "lever", "country": "US", "sector": "media", "tags": ["media"], "verified": false},
+        {"name": "Buffer", "company": "buffer", "ats": "lever", "country": "US", "sector": "social", "tags": ["social"], "verified": false},
+        {"name": "Brex", "company": "brex", "ats": "lever", "country": "US", "sector": "fintech", "tags": ["fintech"], "verified": false},
+        {"name": "Ramp", "company": "ramp", "ats": "lever", "country": "US", "sector": "fintech", "tags": ["fintech"], "verified": false},
+        {"name": "Coinbase", "company": "coinbase", "ats": "lever", "country": "US", "sector": "fintech", "tags": ["fintech", "crypto"], "verified": false},
+        {"name": "Databricks", "company": "databricks", "ats": "lever", "country": "US", "sector": "data", "tags": ["data", "ml"], "verified": false},
+        {"name": "Quora", "company": "quora", "ats": "lever", "country": "US", "sector": "social", "tags": ["social"], "verified": false}
+      ]
+    },
+    {
+      "id": "ashby",
+      "family": "ashby",
+      "tier": "A",
+      "discovery": "api.ashbyhq.com/posting-api/job-board/{org}?includeCompensation=false",
+      "detail": "api.ashbyhq.com/posting-api/job-board/{org}?includeCompensation=false",
+      "auth": false,
+      "cost": "free",
+      "status": "active",
+      "employers": [
+        {"name": "Notion", "org": "notion", "ats": "ashby", "country": "US", "sector": "devtools", "tags": ["devtools"]},
+        {"name": "OpenAI", "org": "openai", "ats": "ashby", "country": "US", "sector": "ai", "tags": ["ai", "ml"]},
+        {"name": "Linear", "org": "linear", "ats": "ashby", "country": "US", "sector": "devtools", "tags": ["devtools"]},
+        {"name": "Ramp", "org": "ramp", "ats": "ashby", "country": "US", "sector": "fintech", "tags": ["fintech"]},
+        {"name": "Hebbia", "org": "hebbia", "ats": "ashby", "country": "US", "sector": "ai", "tags": ["ai", "ml"]},
+        {"name": "Recall", "org": "recall", "ats": "ashby", "country": "US", "sector": "ai", "tags": ["ai", "ml"]},
+        {"name": "Correctly", "org": "correctly", "ats": "ashby", "country": "US", "sector": "ai", "tags": ["ai", "ml"]}
+      ]
+    }
+  ]
+}
