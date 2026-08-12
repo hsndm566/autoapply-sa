@@ -97,6 +97,13 @@ class PortalSentinelTests(unittest.TestCase):
         self.assertEqual("UNSAFE_OR_UNSUPPORTED_SOURCE_URL", result.error_code)
         self.assertFalse(called)
 
+    def test_configured_source_does_not_count_as_a_failed_probe(self) -> None:
+        db.ensure_source_health("ashby")
+        db.record_source_health("ashby", "configured")
+        source = next(item for item in db.health_snapshot()["sources"] if item["source"] == "ashby")
+        self.assertEqual(0, source["successful_checks"])
+        self.assertEqual(0, source["failed_checks"])
+
     def test_cooldown_and_registered_probe_use_discovered_target_only(self) -> None:
         first = portal_sentinel.run_registered_probes(["greenhouse", "ashby"], fetcher=self.response(BASELINE_HTML))
         self.assertEqual(1, first["probed"])

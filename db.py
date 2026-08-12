@@ -671,18 +671,21 @@ def ensure_source_health(source: str, status: str = "configured") -> None:
 
 
 def record_source_health(source: str, status: str, error: str | None = None) -> None:
+    """Record a genuine probe result; configuration is not a failed health check."""
+    success = 1 if status in {"healthy", "baseline", "stable"} else 0
+    failure = 1 if status in {"blocked", "drifted", "unavailable", "degraded", "failed"} else 0
     with connection() as c:
         existing = c.execute("SELECT source FROM source_health WHERE source=?", (source,)).fetchone()
         if existing:
             c.execute(
                 """UPDATE source_health SET status=?, successful_checks=successful_checks+?, failed_checks=failed_checks+?,
                    last_error=?, last_checked_at=?, updated_at=? WHERE source=?""",
-                (status, 1 if status == "healthy" else 0, 0 if status == "healthy" else 1, error, _now(), _now(), source),
+                (status, success, failure, error, _now(), _now(), source),
             )
         else:
             c.execute(
                 "INSERT INTO source_health(source,status,successful_checks,failed_checks,last_error,last_checked_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-                (source, status, 1 if status == "healthy" else 0, 0 if status == "healthy" else 1, error, _now(), _now()),
+                (source, status, success, failure, error, _now(), _now()),
             )
 
 
