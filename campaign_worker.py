@@ -18,6 +18,7 @@ from pathlib import Path
 import campaign_discovery
 import db
 import email_dispatcher
+import portal_sentinel
 
 LOG = logging.getLogger("campaign_worker")
 SOURCE_REGISTRY = Path(__file__).with_name("source_registry.json")
@@ -40,8 +41,9 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
     db.record_service_health("auditor_gate", "healthy", "External execution remains fail-closed until Auditor approval")
     db.record_service_health("external_execution", "disabled", "No source-specific upload proof is enabled")
 
-    for source in _registry_sources():
-        db.record_source_health(source, "configured")
+    registry_sources = _registry_sources()
+    for source in registry_sources:
+        db.ensure_source_health(source, "configured")
 
     # Campaign discovery only reads public ATS listing APIs and writes durable job
     # options/events. It cannot queue an email or submit a portal application.
@@ -54,6 +56,14 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
         "campaign_discovery",
         "healthy" if discovery_result.get("enabled") else "disabled",
         f"processed={discovery_result.get('processed', 0)} skipped_cooldown={discovery_result.get('skipped_cooldown', 0)}",
+    )
+    # The sentinel only performs bounded HTTP GET observations against already
+    # discovered URLs. It has no browser, CV, outbox, or submit interface.
+    sentinel_result = portal_sentinel.run_registered_probes(registry_sources)
+    db.record_service_health(
+        "portal_sentinel",
+        "healthy" if sentinel_result.get("enabled") else "disabled",
+        f"probed={sentinel_result.get('probed', 0)} skipped={sentinel_result.get('skipped', 0)} external_execution=disabled",
     )
     try:
         email_limit = max(1, min(10, int(os.environ.get("EMAIL_OUTREACH_MAX_PER_CYCLE", "5"))))
@@ -70,8 +80,9 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
         "ok": True,
         "time": datetime.now(timezone.utc).isoformat(),
         "released_stale_outbox": released,
-        "configured_sources": _registry_sources(),
+        "configured_sources": registry_sources,
         "campaign_discovery": discovery_result,
+        "portal_sentinel": sentinel_result,
         "email_dispatch": email_result,
         "external_execution": "disabled",
     }

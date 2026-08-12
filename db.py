@@ -159,6 +159,19 @@ CREATE TABLE IF NOT EXISTS source_health (
     last_checked_at REAL,
     updated_at REAL DEFAULT (strftime('%s','now'))
 );
+CREATE TABLE IF NOT EXISTS portal_probe_runs (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    adapter_id TEXT NOT NULL,
+    adapter_version TEXT NOT NULL,
+    target_url TEXT NOT NULL,
+    status TEXT NOT NULL,
+    fingerprint TEXT,
+    previous_fingerprint TEXT,
+    observation_json TEXT NOT NULL DEFAULT '{}',
+    error_code TEXT,
+    observed_at REAL DEFAULT (strftime('%s','now'))
+);
 CREATE TABLE IF NOT EXISTS service_health (
     check_name TEXT PRIMARY KEY,
     status TEXT NOT NULL,
@@ -176,6 +189,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_type_status ON action_outbox(action_type, 
 CREATE INDEX IF NOT EXISTS idx_outreach_contacts_status ON outreach_contacts(status, company);
 CREATE INDEX IF NOT EXISTS idx_evidence_campaign ON application_evidence(campaign_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_campaign_discovery_events ON campaign_events(campaign_id, event_type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_portal_probe_source_observed ON portal_probe_runs(source, observed_at DESC);
 """
 
 
@@ -646,6 +660,16 @@ def record_evidence(
     return evidence_id
 
 
+def ensure_source_health(source: str, status: str = "configured") -> None:
+    """Register a source without overwriting a probe-derived health state."""
+    with connection() as c:
+        c.execute(
+            """INSERT OR IGNORE INTO source_health(source,status,successful_checks,failed_checks,last_error,last_checked_at,updated_at)
+               VALUES(?,?,?,?,?,?,?)""",
+            (source, status, 0, 0, None, None, _now()),
+        )
+
+
 def record_source_health(source: str, status: str, error: str | None = None) -> None:
     with connection() as c:
         existing = c.execute("SELECT source FROM source_health WHERE source=?", (source,)).fetchone()
@@ -660,6 +684,67 @@ def record_source_health(source: str, status: str, error: str | None = None) -> 
                 "INSERT INTO source_health(source,status,successful_checks,failed_checks,last_error,last_checked_at,updated_at) VALUES(?,?,?,?,?,?,?)",
                 (source, status, 1 if status == "healthy" else 0, 0 if status == "healthy" else 1, error, _now(), _now()),
             )
+
+
+def latest_portal_probe(source: str) -> dict[str, Any] | None:
+    with connection() as c:
+        row = c.execute(
+            """SELECT id,source,adapter_id,adapter_version,target_url,status,fingerprint,previous_fingerprint,
+                      observation_json,error_code,observed_at
+               FROM portal_probe_runs WHERE source=? ORDER BY observed_at DESC LIMIT 1""",
+            (source,),
+        ).fetchone()
+    result = _row(row)
+    if result:
+        try:
+            observation = json.loads(result.pop("observation_json", "{}"))
+        except (TypeError, ValueError):
+            observation = {}
+        result["observation"] = observation if isinstance(observation, dict) else {}
+    return result
+
+
+def record_portal_probe(
+    *,
+    source: str,
+    adapter_id: str,
+    adapter_version: str,
+    target_url: str,
+    status: str,
+    fingerprint: str = "",
+    previous_fingerprint: str = "",
+    observation: dict[str, Any] | None = None,
+    error_code: str = "",
+) -> str:
+    """Persist sanitized read-only portal observation data; never application values."""
+    allowed_statuses = {"baseline", "stable", "drifted", "blocked", "unavailable"}
+    if status not in allowed_statuses:
+        raise ValueError("portal probe status is invalid")
+    probe_id = str(uuid.uuid4())
+    with connection() as c:
+        c.execute(
+            """INSERT INTO portal_probe_runs(
+                id,source,adapter_id,adapter_version,target_url,status,fingerprint,previous_fingerprint,
+                observation_json,error_code,observed_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                probe_id, source, adapter_id, adapter_version, target_url[:2000], status,
+                fingerprint[:128] or None, previous_fingerprint[:128] or None,
+                _json(observation), error_code[:200], _now(),
+            ),
+        )
+    return probe_id
+
+
+def select_portal_probe_target(source: str) -> dict[str, Any] | None:
+    """Use an existing discovered public job URL; never invent or scrape new targets here."""
+    with connection() as c:
+        row = c.execute(
+            """SELECT id,campaign_id,source,job_url FROM campaign_jobs
+               WHERE source=? AND job_url LIKE 'https://%' ORDER BY updated_at DESC LIMIT 1""",
+            (source,),
+        ).fetchone()
+    return _row(row)
 
 
 def record_service_health(check_name: str, status: str, detail: str = "") -> None:
