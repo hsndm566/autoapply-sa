@@ -1,0 +1,10 @@
+[
+  {"id": "LV2001", "text": "Industrial Engineer", "hostedUrl": "https://jobs.lever.co/sampleco/LV2001",
+   "applyUrl": "https://jobs.lever.co/sampleco/LV2001/apply",
+   "categories": {"location": "Riyadh, Saudi Arabia"}},
+  {"id": "LV2002", "text": "Operations Engineer", "hostedUrl": "https://jobs.lever.co/sampleco/LV2002",
+   "applyUrl": "https://jobs.lever.co/sampleco/LV2002/apply",
+   "categories": {"location": "Jeddah, Saudi Arabia"}},
+  {"id": "LV2003", "text": "Business Systems Analyst", "toApply": "https://jobs.lever.co/sampleco/LV2003",
+   "hostedUrl": "https://jobs.lever.co/sampleco/LV2003"}
+]

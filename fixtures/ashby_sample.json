@@ -1,0 +1,12 @@
+{
+  "jobs": [
+    {"id": "AS3001", "title": "Process Improvement Engineer", "jobUrl": "https://jobs.ashbyhq.com/sampleco/AS3001",
+     "applyUrl": "https://jobs.ashbyhq.com/sampleco/AS3001/apply",
+     "location": {"location": "Riyadh, Saudi Arabia"}, "organization": {"name": "SampleCo"}},
+    {"id": "AS3002", "title": "Manufacturing Engineer", "jobUrl": "https://jobs.ashbyhq.com/sampleco/AS3002",
+     "applyUrl": "https://jobs.ashbyhq.com/sampleco/AS3002/apply",
+     "location": {"location": "Jeddah, Saudi Arabia"}, "organization": {"name": "SampleCo"}},
+    {"id": "AS3003", "title": "Industrial Engineer", "jobUrl": "https://jobs.ashbyhq.com/sampleco/AS3003",
+     "location": {"location": "Remote"}, "organization": {"name": "SampleCo"}}
+  ]
+}
