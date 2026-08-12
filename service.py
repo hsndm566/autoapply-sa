@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 from apscheduler.schedulers.background import BackgroundScheduler
 
 import campaign_worker
+import contact_import
 import db
 
 try:
@@ -265,6 +266,27 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                     return
                 campaign = db.activate_campaign(campaign_id) if action == "start" else db.pause_campaign(campaign_id)
                 self._send({"ok": True, "campaign": db.campaign_summary(campaign_id), "action": action})
+                return
+
+            if path == "/v1/admin/contacts/import":
+                if not _is_admin(self):
+                    self._forbidden()
+                    return
+                data = self._read_json()
+                rows = data.get("contacts")
+                if not isinstance(rows, list) or not rows:
+                    self._send({"ok": False, "error": "contacts_list_required"}, HTTPStatus.BAD_REQUEST)
+                    return
+                if len(rows) > 2000:
+                    self._send({"ok": False, "error": "contacts_limit_exceeded"}, HTTPStatus.BAD_REQUEST)
+                    return
+                source = _sanitize_text(data.get("verification_source"), 200)
+                counts = contact_import.import_contact_rows(
+                    rows,
+                    verification_source=source,
+                    mark_verified=data.get("mark_verified") is True,
+                )
+                self._send({"ok": True, "import": counts, "delivery_enabled": False})
                 return
 
             if path in {"/run", "/kill", "/resume"}:

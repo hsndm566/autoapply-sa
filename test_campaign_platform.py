@@ -157,6 +157,23 @@ class CampaignPlatformTests(unittest.TestCase):
         self.assertEqual(status, 202)
         self.assertFalse(body["external_execution_enabled"])
 
+    def test_admin_contact_import_requires_token_and_never_enables_delivery(self):
+        payload = {
+            "verification_source": "verified-contact-export-2026-08",
+            "mark_verified": True,
+            "contacts": [{"email": "recruiter@example.com", "name": "Ada", "company": "BrightTech"}],
+        }
+        denied_status, denied = self.request("POST", "/v1/admin/contacts/import", payload)
+        self.assertEqual(403, denied_status)
+        self.assertEqual("forbidden", denied["error"])
+        status, body = self.request(
+            "POST", "/v1/admin/contacts/import", payload, headers={"X-Admin-Token": "test-admin-token"}
+        )
+        self.assertEqual(200, status)
+        self.assertEqual(1, body["import"]["verified"])
+        self.assertFalse(body["delivery_enabled"])
+        self.assertEqual("recruiter@example.com", db.get_verified_outreach_contacts(campaign_id="new-campaign")[0]["email"])
+
     def test_safe_maintenance_recovers_stale_work_without_external_execution(self):
         campaign, _ = db.create_campaign(
             candidate_name="Test Candidate", candidate_email="candidate@example.com", target_role="Engineer"
