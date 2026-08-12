@@ -117,30 +117,29 @@ def enforce_diversity(
         return (r.get("source") or "").split("_")[0]
 
     total = len(recs)
-    # Percentage caps (source-family 35%, watchlist 10%) only bite once there is
-    # enough volume for a concentration to actually be a problem. Below MIN_BATCH
-    # records we keep the strict employer cap but skip the soft percentage caps,
-    # so small honest batches are not silently emptied (and the ratio never
-    # inverts at kept=0, which would wrongly reject everything).
+    # Percentage caps are computed from the candidate batch, not from the number
+    # already kept. A kept-so-far ratio makes the first record 100% of its family
+    # and incorrectly drops every source whenever the cap is below 100%.
+    # Below MIN_BATCH we preserve the strict employer cap but skip soft quotas so
+    # a small honest batch is not silently emptied.
     MIN_BATCH = 20
     apply_pct_caps = total >= MIN_BATCH
+    family_quota = max(1, int(total * SOURCE_FAMILY_CAP_PCT / 100))
+    watchlist_quota = max(1, int(total * WATCHLIST_CAP_PCT / 100))
     for r in recs:
         emp = (r.get("company") or "").strip().casefold()
         fam = family_of(r)
         is_wl = emp in wl
 
+        if apply_pct_caps and is_wl and wl_seen >= watchlist_quota:
+            rep.dropped_watchlist_cap += 1
+            continue
         if emp_seen[emp] >= employer_cap:
             rep.dropped_employer_cap += 1
             continue
-        if apply_pct_caps:
-            # Watchlist concentration cap evaluated against kept-so-far total.
-            if is_wl and (wl_seen + 1) / max(1, (rep.kept + 1)) > WATCHLIST_CAP_PCT / 100:
-                rep.dropped_watchlist_cap += 1
-                continue
-            # Source-family percentage cap (35%) evaluated against kept-so-far.
-            if (fam_seen[fam] + 1) / max(1, (rep.kept + 1)) > SOURCE_FAMILY_CAP_PCT / 100:
-                rep.dropped_source_family_cap += 1
-                continue
+        if apply_pct_caps and fam_seen[fam] >= family_quota:
+            rep.dropped_source_family_cap += 1
+            continue
 
         emp_seen[emp] += 1
         fam_seen[fam] += 1

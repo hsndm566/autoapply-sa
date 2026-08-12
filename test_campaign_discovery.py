@@ -71,6 +71,28 @@ class CampaignDiscoveryTests(unittest.TestCase):
         events = db.list_campaign_events(self.campaign["id"])
         self.assertIn("campaign_discovery_completed", {event["event_type"] for event in events})
 
+    def test_percentage_caps_keep_a_nonempty_two_source_batch(self) -> None:
+        records = []
+        for index in range(20):
+            records.append(job_schema.normalize_job(
+                source="greenhouse", employer_key=f"green-{index}", posting_id=f"green-{index}",
+                company=f"Green Company {index}", title="Operations Analyst", location="Remote",
+                job_url=f"https://boards.greenhouse.io/green{index}/jobs/{index}",
+            ))
+            records.append(job_schema.normalize_job(
+                source="ashby", employer_key=f"ashby-{index}", posting_id=f"ashby-{index}",
+                company=f"Ashby Company {index}", title="Operations Analyst", location="Remote",
+                job_url=f"https://jobs.ashbyhq.com/ashby{index}",
+            ))
+
+        result = campaign_discovery.discover_campaign(
+            self.campaign, fetch=False, discover_fn=lambda *, sources, fetch: records
+        )
+        self.assertEqual(40, result["matched"])
+        self.assertGreater(result["selected"], 0)
+        self.assertGreater(result["added"], 0)
+        self.assertGreater(result["source_family_cap_dropped"], 0)
+
     def test_cooldown_prevents_repeat_fetches_in_the_same_window(self) -> None:
         calls = 0
 
