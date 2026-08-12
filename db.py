@@ -150,6 +150,7 @@ CREATE INDEX IF NOT EXISTS idx_campaign_events ON campaign_events(campaign_id, c
 CREATE INDEX IF NOT EXISTS idx_campaign_jobs ON campaign_jobs(campaign_id, status);
 CREATE INDEX IF NOT EXISTS idx_outbox_ready ON action_outbox(status, available_at);
 CREATE INDEX IF NOT EXISTS idx_evidence_campaign ON application_evidence(campaign_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campaign_discovery_events ON campaign_events(campaign_id, event_type, created_at DESC);
 """
 
 
@@ -378,6 +379,28 @@ def list_campaign_events(campaign_id: str, limit: int = 100) -> list[dict[str, A
             item["metadata"] = {}
         result.append(item)
     return result
+
+
+def list_campaigns_with_status(status: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Return campaign records for safe workers; access-token hashes are never exposed."""
+    with connection() as c:
+        rows = c.execute(
+            """SELECT id,candidate_name,candidate_email,target_role,city,industry,seniority,language,
+                      cv_path,cv_original_name,cv_sha256,status,execution_enabled,created_at,updated_at
+               FROM campaigns WHERE status=? ORDER BY updated_at ASC LIMIT ?""",
+            (status, max(1, min(limit, 100))),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def campaign_event_within(campaign_id: str, event_type: str, seconds: int) -> bool:
+    """Return true when an event exists within the provided cooldown window."""
+    with connection() as c:
+        row = c.execute(
+            "SELECT 1 FROM campaign_events WHERE campaign_id=? AND event_type=? AND created_at>=? LIMIT 1",
+            (campaign_id, event_type, _now() - max(0, seconds)),
+        ).fetchone()
+    return row is not None
 
 
 def campaign_summary(campaign_id: str) -> dict[str, Any] | None:

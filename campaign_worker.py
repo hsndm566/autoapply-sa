@@ -1,9 +1,10 @@
 """Safe autonomous worker for AutoApply SA.
 
-The worker is intentionally conservative.  It performs deterministic maintenance,
-records source/service health, and recovers stale queue leases.  It does not send
-email or submit portal forms.  Any future dispatcher must verify an Auditor approval
-token immediately before an external side effect.
+The worker is intentionally conservative. It performs deterministic maintenance,
+records source/service health, recovers stale queue leases, and makes bounded
+read-only calls to public job-board listing APIs for active campaigns. It does not
+send email or submit portal forms. Any future dispatcher must verify an Auditor
+approval token immediately before an external side effect.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import campaign_discovery
 import db
 
 LOG = logging.getLogger("campaign_worker")
@@ -29,8 +31,8 @@ def _registry_sources() -> list[str]:
         return []
 
 
-def run_maintenance_cycle() -> dict[str, object]:
-    """Run only idempotent, no-network maintenance work."""
+def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, object]:
+    """Run safe maintenance; optional discovery uses only public listing APIs."""
     db.initialize()
     released = db.recover_stale_outbox()
     db.record_service_health("database", "healthy", "SQLite schema initialized and writable")
@@ -40,11 +42,24 @@ def run_maintenance_cycle() -> dict[str, object]:
     for source in _registry_sources():
         db.record_source_health(source, "configured")
 
+    # Campaign discovery only reads public ATS listing APIs and writes durable job
+    # options/events. It cannot queue an email or submit a portal application.
+    discovery_result = (
+        campaign_discovery.run_active_campaign_discovery(fetch=True)
+        if discover_campaigns
+        else {"enabled": True, "processed": 0, "skipped_cooldown": 0, "results": [], "deferred": True}
+    )
+    db.record_service_health(
+        "campaign_discovery",
+        "healthy" if discovery_result.get("enabled") else "disabled",
+        f"processed={discovery_result.get('processed', 0)} skipped_cooldown={discovery_result.get('skipped_cooldown', 0)}",
+    )
     result = {
         "ok": True,
         "time": datetime.now(timezone.utc).isoformat(),
         "released_stale_outbox": released,
         "configured_sources": _registry_sources(),
+        "campaign_discovery": discovery_result,
         "external_execution": "disabled",
     }
     LOG.info("safe maintenance complete: %s", result)
