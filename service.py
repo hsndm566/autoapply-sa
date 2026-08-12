@@ -1,104 +1,308 @@
-#!/usr/bin/env python3
+"""AutoApply SA API service.
+
+This is the public campaign boundary.  It accepts a CV and campaign brief, creates
+durable campaign state, exposes status/events, and runs only safe maintenance by
+default.  Legacy external execution is disabled unless explicitly configured after
+a source-specific upload proof and Auditor verification are in place.
 """
-AutoApply SA — Railway service wrapper.
-Turns the batch orchestrator into a long-lived, observable web service.
-- /status  -> real metrics (queue depth, dead-letter, success rate, last run, kill switch)
-- /run     -> manual trigger (POST) to run one application cycle
-- /kill    -> POST to flip RUN_ENABLED (owner/Commander halt without redeploy)
-- Daily APScheduler job runs run_application() automatically.
-Secrets load from env vars, falling back to committed secrets.env (private gist for Groq).
-"""
-import os
-import logging
+from __future__ import annotations
+
+import cgi
+import hashlib
 import json
+import logging
+import os
+import re
+import shutil
+import tempfile
+import threading
 from datetime import datetime, timezone
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from threading import Thread
+from http import HTTPStatus
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
 from apscheduler.schedulers.background import BackgroundScheduler
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("autoapply")
+import campaign_worker
+import db
 
-PORT = int(os.environ.get("PORT", "8080"))
-
-# fallback: load secrets.env from repo root if env vars missing (Railway/Linux)
-import os as _os
-_SECRETS = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "secrets.env")
-if _os.path.exists(_SECRETS):
-    for _l in open(_SECRETS, encoding="utf-8", errors="replace"):
-        if "=" in _l and not _l.startswith("#"):
-            _k, _v = _l.strip().split("=", 1)
-            if _k and _k not in _os.environ:
-                _os.environ[_k] = _v
-
-# ---- import the real engine (same repo) ----
 try:
     import orchestrator
-    import db
-    import caps
     ENGINE_OK = True
-except Exception as e:
-    log.error("engine import failed: %s", e)
+except Exception as exc:  # Health must stay available even if an optional legacy module fails.
+    orchestrator = None
     ENGINE_OK = False
+    ENGINE_ERROR = str(exc)
+else:
+    ENGINE_ERROR = ""
 
-def run_cycle():
-    """One application cycle. Kill-switch aware; metrics logged."""
-    if not ENGINE_OK:
-        log.error("engine not loaded, skipping cycle")
-        return
-    if db.kill_switch_on():
-        log.warning("RUN_ENABLED=false — cycle skipped")
-        return
-    cv = os.environ.get("CV_TEXT", "Hasan Adam, Industrial Engineering, process optimization.")
-    name = os.environ.get("APPLY_NAME", "Commander")
-    role = os.environ.get("APPLY_ROLE", "engineer")
+LOG = logging.getLogger("autoapply.api")
+PORT = int(os.environ.get("PORT", "8080"))
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_CV_UPLOAD_BYTES", str(5 * 1024 * 1024)))
+CV_STORAGE_DIR = Path(os.environ.get("CV_STORAGE_DIR", os.path.join(os.path.dirname(__file__), "data", "cv")))
+ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt"}
+CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "https://hsndm.tech")
+ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
+ALLOW_LEGACY_EXTERNAL_EXECUTION = os.environ.get("ALLOW_LEGACY_EXTERNAL_EXECUTION", "false").lower() == "true"
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _safe_name(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9._-]", "_", Path(value or "cv").name)[:120] or "cv"
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _sanitize_text(value: object, limit: int = 250) -> str:
+    return str(value or "").strip()[:limit]
+
+
+def _campaign_token(handler: BaseHTTPRequestHandler) -> str:
+    return handler.headers.get("X-Campaign-Token", "").strip()
+
+
+def _is_admin(handler: BaseHTTPRequestHandler) -> bool:
+    presented = handler.headers.get("X-Admin-Token", "").strip()
+    return bool(ADMIN_API_TOKEN and presented and presented == ADMIN_API_TOKEN)
+
+
+def _store_cv(upload: cgi.FieldStorage | None) -> tuple[str | None, str | None, str | None]:
+    if upload is None or not getattr(upload, "filename", None):
+        return None, None, None
+    name = _safe_name(upload.filename)
+    suffix = Path(name).suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise ValueError("CV must be PDF, DOC, DOCX, or TXT")
+    CV_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix="upload-", dir=str(CV_STORAGE_DIR))
+    temp_path = Path(temp_name)
     try:
-        orchestrator.run_application(name, role, cv)
-        log.info("cycle complete | metrics=%s", db.metrics())
-    except Exception as e:
-        log.error("cycle error: %s", e)
+        with os.fdopen(fd, "wb") as dest:
+            shutil.copyfileobj(upload.file, dest, length=1024 * 1024)
+        size = temp_path.stat().st_size
+        if not size:
+            raise ValueError("CV upload was empty")
+        if size > MAX_UPLOAD_BYTES:
+            raise ValueError(f"CV exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit")
+        final = CV_STORAGE_DIR / f"campaign-cv-{hashlib.sha256(os.urandom(32)).hexdigest()[:20]}{suffix}"
+        temp_path.replace(final)
+        return str(final), name, _file_sha256(final)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
-class H(BaseHTTPRequestHandler):
-    def _send(self, obj, code=200):
-        out = json.dumps(obj).encode()
+
+def run_safe_maintenance() -> None:
+    try:
+        campaign_worker.run_maintenance_cycle()
+    except Exception as exc:
+        LOG.exception("safe maintenance failed: %s", exc)
+
+
+def run_legacy_cycle() -> None:
+    """Intentionally guarded legacy path. It is never scheduled by default."""
+    if not ALLOW_LEGACY_EXTERNAL_EXECUTION:
+        LOG.warning("legacy cycle rejected: ALLOW_LEGACY_EXTERNAL_EXECUTION is false")
+        return
+    if not ENGINE_OK or db.kill_switch_on():
+        LOG.warning("legacy cycle skipped: engine=%s kill_switch=%s", ENGINE_OK, db.kill_switch_on())
+        return
+    cv = os.environ.get("CV_TEXT", "")
+    name = os.environ.get("APPLY_NAME", "")
+    role = os.environ.get("APPLY_ROLE", "")
+    if not (cv and name and role):
+        LOG.error("legacy cycle blocked: campaign values are not configured")
+        return
+    # The legacy engine still has its own Auditor assertion.  This outer service never bypasses it.
+    orchestrator.run_application(name, role, cv)
+
+
+class AutoApplyHandler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, format: str, *args: object) -> None:
+        LOG.info("%s - %s", self.address_string(), format % args)
+
+    def _cors(self) -> None:
+        origin = self.headers.get("Origin", "")
+        if origin and origin == CORS_ORIGIN:
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Campaign-Token, X-Admin-Token")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+
+    def _send(self, payload: dict[str, object], code: int = 200) -> None:
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self._cors()
         self.end_headers()
-        self.wfile.write(out)
+        self.wfile.write(body)
 
-    def do_GET(self):
-        if self.path == "/status":
-            try:
-                m = db.metrics()
-            except Exception:
-                m = {}
-            m["ok"] = ENGINE_OK
-            m["engine"] = "orchestrator" if ENGINE_OK else "offline"
-            m["kill_switch_on"] = db.kill_switch_on() if ENGINE_OK else None
-            m["time"] = datetime.now(timezone.utc).isoformat()
-            self._send(m)
-        else:
-            self.send_response(404); self.end_headers()
+    def _not_found(self) -> None:
+        self._send({"ok": False, "error": "not_found"}, HTTPStatus.NOT_FOUND)
 
-    def do_POST(self):
-        if self.path == "/run":
-            Thread(target=run_cycle, daemon=True).start()
-            self._send({"ok": True, "msg": "cycle started"}, 202)
-        elif self.path == "/kill":
-            db.set_kill_switch(True)
-            self._send({"ok": True, "kill_switch": True})
-        elif self.path == "/resume":
-            db.set_kill_switch(False)
-            self._send({"ok": True, "kill_switch": False})
-        else:
-            self.send_response(404); self.end_headers()
+    def _forbidden(self) -> None:
+        self._send({"ok": False, "error": "forbidden"}, HTTPStatus.FORBIDDEN)
 
-    def log_message(self, *a):
-        pass
+    def _read_json(self) -> dict[str, object]:
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if length > 1024 * 1024:
+            raise ValueError("JSON body too large")
+        raw = self.rfile.read(length) if length else b"{}"
+        return json.loads(raw.decode("utf-8")) if raw else {}
+
+    def _multipart_campaign(self) -> tuple[dict[str, str], cgi.FieldStorage | None]:
+        content_type = self.headers.get("Content-Type", "")
+        if not content_type.startswith("multipart/form-data"):
+            data = self._read_json()
+            return {key: _sanitize_text(value) for key, value in data.items()}, None
+        form = cgi.FieldStorage(
+            fp=self.rfile,
+            headers=self.headers,
+            environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": content_type},
+        )
+        values: dict[str, str] = {}
+        for key in ("candidate_name", "candidate_email", "target_role", "city", "industry", "seniority", "language"):
+            if key in form and not getattr(form[key], "filename", None):
+                values[key] = _sanitize_text(form.getfirst(key, ""))
+        upload = form["cv"] if "cv" in form else None
+        return values, upload
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self._cors()
+        self.end_headers()
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+        if path in {"/healthz", "/status"}:
+            status = {
+                "ok": True,
+                "time": _utc_now(),
+                "engine": "available" if ENGINE_OK else "offline",
+                "engine_error": ENGINE_ERROR if not ENGINE_OK else None,
+                "kill_switch_on": db.kill_switch_on(),
+                "external_execution_enabled": ALLOW_LEGACY_EXTERNAL_EXECUTION,
+                "metrics": db.metrics(),
+                "health": db.health_snapshot(),
+            }
+            self._send(status)
+            return
+        parts = [segment for segment in path.split("/") if segment]
+        if len(parts) == 3 and parts[:2] == ["v1", "campaigns"]:
+            campaign_id = parts[2]
+            if not db.campaign_authorized(campaign_id, _campaign_token(self)):
+                self._forbidden()
+                return
+            summary = db.campaign_summary(campaign_id)
+            self._send({"ok": True, "campaign": summary or {}})
+            return
+        if len(parts) == 4 and parts[:2] == ["v1", "campaigns"] and parts[3] == "events":
+            campaign_id = parts[2]
+            if not db.campaign_authorized(campaign_id, _campaign_token(self)):
+                self._forbidden()
+                return
+            limit = int(parse_qs(parsed.query).get("limit", ["100"])[0])
+            self._send({"ok": True, "events": db.list_campaign_events(campaign_id, limit)})
+            return
+        self._not_found()
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path.rstrip("/") or "/"
+        try:
+            if path == "/v1/campaigns":
+                values, upload = self._multipart_campaign()
+                required = ("candidate_name", "candidate_email", "target_role")
+                missing = [key for key in required if not values.get(key)]
+                if missing:
+                    self._send({"ok": False, "error": "missing_fields", "fields": missing}, HTTPStatus.BAD_REQUEST)
+                    return
+                if "@" not in values["candidate_email"]:
+                    self._send({"ok": False, "error": "invalid_email"}, HTTPStatus.BAD_REQUEST)
+                    return
+                cv_path, cv_name, cv_sha = _store_cv(upload)
+                campaign, token = db.create_campaign(
+                    candidate_name=values["candidate_name"],
+                    candidate_email=values["candidate_email"],
+                    target_role=values["target_role"],
+                    city=values.get("city", ""),
+                    industry=values.get("industry", ""),
+                    seniority=values.get("seniority", ""),
+                    language=values.get("language", ""),
+                    cv_path=cv_path,
+                    cv_original_name=cv_name,
+                    cv_sha256=cv_sha,
+                )
+                self._send(
+                    {
+                        "ok": True,
+                        "campaign": db.campaign_summary(campaign["id"]),
+                        "campaign_access_token": token,
+                        "message": "Campaign created. Discovery is safe/read-only until a source has verified CV upload and Auditor approval.",
+                    },
+                    HTTPStatus.CREATED,
+                )
+                return
+
+            parts = [segment for segment in path.split("/") if segment]
+            if len(parts) == 4 and parts[:2] == ["v1", "campaigns"] and parts[3] in {"start", "pause"}:
+                campaign_id, action = parts[2], parts[3]
+                if not db.campaign_authorized(campaign_id, _campaign_token(self)):
+                    self._forbidden()
+                    return
+                campaign = db.activate_campaign(campaign_id) if action == "start" else db.pause_campaign(campaign_id)
+                self._send({"ok": True, "campaign": db.campaign_summary(campaign_id), "action": action})
+                return
+
+            if path in {"/run", "/kill", "/resume"}:
+                if not _is_admin(self):
+                    self._forbidden()
+                    return
+                if path == "/run":
+                    threading.Thread(target=run_legacy_cycle, daemon=True).start()
+                    self._send({"ok": True, "message": "legacy cycle request accepted", "external_execution_enabled": ALLOW_LEGACY_EXTERNAL_EXECUTION}, HTTPStatus.ACCEPTED)
+                elif path == "/kill":
+                    db.set_kill_switch(True)
+                    self._send({"ok": True, "kill_switch": True})
+                else:
+                    db.set_kill_switch(False)
+                    self._send({"ok": True, "kill_switch": False})
+                return
+            self._not_found()
+        except (ValueError, json.JSONDecodeError) as exc:
+            self._send({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        except Exception as exc:
+            LOG.exception("request failed: %s", exc)
+            self._send({"ok": False, "error": "internal_error"}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+def build_server(port: int = PORT) -> ThreadingHTTPServer:
+    db.initialize()
+    return ThreadingHTTPServer(("0.0.0.0", port), AutoApplyHandler)
+
+
+def main() -> None:
+    logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
+    db.initialize()
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(run_safe_maintenance, "interval", minutes=5, id="safe-maintenance", replace_existing=True)
+    scheduler.start()
+    LOG.info("service up on :%s engine_ok=%s external_execution_enabled=%s", PORT, ENGINE_OK, ALLOW_LEGACY_EXTERNAL_EXECUTION)
+    build_server().serve_forever()
+
 
 if __name__ == "__main__":
-    sched = BackgroundScheduler()
-    sched.add_job(run_cycle, "cron", hour=23, minute=0)
-    sched.start()
-    log.info("service up on :%s  engine_ok=%s", PORT, ENGINE_OK)
-    HTTPServer(("0.0.0.0", PORT), H).serve_forever()
+    main()
