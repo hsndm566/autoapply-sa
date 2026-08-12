@@ -4,8 +4,8 @@
     "builder": "nixpacks"
   },
   "deploy": {
-    "startCommand": "playwright install chromium && python service.py",
-    "healthcheckPath": "/status",
+    "startCommand": "python service.py",
+    "healthcheckPath": "/healthz",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3

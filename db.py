@@ -1,14 +1,28 @@
-#!/usr/bin/env python3
-"""
-db.py — Durable state for unattended operation.
-SQLite (Railway free tier). Swap to Postgres later via DB_URL env (one line).
-Stores: applications state machine, dead-letter, run flags (kill switch), budgets.
-"""
-import os, sqlite3, hashlib, json, time
+"""Durable state for AutoApply SA.
 
-DB_PATH = os.environ.get("DB_PATH", os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "autoapply.db"))
+This module is intentionally provider-neutral.  It owns campaign state, the legacy
+application state machine, evidence, outbox rows, and operational health records.
+It uses SQLite by default and is designed to live on a mounted volume.  No function
+in this module sends an email, submits a form, or calls an AI model.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import secrets
+import sqlite3
+import time
+import uuid
+from contextlib import contextmanager
+from typing import Any, Iterable
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "autoapply.db"))
+
 SCHEMA = """
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE IF NOT EXISTS applications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id TEXT NOT NULL,
@@ -38,95 +52,492 @@ CREATE TABLE IF NOT EXISTS run_budget (
     max_per_hour INTEGER DEFAULT 20,
     max_per_run INTEGER DEFAULT 50
 );
+
+CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY,
+    access_token_hash TEXT NOT NULL,
+    candidate_name TEXT NOT NULL,
+    candidate_email TEXT NOT NULL,
+    target_role TEXT NOT NULL,
+    city TEXT,
+    industry TEXT,
+    seniority TEXT,
+    language TEXT,
+    cv_path TEXT,
+    cv_original_name TEXT,
+    cv_sha256 TEXT,
+    status TEXT NOT NULL DEFAULT 'intake_received',
+    execution_enabled INTEGER NOT NULL DEFAULT 0,
+    created_at REAL DEFAULT (strftime('%s','now')),
+    updated_at REAL DEFAULT (strftime('%s','now'))
+);
+CREATE TABLE IF NOT EXISTS campaign_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    level TEXT NOT NULL DEFAULT 'info',
+    message TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at REAL DEFAULT (strftime('%s','now')),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS campaign_jobs (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    job_hash TEXT NOT NULL,
+    source TEXT,
+    company TEXT,
+    title TEXT,
+    location TEXT,
+    job_url TEXT,
+    path_state TEXT NOT NULL DEFAULT 'discovered',
+    fit_score REAL,
+    status TEXT NOT NULL DEFAULT 'discovered',
+    created_at REAL DEFAULT (strftime('%s','now')),
+    updated_at REAL DEFAULT (strftime('%s','now')),
+    UNIQUE(campaign_id, job_hash),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS action_outbox (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    campaign_job_id TEXT,
+    action_type TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    available_at REAL DEFAULT (strftime('%s','now')),
+    locked_at REAL,
+    completed_at REAL,
+    created_at REAL DEFAULT (strftime('%s','now')),
+    updated_at REAL DEFAULT (strftime('%s','now')),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    FOREIGN KEY (campaign_job_id) REFERENCES campaign_jobs(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS application_evidence (
+    id TEXT PRIMARY KEY,
+    campaign_id TEXT NOT NULL,
+    campaign_job_id TEXT,
+    evidence_type TEXT NOT NULL,
+    value TEXT NOT NULL,
+    metadata_json TEXT NOT NULL DEFAULT '{}',
+    created_at REAL DEFAULT (strftime('%s','now')),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    FOREIGN KEY (campaign_job_id) REFERENCES campaign_jobs(id) ON DELETE SET NULL
+);
+CREATE TABLE IF NOT EXISTS source_health (
+    source TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'unknown',
+    successful_checks INTEGER NOT NULL DEFAULT 0,
+    failed_checks INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    last_checked_at REAL,
+    updated_at REAL DEFAULT (strftime('%s','now'))
+);
+CREATE TABLE IF NOT EXISTS service_health (
+    check_name TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    detail TEXT,
+    checked_at REAL DEFAULT (strftime('%s','now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_client ON applications(client_id);
+CREATE INDEX IF NOT EXISTS idx_campaign_status ON campaigns(status);
+CREATE INDEX IF NOT EXISTS idx_campaign_events ON campaign_events(campaign_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campaign_jobs ON campaign_jobs(campaign_id, status);
+CREATE INDEX IF NOT EXISTS idx_outbox_ready ON action_outbox(status, available_at);
+CREATE INDEX IF NOT EXISTS idx_evidence_campaign ON application_evidence(campaign_id, created_at DESC);
 """
 
-def conn():
-    c = sqlite3.connect(DB_PATH)
+
+def _now() -> float:
+    return time.time()
+
+
+def _json(value: Any) -> str:
+    return json.dumps(value or {}, separators=(",", ":"), ensure_ascii=False)
+
+
+def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    return dict(row) if row is not None else None
+
+
+@contextmanager
+def connection() -> Iterable[sqlite3.Connection]:
+    directory = os.path.dirname(os.path.abspath(DB_PATH))
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    c = sqlite3.connect(DB_PATH, timeout=20, check_same_thread=False)
+    c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL;")
+    c.execute("PRAGMA foreign_keys=ON;")
+    c.executescript(SCHEMA)
+    try:
+        yield c
+        c.commit()
+    finally:
+        c.close()
+
+
+def conn() -> sqlite3.Connection:
+    """Compatibility helper for older modules; callers must close the connection."""
+    directory = os.path.dirname(os.path.abspath(DB_PATH))
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    c = sqlite3.connect(DB_PATH, timeout=20, check_same_thread=False)
+    c.row_factory = sqlite3.Row
+    c.execute("PRAGMA journal_mode=WAL;")
+    c.execute("PRAGMA foreign_keys=ON;")
     c.executescript(SCHEMA)
     return c
 
-def posting_hash(company, role, url=""):
-    return hashlib.sha256(f"{company}|{role}|{url}".encode()).hexdigest()
 
-def kill_switch_on():
-    c = conn()
-    row = c.execute("SELECT value FROM run_flags WHERE key='RUN_ENABLED'").fetchone()
-    c.close()
-    return row is not None and row[0] == "false"
+def initialize() -> None:
+    with connection() as c:
+        c.execute("SELECT 1")
 
-def set_kill_switch(on):
-    c = conn()
-    c.execute("INSERT OR REPLACE INTO run_flags(key,value) VALUES('RUN_ENABLED',?)",
-              ("false" if on else "true",))
-    c.commit(); c.close()
 
-def ingest_job(client_id, company, role, url=""):
-    """Dedup at DB layer. Returns (hash, is_new). ON CONFLICT DO NOTHING."""
+def posting_hash(company: str, role: str, url: str = "") -> str:
+    return hashlib.sha256(f"{company}|{role}|{url}".encode("utf-8")).hexdigest()
+
+
+# ---- Legacy orchestrator compatibility -------------------------------------------------
+
+def kill_switch_on() -> bool:
+    with connection() as c:
+        row = c.execute("SELECT value FROM run_flags WHERE key='RUN_ENABLED'").fetchone()
+    return row is not None and row["value"] == "false"
+
+
+def set_kill_switch(on: bool) -> None:
+    with connection() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO run_flags(key,value) VALUES('RUN_ENABLED',?)",
+            ("false" if on else "true",),
+        )
+
+
+def ingest_job(client_id: str, company: str, role: str, url: str = "") -> tuple[str, bool]:
     h = posting_hash(company, role, url)
-    c = conn()
-    try:
-        c.execute("INSERT INTO applications(client_id,job_posting_hash,company,role,status) VALUES(?,?,?,?,?)",
-                  (client_id, h, company, role, "scraped"))
-        c.commit()
-        res = (h, True)
-    except sqlite3.IntegrityError:
-        res = (h, False)  # duplicate — already tracked
-    c.close()
-    return res
+    with connection() as c:
+        try:
+            c.execute(
+                "INSERT INTO applications(client_id,job_posting_hash,company,role,status) VALUES(?,?,?,?,?)",
+                (client_id, h, company, role, "scraped"),
+            )
+            return h, True
+        except sqlite3.IntegrityError:
+            return h, False
 
-def set_status(h, status, error=None):
-    c = conn()
-    c.execute("UPDATE applications SET status=?,last_error=?,attempt_count=attempt_count+1,updated_at=strftime('%s','now') WHERE job_posting_hash=?",
-              (status, error, h))
-    c.commit(); c.close()
 
-def dead_letter(client_id, h, stage, error):
-    c = conn()
-    c.execute("INSERT INTO dead_letter(client_id,job_posting_hash,stage,error) VALUES(?,?,?,?)",
-              (client_id, h, stage, str(error)[:500]))
-    c.commit(); c.close()
+def set_status(h: str, status: str, error: str | None = None) -> None:
+    with connection() as c:
+        c.execute(
+            "UPDATE applications SET status=?,last_error=?,attempt_count=attempt_count+1,updated_at=? WHERE job_posting_hash=?",
+            (status, error, _now(), h),
+        )
 
-def metrics():
-    c = conn()
-    q = c.execute("SELECT status, COUNT(*) FROM applications GROUP BY status").fetchall()
-    dl = c.execute("SELECT COUNT(*) FROM dead_letter").fetchone()[0]
-    last = c.execute("SELECT MAX(updated_at) FROM applications WHERE status='submitted'").fetchone()[0]
-    c.close()
-    by_status = {k: v for k, v in q}
+
+def dead_letter(client_id: str, h: str, stage: str, error: Any) -> None:
+    with connection() as c:
+        c.execute(
+            "INSERT INTO dead_letter(client_id,job_posting_hash,stage,error) VALUES(?,?,?,?)",
+            (client_id, h, stage, str(error)[:500]),
+        )
+
+
+def action_count_window(action_type: str, window_secs: int = 3600) -> int:
+    with connection() as c:
+        row = c.execute(
+            "SELECT COUNT(*) AS n FROM applications WHERE status IN ('submitted','queued_submit') AND updated_at > ?",
+            (_now() - window_secs,),
+        ).fetchone()
+    return int(row["n"])
+
+
+def action_count_run(action_type: str) -> int:
+    with connection() as c:
+        row = c.execute(
+            "SELECT COUNT(*) AS n FROM applications WHERE status IN ('submitted','queued_submit')"
+        ).fetchone()
+    return int(row["n"])
+
+
+def budget_for(action_type: str) -> tuple[int, int]:
+    with connection() as c:
+        row = c.execute(
+            "SELECT max_per_hour, max_per_run FROM run_budget WHERE action_type=?", (action_type,)
+        ).fetchone()
+    return (int(row["max_per_hour"]), int(row["max_per_run"])) if row else (20, 50)
+
+
+# ---- Campaign platform ----------------------------------------------------------------
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_campaign(
+    *,
+    candidate_name: str,
+    candidate_email: str,
+    target_role: str,
+    city: str = "",
+    industry: str = "",
+    seniority: str = "",
+    language: str = "",
+    cv_path: str | None = None,
+    cv_original_name: str | None = None,
+    cv_sha256: str | None = None,
+) -> tuple[dict[str, Any], str]:
+    campaign_id = str(uuid.uuid4())
+    access_token = secrets.token_urlsafe(32)
+    now = _now()
+    with connection() as c:
+        c.execute(
+            """INSERT INTO campaigns(
+                id,access_token_hash,candidate_name,candidate_email,target_role,city,industry,
+                seniority,language,cv_path,cv_original_name,cv_sha256,status,created_at,updated_at
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                campaign_id, _token_hash(access_token), candidate_name.strip(), candidate_email.strip().lower(),
+                target_role.strip(), city.strip(), industry.strip(), seniority.strip(), language.strip(),
+                cv_path, cv_original_name, cv_sha256, "intake_received", now, now,
+            ),
+        )
+    add_campaign_event(campaign_id, "campaign_created", "info", "Campaign intake received; no external action has started.")
+    if cv_path:
+        add_campaign_event(campaign_id, "cv_stored", "info", "CV file stored for controlled campaign processing.", {"filename": cv_original_name})
+    return get_campaign(campaign_id) or {}, access_token
+
+
+def get_campaign(campaign_id: str) -> dict[str, Any] | None:
+    with connection() as c:
+        row = c.execute("SELECT * FROM campaigns WHERE id=?", (campaign_id,)).fetchone()
+    return _row(row)
+
+
+def campaign_authorized(campaign_id: str, access_token: str | None) -> bool:
+    if not access_token:
+        return False
+    campaign = get_campaign(campaign_id)
+    return bool(campaign and secrets.compare_digest(campaign["access_token_hash"], _token_hash(access_token)))
+
+
+def activate_campaign(campaign_id: str) -> dict[str, Any] | None:
+    with connection() as c:
+        c.execute(
+            "UPDATE campaigns SET status='active_readonly',updated_at=? WHERE id=? AND status IN ('intake_received','paused')",
+            (_now(), campaign_id),
+        )
+    add_campaign_event(
+        campaign_id,
+        "campaign_activated",
+        "info",
+        "Campaign activated for discovery and drafting only. External submission remains disabled until a source proves CV upload and evidence capture.",
+    )
+    return get_campaign(campaign_id)
+
+
+def pause_campaign(campaign_id: str, reason: str = "Paused by campaign owner") -> dict[str, Any] | None:
+    with connection() as c:
+        c.execute("UPDATE campaigns SET status='paused',updated_at=? WHERE id=?", (_now(), campaign_id))
+    add_campaign_event(campaign_id, "campaign_paused", "warning", reason)
+    return get_campaign(campaign_id)
+
+
+def add_campaign_event(
+    campaign_id: str,
+    event_type: str,
+    level: str,
+    message: str,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    with connection() as c:
+        c.execute(
+            "INSERT INTO campaign_events(campaign_id,event_type,level,message,metadata_json,created_at) VALUES(?,?,?,?,?,?)",
+            (campaign_id, event_type, level, message[:2000], _json(metadata), _now()),
+        )
+
+
+def list_campaign_events(campaign_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    with connection() as c:
+        rows = c.execute(
+            "SELECT id,campaign_id,event_type,level,message,metadata_json,created_at FROM campaign_events WHERE campaign_id=? ORDER BY created_at DESC LIMIT ?",
+            (campaign_id, max(1, min(limit, 500))),
+        ).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["metadata"] = json.loads(item.pop("metadata_json"))
+        except json.JSONDecodeError:
+            item["metadata"] = {}
+        result.append(item)
+    return result
+
+
+def campaign_summary(campaign_id: str) -> dict[str, Any] | None:
+    campaign = get_campaign(campaign_id)
+    if not campaign:
+        return None
+    with connection() as c:
+        job_rows = c.execute(
+            "SELECT status,COUNT(*) AS count FROM campaign_jobs WHERE campaign_id=? GROUP BY status", (campaign_id,)
+        ).fetchall()
+        evidence_count = c.execute(
+            "SELECT COUNT(*) AS count FROM application_evidence WHERE campaign_id=?", (campaign_id,)
+        ).fetchone()["count"]
+        outbox_rows = c.execute(
+            "SELECT status,COUNT(*) AS count FROM action_outbox WHERE campaign_id=? GROUP BY status", (campaign_id,)
+        ).fetchall()
+    campaign.pop("access_token_hash", None)
+    campaign.pop("cv_path", None)
+    campaign["job_counts"] = {row["status"]: row["count"] for row in job_rows}
+    campaign["outbox_counts"] = {row["status"]: row["count"] for row in outbox_rows}
+    campaign["evidence_count"] = evidence_count
+    campaign["external_execution_enabled"] = bool(campaign["execution_enabled"])
+    return campaign
+
+
+def add_campaign_job(
+    campaign_id: str,
+    *,
+    company: str,
+    title: str,
+    job_url: str,
+    source: str = "",
+    location: str = "",
+    path_state: str = "discovered",
+    fit_score: float | None = None,
+) -> tuple[str, bool]:
+    job_hash = posting_hash(company, title, job_url)
+    job_id = str(uuid.uuid4())
+    with connection() as c:
+        try:
+            c.execute(
+                """INSERT INTO campaign_jobs(
+                   id,campaign_id,job_hash,source,company,title,location,job_url,path_state,fit_score,status,created_at,updated_at
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (job_id, campaign_id, job_hash, source, company, title, location, job_url, path_state, fit_score, "discovered", _now(), _now()),
+            )
+            return job_id, True
+        except sqlite3.IntegrityError:
+            row = c.execute(
+                "SELECT id FROM campaign_jobs WHERE campaign_id=? AND job_hash=?", (campaign_id, job_hash)
+            ).fetchone()
+            return str(row["id"]), False
+
+
+def queue_action(
+    campaign_id: str,
+    action_type: str,
+    payload: dict[str, Any],
+    *,
+    campaign_job_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> tuple[str, bool]:
+    """Create a durable action intent. Workers must enforce the Auditor before execution."""
+    key = idempotency_key or hashlib.sha256(
+        f"{campaign_id}|{campaign_job_id or ''}|{action_type}|{_json(payload)}".encode("utf-8")
+    ).hexdigest()
+    outbox_id = str(uuid.uuid4())
+    with connection() as c:
+        try:
+            c.execute(
+                "INSERT INTO action_outbox(id,campaign_id,campaign_job_id,action_type,idempotency_key,payload_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (outbox_id, campaign_id, campaign_job_id, action_type, key, _json(payload), "pending", _now(), _now()),
+            )
+            return outbox_id, True
+        except sqlite3.IntegrityError:
+            row = c.execute("SELECT id FROM action_outbox WHERE idempotency_key=?", (key,)).fetchone()
+            return str(row["id"]), False
+
+
+def record_evidence(
+    campaign_id: str,
+    evidence_type: str,
+    value: str,
+    *,
+    campaign_job_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    evidence_id = str(uuid.uuid4())
+    with connection() as c:
+        c.execute(
+            "INSERT INTO application_evidence(id,campaign_id,campaign_job_id,evidence_type,value,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)",
+            (evidence_id, campaign_id, campaign_job_id, evidence_type, value[:4000], _json(metadata), _now()),
+        )
+    return evidence_id
+
+
+def record_source_health(source: str, status: str, error: str | None = None) -> None:
+    with connection() as c:
+        existing = c.execute("SELECT source FROM source_health WHERE source=?", (source,)).fetchone()
+        if existing:
+            c.execute(
+                """UPDATE source_health SET status=?, successful_checks=successful_checks+?, failed_checks=failed_checks+?,
+                   last_error=?, last_checked_at=?, updated_at=? WHERE source=?""",
+                (status, 1 if status == "healthy" else 0, 0 if status == "healthy" else 1, error, _now(), _now(), source),
+            )
+        else:
+            c.execute(
+                "INSERT INTO source_health(source,status,successful_checks,failed_checks,last_error,last_checked_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                (source, status, 1 if status == "healthy" else 0, 0 if status == "healthy" else 1, error, _now(), _now(), _now()),
+            )
+
+
+def record_service_health(check_name: str, status: str, detail: str = "") -> None:
+    with connection() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO service_health(check_name,status,detail,checked_at) VALUES(?,?,?,?)",
+            (check_name, status, detail[:1000], _now()),
+        )
+
+
+def health_snapshot() -> dict[str, Any]:
+    with connection() as c:
+        checks = c.execute("SELECT check_name,status,detail,checked_at FROM service_health ORDER BY check_name").fetchall()
+        sources = c.execute("SELECT source,status,successful_checks,failed_checks,last_error,last_checked_at FROM source_health ORDER BY source").fetchall()
+    return {"checks": [dict(r) for r in checks], "sources": [dict(r) for r in sources]}
+
+
+def recover_stale_outbox(stale_after_seconds: int = 900) -> int:
+    """Safe self-healing: release stuck claimed work. It never executes an action."""
+    cutoff = _now() - max(60, stale_after_seconds)
+    with connection() as c:
+        cur = c.execute(
+            "UPDATE action_outbox SET status='pending',locked_at=NULL,updated_at=?,last_error='worker lease expired; safely returned to queue' WHERE status='claimed' AND locked_at<?",
+            (_now(), cutoff),
+        )
+        return cur.rowcount
+
+
+def metrics() -> dict[str, Any]:
+    with connection() as c:
+        application_rows = c.execute("SELECT status, COUNT(*) AS count FROM applications GROUP BY status").fetchall()
+        campaign_rows = c.execute("SELECT status, COUNT(*) AS count FROM campaigns GROUP BY status").fetchall()
+        outbox_rows = c.execute("SELECT status, COUNT(*) AS count FROM action_outbox GROUP BY status").fetchall()
+        dead_count = c.execute("SELECT COUNT(*) AS count FROM dead_letter").fetchone()["count"]
+        last = c.execute("SELECT MAX(updated_at) AS last FROM applications WHERE status='submitted'").fetchone()["last"]
+    by_status = {row["status"]: row["count"] for row in application_rows}
     total = sum(by_status.values())
     success = by_status.get("submitted", 0)
-    rate = round(100.0 * success / total, 1) if total else 0.0
     return {
-        "total": total, "by_status": by_status,
-        "dead_letter": dl, "success_rate_pct": rate,
+        "total": total,
+        "by_status": by_status,
+        "dead_letter": dead_count,
+        "success_rate_pct": round(100.0 * success / total, 1) if total else 0.0,
         "last_submit_ts": last,
+        "campaigns": {row["status"]: row["count"] for row in campaign_rows},
+        "outbox": {row["status"]: row["count"] for row in outbox_rows},
     }
 
-def action_count_window(action_type, window_secs=3600):
-    """How many actions of this type in the last window (for caps)."""
-    c = conn()
-    n = c.execute("SELECT COUNT(*) FROM applications WHERE status IN ('submitted','queued_submit') AND updated_at > strftime('%s','now')-?",
-                  (window_secs,)).fetchone()[0]
-    c.close()
-    return n
-
-def action_count_run(action_type):
-    c = conn()
-    n = c.execute("SELECT COUNT(*) FROM applications WHERE status IN ('submitted','queued_submit')").fetchone()[0]
-    c.close()
-    return n
-
-def budget_for(action_type):
-    c = conn()
-    row = c.execute("SELECT max_per_hour, max_per_run FROM run_budget WHERE action_type=?", (action_type,)).fetchone()
-    c.close()
-    if not row:
-        return (20, 50)
-    return (row[0], row[1])
 
 if __name__ == "__main__":
+    initialize()
     print("DB init OK at", DB_PATH)
     print("metrics:", metrics())
