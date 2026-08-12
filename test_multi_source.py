@@ -326,7 +326,9 @@ class FixVerificationTests(unittest.TestCase):
         # never polluted (no committed test slug). Fully offline/deterministic.
         import tempfile, shutil, os as _os
         src = sr.REGISTRY_PATH
-        tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False).name
+        _fh = tempfile.NamedTemporaryFile(suffix=".json", delete=False)
+        tmp = _fh.name
+        _fh.close()  # close handle immediately; we only need the path
         shutil.copyfile(src, tmp)
         old_path = sr.REGISTRY_PATH
         sr.REGISTRY_PATH = tmp
