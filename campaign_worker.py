@@ -2,9 +2,9 @@
 
 The worker is intentionally conservative. It performs deterministic maintenance,
 records source/service health, recovers stale queue leases, and makes bounded
-read-only calls to public job-board listing APIs for active campaigns. It does not
-send email or submit portal forms. Any future dispatcher must verify an Auditor
-approval token immediately before an external side effect.
+read-only calls to public job-board listing APIs for active campaigns. Its audited
+email dispatcher remains disabled until separately configured, and it never submits
+portal forms. Every email side effect rechecks a current Auditor approval token.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from pathlib import Path
 
 import campaign_discovery
 import db
+import email_dispatcher
 
 LOG = logging.getLogger("campaign_worker")
 SOURCE_REGISTRY = Path(__file__).with_name("source_registry.json")
@@ -54,12 +55,24 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
         "healthy" if discovery_result.get("enabled") else "disabled",
         f"processed={discovery_result.get('processed', 0)} skipped_cooldown={discovery_result.get('skipped_cooldown', 0)}",
     )
+    try:
+        email_limit = max(1, min(10, int(os.environ.get("EMAIL_OUTREACH_MAX_PER_CYCLE", "5"))))
+    except ValueError:
+        email_limit = 5
+    email_result = email_dispatcher.dispatch_pending(limit=email_limit)
+    email_status = "healthy" if email_result.get("enabled") and "configuration" not in email_result else "disabled"
+    db.record_service_health(
+        "audited_email_dispatcher",
+        email_status,
+        f"claimed={email_result.get('claimed', 0)} enabled={email_result.get('enabled', False)}",
+    )
     result = {
         "ok": True,
         "time": datetime.now(timezone.utc).isoformat(),
         "released_stale_outbox": released,
         "configured_sources": _registry_sources(),
         "campaign_discovery": discovery_result,
+        "email_dispatch": email_result,
         "external_execution": "disabled",
     }
     LOG.info("safe maintenance complete: %s", result)

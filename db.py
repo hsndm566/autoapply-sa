@@ -116,6 +116,29 @@ CREATE TABLE IF NOT EXISTS action_outbox (
     FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
     FOREIGN KEY (campaign_job_id) REFERENCES campaign_jobs(id) ON DELETE SET NULL
 );
+CREATE TABLE IF NOT EXISTS outreach_contacts (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    full_name TEXT,
+    company TEXT,
+    role TEXT,
+    status TEXT NOT NULL DEFAULT 'unverified',
+    verification_source TEXT,
+    last_contacted_at REAL,
+    created_at REAL DEFAULT (strftime('%s','now')),
+    updated_at REAL DEFAULT (strftime('%s','now'))
+);
+CREATE TABLE IF NOT EXISTS campaign_contact_attempts (
+    campaign_id TEXT NOT NULL,
+    contact_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'available',
+    outbox_id TEXT,
+    created_at REAL DEFAULT (strftime('%s','now')),
+    updated_at REAL DEFAULT (strftime('%s','now')),
+    PRIMARY KEY(campaign_id, contact_id),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE,
+    FOREIGN KEY (contact_id) REFERENCES outreach_contacts(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS application_evidence (
     id TEXT PRIMARY KEY,
     campaign_id TEXT NOT NULL,
@@ -149,6 +172,8 @@ CREATE INDEX IF NOT EXISTS idx_campaign_status ON campaigns(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_events ON campaign_events(campaign_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_campaign_jobs ON campaign_jobs(campaign_id, status);
 CREATE INDEX IF NOT EXISTS idx_outbox_ready ON action_outbox(status, available_at);
+CREATE INDEX IF NOT EXISTS idx_outbox_type_status ON action_outbox(action_type, status, available_at);
+CREATE INDEX IF NOT EXISTS idx_outreach_contacts_status ON outreach_contacts(status, company);
 CREATE INDEX IF NOT EXISTS idx_evidence_campaign ON application_evidence(campaign_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_campaign_discovery_events ON campaign_events(campaign_id, event_type, created_at DESC);
 """
@@ -455,6 +480,76 @@ def add_campaign_job(
             return str(row["id"]), False
 
 
+def upsert_outreach_contact(
+    *,
+    email: str,
+    full_name: str = "",
+    company: str = "",
+    role: str = "",
+    status: str = "unverified",
+    verification_source: str = "",
+) -> tuple[str, bool]:
+    """Persist one contact. Only `verified` contacts may later be selected for a campaign."""
+    normalized = email.strip().lower()
+    if "@" not in normalized or len(normalized) > 320:
+        raise ValueError("contact email is invalid")
+    allowed = {"verified", "unverified", "suppressed", "opted_out", "bounced"}
+    if status not in allowed:
+        raise ValueError("contact status is invalid")
+    with connection() as c:
+        existing = c.execute("SELECT id FROM outreach_contacts WHERE email=?", (normalized,)).fetchone()
+        if existing:
+            c.execute(
+                """UPDATE outreach_contacts SET full_name=?,company=?,role=?,status=?,verification_source=?,updated_at=?
+                   WHERE id=?""",
+                (full_name[:200], company[:200], role[:200], status, verification_source[:200], _now(), existing["id"]),
+            )
+            return str(existing["id"]), False
+        contact_id = str(uuid.uuid4())
+        c.execute(
+            """INSERT INTO outreach_contacts(id,email,full_name,company,role,status,verification_source,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?,?,?)""",
+            (contact_id, normalized, full_name[:200], company[:200], role[:200], status, verification_source[:200], _now(), _now()),
+        )
+        return contact_id, True
+
+
+def get_outreach_contact(contact_id: str) -> dict[str, Any] | None:
+    with connection() as c:
+        row = c.execute(
+            "SELECT id,email,full_name,company,role,status,verification_source FROM outreach_contacts WHERE id=?",
+            (contact_id,),
+        ).fetchone()
+    return _row(row)
+
+
+def get_verified_outreach_contacts(*, campaign_id: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Return eligible verified contacts not already assigned to the campaign."""
+    with connection() as c:
+        rows = c.execute(
+            """SELECT c.id,c.email,c.full_name,c.company,c.role,c.status,c.verification_source
+               FROM outreach_contacts c
+               LEFT JOIN campaign_contact_attempts a ON a.contact_id=c.id AND a.campaign_id=?
+               WHERE c.status='verified' AND a.contact_id IS NULL
+               ORDER BY c.updated_at DESC LIMIT ?""",
+            (campaign_id, max(1, min(limit, 100))),
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def reserve_campaign_contact(campaign_id: str, contact_id: str, *, status: str = "queued", outbox_id: str | None = None) -> bool:
+    """Reserve a contact once per campaign, preventing duplicate campaigns sends."""
+    with connection() as c:
+        try:
+            c.execute(
+                "INSERT INTO campaign_contact_attempts(campaign_id,contact_id,status,outbox_id,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+                (campaign_id, contact_id, status, outbox_id, _now(), _now()),
+            )
+            return True
+        except sqlite3.IntegrityError:
+            return False
+
+
 def queue_action(
     campaign_id: str,
     action_type: str,
@@ -478,6 +573,60 @@ def queue_action(
         except sqlite3.IntegrityError:
             row = c.execute("SELECT id FROM action_outbox WHERE idempotency_key=?", (key,)).fetchone()
             return str(row["id"]), False
+
+
+def claim_ready_actions(action_type: str, limit: int = 5) -> list[dict[str, Any]]:
+    """Lease pending actions atomically. A worker must still validate before execution."""
+    now = _now()
+    with connection() as c:
+        c.execute("BEGIN IMMEDIATE")
+        rows = c.execute(
+            """SELECT id,campaign_id,campaign_job_id,action_type,payload_json,attempts
+               FROM action_outbox
+               WHERE action_type=? AND status='pending' AND available_at<=?
+               ORDER BY created_at ASC LIMIT ?""",
+            (action_type, now, max(1, min(limit, 50))),
+        ).fetchall()
+        claimed: list[dict[str, Any]] = []
+        for row in rows:
+            changed = c.execute(
+                "UPDATE action_outbox SET status='claimed',attempts=attempts+1,locked_at=?,updated_at=? WHERE id=? AND status='pending'",
+                (now, now, row["id"]),
+            ).rowcount
+            if changed:
+                item = dict(row)
+                try:
+                    item["payload"] = json.loads(item.pop("payload_json"))
+                except json.JSONDecodeError:
+                    item["payload"] = {}
+                claimed.append(item)
+    return claimed
+
+
+def complete_action(action_id: str, *, error: str | None = None) -> None:
+    with connection() as c:
+        c.execute(
+            "UPDATE action_outbox SET status='completed',completed_at=?,locked_at=NULL,last_error=?,updated_at=? WHERE id=?",
+            (_now(), error, _now(), action_id),
+        )
+
+
+def block_action(action_id: str, reason: str) -> None:
+    """Terminally block an unsafe action; it cannot silently retry as a send."""
+    with connection() as c:
+        c.execute(
+            "UPDATE action_outbox SET status='blocked',locked_at=NULL,last_error=?,updated_at=? WHERE id=?",
+            (reason[:1000], _now(), action_id),
+        )
+
+
+def mark_action_uncertain(action_id: str, reason: str) -> None:
+    """Record unknown transport outcome without retrying and risking a duplicate send."""
+    with connection() as c:
+        c.execute(
+            "UPDATE action_outbox SET status='uncertain',locked_at=NULL,last_error=?,updated_at=? WHERE id=?",
+            (reason[:1000], _now(), action_id),
+        )
 
 
 def record_evidence(

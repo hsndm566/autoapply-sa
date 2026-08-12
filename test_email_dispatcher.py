@@ -1,0 +1,130 @@
+"""Offline tests for Auditor-gated durable Gmail application dispatch."""
+from __future__ import annotations
+
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+import auditor
+import db
+import email_dispatcher
+
+
+class EmailDispatcherTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.old_db_path = db.DB_PATH
+        db.DB_PATH = os.path.join(self.temp_dir.name, "email-dispatch-test.db")
+        self.addCleanup(setattr, db, "DB_PATH", self.old_db_path)
+        self.env_keys = ("EMAIL_OUTREACH_ENABLED", "GMAIL_USER", "GMAIL_APP_PASSWORD")
+        self.old_env = {key: os.environ.get(key) for key in self.env_keys}
+        self.addCleanup(self._restore_env)
+        for key in self.env_keys:
+            os.environ.pop(key, None)
+        self.cv = Path(self.temp_dir.name) / "hasan-cv.pdf"
+        self.cv.write_bytes(b"%PDF-1.4\nEmail dispatcher test CV\n%%EOF\n")
+        campaign, _token = db.create_campaign(
+            candidate_name="Hasan Adam",
+            candidate_email="hasan@example.com",
+            target_role="Operations Analyst",
+            cv_path=str(self.cv),
+            cv_original_name=self.cv.name,
+            cv_sha256=auditor.cv_sha256(str(self.cv)),
+        )
+        self.campaign_id = campaign["id"]
+
+    def _restore_env(self) -> None:
+        for key, value in self.old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    @staticmethod
+    def approved_ai(_prompt, _package):
+        return {"decision": "approve", "confidence": 0.95, "reasons": ["Complete and tailored."], "required_fixes": []}
+
+    def package(self) -> dict:
+        return {
+            "application_id": "email-app-001",
+            "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "https://careers.brighttech.example/jobs/1"},
+            "candidate": {
+                "full_name": "Hasan Adam", "email": "hasan@example.com", "cv_path": str(self.cv),
+                "cv_text": "Operations analyst with process-improvement experience.",
+            },
+            "draft": (
+                "Dear BrightTech team, I am applying for the Operations Analyst role. "
+                "My process-improvement experience and operational analysis background align with your team’s needs."
+            ),
+            "destination": {"recipient": "recruiting@brighttech.example", "subject": "Application — Operations Analyst", "is_test_recipient": False},
+            "submission": {"channel": "email", "mode": "live", "cv_transport": "email_attachment"},
+        }
+
+    def queue_valid_action(self) -> str:
+        package = self.package()
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        self.assertTrue(decision.approved, decision.summary)
+        action_id, added = email_dispatcher.queue_audited_email_application(self.campaign_id, package, decision.approval_token)
+        self.assertTrue(added)
+        return action_id
+
+    def action_status(self, action_id: str) -> str:
+        with db.connection() as c:
+            return str(c.execute("SELECT status FROM action_outbox WHERE id=?", (action_id,)).fetchone()["status"])
+
+    def test_disabled_dispatcher_does_not_claim_or_block_queued_actions(self) -> None:
+        action_id = self.queue_valid_action()
+        result = email_dispatcher.dispatch_pending()
+        self.assertFalse(result["enabled"])
+        self.assertEqual(0, result["claimed"])
+        self.assertEqual("pending", self.action_status(action_id))
+
+    def test_enabled_dispatcher_sends_audited_cv_attachment_and_records_evidence(self) -> None:
+        action_id = self.queue_valid_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = "sender@example.com"
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        sent: list[object] = []
+
+        def fake_send(message, sender, password):
+            sent.append((message, sender, password))
+            self.assertEqual("sender@example.com", sender)
+            self.assertEqual("app-password", password)
+            attachments = list(message.iter_attachments())
+            self.assertEqual(1, len(attachments))
+            self.assertEqual(self.cv.name, attachments[0].get_filename())
+            return "smtp-message-accepted-001"
+
+        result = email_dispatcher.dispatch_pending(send_fn=fake_send)
+        self.assertEqual(1, result["claimed"])
+        self.assertEqual("accepted", result["results"][0]["status"])
+        self.assertEqual(1, len(sent))
+        self.assertEqual("completed", self.action_status(action_id))
+        summary = db.campaign_summary(self.campaign_id)
+        self.assertEqual(1, summary["evidence_count"])
+        self.assertIn("email_delivery_accepted", {item["event_type"] for item in db.list_campaign_events(self.campaign_id)})
+
+    def test_smtp_failure_is_uncertain_and_not_retried_as_a_duplicate(self) -> None:
+        action_id = self.queue_valid_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = "sender@example.com"
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+
+        def failing_send(_message, _sender, _password):
+            raise TimeoutError("SMTP timed out")
+
+        result = email_dispatcher.dispatch_pending(send_fn=failing_send)
+        self.assertEqual("uncertain", result["results"][0]["status"])
+        self.assertEqual("uncertain", self.action_status(action_id))
+        self.assertEqual(0, db.campaign_summary(self.campaign_id)["evidence_count"])
+        self.assertIn("email_delivery_uncertain", {item["event_type"] for item in db.list_campaign_events(self.campaign_id)})
+
+    def test_queue_rejects_a_package_without_current_auditor_approval(self) -> None:
+        with self.assertRaises(PermissionError):
+            email_dispatcher.queue_audited_email_application(self.campaign_id, self.package(), "not-an-approval")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)
