@@ -486,7 +486,7 @@ def record_source_health(source: str, status: str, error: str | None = None) -> 
         else:
             c.execute(
                 "INSERT INTO source_health(source,status,successful_checks,failed_checks,last_error,last_checked_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-                (source, status, 1 if status == "healthy" else 0, 0 if status == "healthy" else 1, error, _now(), _now(), _now()),
+                (source, status, 1 if status == "healthy" else 0, 0 if status == "healthy" else 1, error, _now(), _now()),
             )
 
 

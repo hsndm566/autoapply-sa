@@ -168,6 +168,8 @@ class CampaignPlatformTests(unittest.TestCase):
         result = campaign_worker.run_maintenance_cycle()
         self.assertTrue(result["ok"])
         self.assertEqual(result["external_execution"], "disabled")
+        self.assertIn("greenhouse", result["configured_sources"])
+        self.assertIn("ashby", result["configured_sources"])
         with db.connection() as c:
             row = c.execute("SELECT status FROM action_outbox WHERE id=?", (outbox_id,)).fetchone()
         self.assertEqual(row["status"], "pending")

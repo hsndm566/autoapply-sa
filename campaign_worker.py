@@ -23,7 +23,7 @@ SOURCE_REGISTRY = Path(__file__).with_name("source_registry.json")
 def _registry_sources() -> list[str]:
     try:
         data = json.loads(SOURCE_REGISTRY.read_text(encoding="utf-8"))
-        return sorted({str(item.get("source", "")).strip() for item in data.get("sources", []) if item.get("source")})
+        return sorted({str(item.get("id") or item.get("source") or "").strip() for item in data.get("sources", []) if item.get("id") or item.get("source")})
     except Exception as exc:  # source health must not crash the worker
         LOG.warning("source registry unavailable: %s", exc)
         return []

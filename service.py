@@ -297,6 +297,8 @@ def build_server(port: int = PORT) -> ThreadingHTTPServer:
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
     db.initialize()
+    # Establish observability at boot; subsequent cycles perform only safe recovery/health recording.
+    run_safe_maintenance()
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_safe_maintenance, "interval", minutes=5, id="safe-maintenance", replace_existing=True)
     scheduler.start()
