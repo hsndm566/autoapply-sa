@@ -43,6 +43,13 @@ class BrowserHandoffLedgerTests(unittest.TestCase):
             connection.commit()
         self.assertIn(self.url, self._selected_urls())
 
+    def test_verified_eligibility_reopening_restores_queue_access(self) -> None:
+        self.db.record_browser_handoff_attempt(self.url, "abandoned", "nationality fact was not yet established")
+        self.assertNotIn(self.url, self._selected_urls())
+        record = self.db.record_browser_handoff_attempt(self.url, "eligibility_reopened", "candidate directly confirmed Saudi nationality")
+        self.assertEqual(record["status"], "eligibility_reopened")
+        self.assertIn(self.url, self._selected_urls())
+
     def test_second_retry_and_captcha_are_manual_exclusions(self) -> None:
         self.db.record_browser_handoff_attempt(self.url, "form_changed", "first retry")
         self.db.record_browser_handoff_attempt(self.url, "form_changed", "second retry")

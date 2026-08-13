@@ -317,7 +317,7 @@ def posting_hash(company: str, role: str, url: str = "") -> str:
 
 BROWSER_HANDOFF_ATTEMPT_STATUSES = {
     "browser_timeout", "form_changed", "transient_error", "captcha", "login_required",
-    "unsupported_question", "submitted", "abandoned",
+    "unsupported_question", "submitted", "abandoned", "eligibility_reopened",
 }
 
 
