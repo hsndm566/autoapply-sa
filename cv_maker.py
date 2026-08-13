@@ -95,26 +95,16 @@ def health() -> dict[str, object]:
     return {"ready": ready, "database_ready": db_ready, "bank_configured": bank["configured"], "admin_configured": bool(os.environ.get("ADMIN_API_TOKEN")), "model_provider": provider, "price_sar": bank["amount_sar"]}
 
 
-def _normalise_result(payload: object) -> dict[str, object] | None:
+def _schema_valid(payload: object) -> bool:
     if not isinstance(payload, dict) or not isinstance(payload.get("english"), dict) or not isinstance(payload.get("arabic"), dict):
-        return None
-    normalised: dict[str, object] = {"english": {}, "arabic": {}, "ats_notes": payload.get("ats_notes", payload.get("atsNotes", []))}
-    for language in ("english", "arabic"):
-        source = payload[language]
-        version: dict[str, object] = {}
-        version["headline"] = clean(source.get("headline", source.get("title", "")), 300)
-        version["summary"] = clean(source.get("summary", source.get("professional_summary", "")), 2200)
+        return False
+    for version in (payload["english"], payload["arabic"]):
+        if not isinstance(version.get("headline"), str) or not isinstance(version.get("summary"), str):
+            return False
         for field in ("experience", "education", "skills", "certifications", "languages"):
-            value = source.get(field, [])
-            if isinstance(value, str):
-                value = [value]
-            version[field] = [clean(item, 1500) for item in value if clean(item, 1500)] if isinstance(value, list) else []
-        if not version["headline"] or not version["summary"]:
-            return None
-        normalised[language] = version
-    notes = normalised["ats_notes"]
-    normalised["ats_notes"] = [clean(item, 500) for item in notes if clean(item, 500)] if isinstance(notes, list) else []
-    return normalised
+            if not isinstance(version.get(field), list) or not all(isinstance(item, str) for item in version[field]):
+                return False
+    return isinstance(payload.get("ats_notes"), list)
 
 
 def _prompt(source_text: str, target_role: str, job_description: str) -> str:
@@ -129,31 +119,25 @@ def generate(source_text: str, target_role: str, job_description: str) -> tuple[
     if not api_key:
         raise RuntimeError("CV maker model is not configured.")
     body = {"model": os.environ.get("CV_MODEL", "deepseek-v4-flash"), "thinking": {"type": "disabled"}, "temperature": 0.2, "max_tokens": 3200, "response_format": {"type": "json_object"}, "messages": [{"role": "system", "content": "Return valid JSON only."}, {"role": "user", "content": _prompt(source_text, clean(target_role, 180), clean(job_description, 5000))}]}
-    result: dict[str, object] | None = None
-    for generation_attempt in range(2):
-        response: requests.Response | None = None
-        for attempt in range(3):
-            try:
-                response = requests.post(DEEPSEEK_URL, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=body, timeout=45)
-                if response.status_code not in {429, 500, 502, 503, 504} or attempt == 2:
-                    break
-                time.sleep(0.5 * (attempt + 1))
-            except requests.RequestException:
-                if attempt == 2:
-                    raise RuntimeError("CV maker model is unavailable.")
-                time.sleep(0.5 * (attempt + 1))
-        if response is None or not response.ok:
-            raise RuntimeError("CV maker model is unavailable.")
+    response: requests.Response | None = None
+    for attempt in range(3):
         try:
-            content = response.json()["choices"][0]["message"]["content"]
-            result = _normalise_result(json.loads(content))
-        except Exception:
-            result = None
-        if result:
-            break
-        LOG.warning("CV maker returned invalid JSON shape; retrying=%s", generation_attempt == 0)
-        body["messages"][0]["content"] = "Return only the exact requested JSON object. Every English and Arabic version must include headline, summary, experience, education, skills, certifications, and languages."
-    if not result:
+            response = requests.post(DEEPSEEK_URL, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=body, timeout=45)
+            if response.status_code not in {429, 500, 502, 503, 504} or attempt == 2:
+                break
+            time.sleep(0.5 * (attempt + 1))
+        except requests.RequestException:
+            if attempt == 2:
+                raise RuntimeError("CV maker model is unavailable.")
+            time.sleep(0.5 * (attempt + 1))
+    if response is None or not response.ok:
+        raise RuntimeError("CV maker model is unavailable.")
+    try:
+        content = response.json()["choices"][0]["message"]["content"]
+        result = json.loads(content)
+    except Exception as exc:
+        raise RuntimeError("CV maker returned an invalid result.") from exc
+    if not _schema_valid(result):
         raise RuntimeError("CV maker returned an incomplete result.")
     draft_id = f"DRAFT-{uuid.uuid4().hex[:12].upper()}"
     created = datetime.now(timezone.utc)
