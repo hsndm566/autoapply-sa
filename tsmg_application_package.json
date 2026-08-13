@@ -1,0 +1,50 @@
+{
+  "application_id": "tsmg-team-coordinator-20260813",
+  "job": {
+    "company": "TSMG",
+    "role": "Team Coordinator",
+    "location": "Remote in Saudi Arabia",
+    "url": "https://jobs.lever.co/tsmg/ae7275ab-7525-4de4-b152-101297d58ad8/apply",
+    "facts": [
+      "The public form identifies the role as Team Coordinator, Remote in Saudi Arabia, in AI/ML Data Collection – AI Device Testing.",
+      "The form requires a Resume/CV, full name, email, a brief comment on experience and qualifications, consent to data processing, and an academy communication preference."
+    ]
+  },
+  "candidate": {
+    "full_name": "Hassan Adam",
+    "email": "hasanadam506@gmail.com",
+    "phone": "+966571448656",
+    "location": "Jeddah, Saudi Arabia",
+    "current_company": "University of Business and Technology (UBT)",
+    "linkedin": "https://www.linkedin.com/in/hassanadam",
+    "cv_path": "/home/ubuntu/upload/HasanAdamcvindustrialengineering.pdf",
+    "facts": [
+      "Industrial Engineering student at the University of Business and Technology in Jeddah; degree in progress since March 2022.",
+      "Logistics & Operations Coordinator at UBT from June 2022 to December 2025, coordinating travel, accommodation, logistics frameworks, volunteer workforces, and liaison operations for international athletic contingents.",
+      "Purchasing Assistant at Aljabr from March 2024 to August 2024, supporting procurement operations, vendor relationships, purchase orders, and market research.",
+      "Languages listed in the candidate profile: English, Arabic, Somali, and Filipino."
+    ]
+  },
+  "draft": "I am applying for the Team Coordinator role in Saudi Arabia. I am currently completing a Bachelor of Science in Industrial Engineering at the University of Business and Technology in Jeddah. In my Logistics & Operations Coordinator role at UBT, I coordinated travel, accommodation, and logistics frameworks for international athletic contingents, supported liaison operations, and helped direct volunteer workforces for large events. I also supported procurement, vendor communication, purchase orders, and market research as a Purchasing Assistant at Aljabr. These experiences developed the organization, communication, follow-through, and cross-functional coordination skills I would bring to TSMG's AI/ML data-collection work.",
+  "destination": {
+    "type": "public_employer_portal",
+    "url": "https://jobs.lever.co/tsmg/ae7275ab-7525-4de4-b152-101297d58ad8/apply",
+    "is_test_recipient": false
+  },
+  "submission": {
+    "channel": "portal",
+    "mode": "live",
+    "source": "lever",
+    "cv_transport": "portal_file_upload_verified",
+    "upload_evidence": {
+      "verified_read_only": true,
+      "required": true,
+      "input_label": "Resume/CV",
+      "verification_pending": "The cloud adapter must confirm an actual file control and selected filename immediately before submit."
+    },
+    "required_choices": {
+      "data_processing_consent": "I agree",
+      "academy_marketing_preference": "No"
+    }
+  }
+}
