@@ -19,6 +19,7 @@ import bayt_profile_adapter
 import campaign_discovery
 import db
 import email_dispatcher
+import email_preparation
 import portal_sentinel
 
 LOG = logging.getLogger("campaign_worker")
@@ -73,6 +74,21 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
         f"probed={sentinel_result.get('probed', 0)} skipped={sentinel_result.get('skipped', 0)} external_execution=disabled",
     )
     try:
+        preparation_limit = max(1, min(20, int(os.environ.get("EMAIL_PREPARATION_MAX_PER_CYCLE", "10"))))
+    except ValueError:
+        preparation_limit = 10
+    try:
+        preparation_result = email_preparation.prepare_pending_batch(limit=preparation_limit)
+        db.record_service_health(
+            "audited_email_preparation",
+            "healthy",
+            f"mode=preparation_only selected={preparation_result.get('selected_count', 0)} cv_sha256={preparation_result.get('cv', {}).get('sha256', '')[:12]}",
+        )
+    except Exception as exc:
+        preparation_result = {"ok": False, "error": type(exc).__name__}
+        db.record_service_health("audited_email_preparation", "degraded", type(exc).__name__)
+
+    try:
         email_limit = max(1, min(10, int(os.environ.get("EMAIL_OUTREACH_MAX_PER_CYCLE", "5"))))
     except ValueError:
         email_limit = 5
@@ -90,6 +106,7 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
         "configured_sources": registry_sources,
         "campaign_discovery": discovery_result,
         "portal_sentinel": sentinel_result,
+        "email_preparation": preparation_result,
         "email_dispatch": email_result,
         "external_execution": "disabled",
     }
