@@ -17,6 +17,7 @@ import re
 import shutil
 import tempfile
 import threading
+import uuid
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -28,6 +29,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 import bayt_profile_adapter
 import campaign_worker
 import contact_import
+import cv_maker
 import db
 import diversity_queue
 
@@ -160,6 +162,19 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_html(self, payload: str, code: int = 200, download_name: str | None = None) -> None:
+        body = payload.encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Robots-Tag", "noindex, nofollow")
+        if download_name:
+            self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
+        self._cors()
+        self.end_headers()
+        self.wfile.write(body)
+
     def _not_found(self) -> None:
         self._send({"ok": False, "error": "not_found"}, HTTPStatus.NOT_FOUND)
 
@@ -213,8 +228,41 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 "metrics": db.metrics(),
                 "health": db.health_snapshot(),
                 "bayt_profile_handoff": bayt_handoff,
+                "cv_maker": cv_maker.health(),
             }
             self._send(status)
+            return
+        if path == "/v1/cv/health":
+            state = cv_maker.health()
+            self._send({"ok": state["ready"], "cv_maker": state}, HTTPStatus.OK if state["ready"] else HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if path == "/v1/admin/cv/orders":
+            if not _is_admin(self):
+                self._forbidden()
+                return
+            limit = int(parse_qs(parsed.query).get("limit", ["100"])[0])
+            self._send({"ok": True, "orders": cv_maker.list_orders(limit)})
+            return
+        parts = [segment for segment in path.split("/") if segment]
+        if len(parts) == 4 and parts[:2] == ["v1", "cv"] and parts[2] == "orders" and parts[3]:
+            item = cv_maker.order(parts[3])
+            if not item:
+                self._send({"ok": False, "error": "order_not_found"}, HTTPStatus.NOT_FOUND)
+                return
+            self._send({"ok": True, "order": item})
+            return
+        if len(parts) == 5 and parts[:2] == ["v1", "cv"] and parts[2] == "orders" and parts[4] == "export":
+            language = parse_qs(parsed.query).get("language", ["en"])[0]
+            try:
+                document = cv_maker.export_html(parts[3], language)
+                self._send_html(document, download_name=None if parse_qs(parsed.query).get("format", [""])[0] == "print" else f"{parts[3]}-{language}.html")
+            except PermissionError:
+                self._send({"ok": False, "error": "payment_not_approved"}, HTTPStatus.PAYMENT_REQUIRED)
+            except ValueError:
+                self._send({"ok": False, "error": "order_not_found"}, HTTPStatus.NOT_FOUND)
+            except Exception as exc:
+                LOG.exception("cv export failed: %s", exc)
+                self._send({"ok": False, "error": "export_unavailable"}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
         if path == "/v1/portal-queues/bayt":
             try:
@@ -260,6 +308,48 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path.rstrip("/") or "/"
         try:
+            if path == "/v1/cv/generate":
+                data = self._read_json()
+                request_id = uuid.uuid4().hex[:12]
+                try:
+                    draft_id, result = cv_maker.generate(str(data.get("source_text") or ""), str(data.get("target_role") or ""), str(data.get("job_description") or ""))
+                    self._send({"ok": True, "request_id": request_id, "draft_id": draft_id, "result": result})
+                except ValueError as exc:
+                    self._send({"ok": False, "request_id": request_id, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                except RuntimeError as exc:
+                    LOG.warning("cv generation unavailable request_id=%s reason=%s", request_id, str(exc))
+                    self._send({"ok": False, "request_id": request_id, "error": str(exc)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+            if path == "/v1/cv/orders":
+                data = self._read_json()
+                try:
+                    created = cv_maker.create_order(str(data.get("draft_id") or ""), str(data.get("customer_name") or ""), str(data.get("customer_email") or ""))
+                    self._send({"ok": True, **created}, HTTPStatus.CREATED)
+                except ValueError as exc:
+                    self._send({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                except RuntimeError as exc:
+                    self._send({"ok": False, "error": str(exc)}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+            parts = [segment for segment in path.split("/") if segment]
+            if len(parts) == 5 and parts[:2] == ["v1", "cv"] and parts[2] == "orders" and parts[4] == "transfer":
+                data = self._read_json()
+                try:
+                    item = cv_maker.submit_transfer(parts[3], str(data.get("payer_name") or ""), str(data.get("transfer_reference") or ""))
+                    self._send({"ok": True, "order": item, "message": "Transfer details submitted for manual review."})
+                except ValueError as exc:
+                    self._send({"ok": False, "error": str(exc)}, HTTPStatus.BAD_REQUEST)
+                return
+            if len(parts) == 6 and parts[:3] == ["v1", "admin", "cv"] and parts[3] == "orders" and parts[5] in {"approve", "reject"}:
+                if not _is_admin(self):
+                    self._forbidden()
+                    return
+                data = self._read_json()
+                try:
+                    item = cv_maker.review_order(parts[4], "approved" if parts[5] == "approve" else "rejected", str(data.get("note") or ""))
+                    self._send({"ok": True, "order": item})
+                except ValueError as exc:
+                    self._send({"ok": False, "error": str(exc)}, HTTPStatus.CONFLICT)
+                return
             if path == "/v1/campaigns":
                 values, upload = self._multipart_campaign()
                 required = ("candidate_name", "candidate_email", "target_role")
