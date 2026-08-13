@@ -15,6 +15,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import bayt_profile_adapter
 import campaign_discovery
 import db
 import email_dispatcher
@@ -40,6 +41,12 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
     db.record_service_health("database", "healthy", "SQLite schema initialized and writable")
     db.record_service_health("auditor_gate", "healthy", "External execution remains fail-closed until Auditor approval")
     db.record_service_health("external_execution", "disabled", "No source-specific upload proof is enabled")
+    try:
+        bayt = bayt_profile_adapter.queue_summary(db.DB_PATH)
+        bayt_state = "browser_handoff_ready" if bayt.get("profile_ready") else "waiting_for_profile"
+        db.record_service_health("bayt_profile_handoff", bayt_state, f"total_bayt_leads={bayt.get('total_bayt_leads', 0)}; execution_mode={bayt.get('execution_mode')}")
+    except Exception as exc:
+        db.record_service_health("bayt_profile_handoff", "degraded", type(exc).__name__)
 
     registry_sources = _registry_sources()
     for source in registry_sources:

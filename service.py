@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
+import bayt_profile_adapter
 import campaign_worker
 import contact_import
 import db
@@ -190,6 +191,10 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         if path in {"/healthz", "/status"}:
+            try:
+                bayt_handoff = bayt_profile_adapter.queue_summary(db.DB_PATH)
+            except Exception as exc:
+                bayt_handoff = {"adapter_id": bayt_profile_adapter.ADAPTER_ID, "status": "unavailable", "reason": type(exc).__name__}
             status = {
                 "ok": True,
                 "time": _utc_now(),
@@ -199,8 +204,15 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 "external_execution_enabled": ALLOW_LEGACY_EXTERNAL_EXECUTION,
                 "metrics": db.metrics(),
                 "health": db.health_snapshot(),
+                "bayt_profile_handoff": bayt_handoff,
             }
             self._send(status)
+            return
+        if path == "/v1/portal-queues/bayt":
+            try:
+                self._send({"ok": True, "bayt": bayt_profile_adapter.queue_summary(db.DB_PATH)})
+            except Exception as exc:
+                self._send({"ok": False, "error": "bayt_queue_unavailable", "detail": type(exc).__name__}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
         parts = [segment for segment in path.split("/") if segment]
         if len(parts) == 3 and parts[:2] == ["v1", "campaigns"]:
