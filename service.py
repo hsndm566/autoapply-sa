@@ -287,6 +287,25 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 self._send({"ok": True, "campaign": db.campaign_summary(campaign_id), "action": action})
                 return
 
+            if path == "/v1/admin/auditor/self-test":
+                if not _is_job_importer(self):
+                    self._forbidden()
+                    return
+                try:
+                    import auditor
+                    reviewer_result = auditor.configured_ai_reviewer(
+                        "Return only a JSON object with decision, confidence, reasons, and required_fixes.",
+                        {"kind": "auditor_connectivity_self_test", "external_action": "none"},
+                    )
+                    required = {"decision", "confidence", "reasons", "required_fixes"}
+                    if not isinstance(reviewer_result, dict) or not required.issubset(reviewer_result):
+                        raise ValueError("reviewer response schema invalid")
+                    self._send({"ok": True, "reviewer": "available", "schema_valid": True})
+                except Exception as exc:
+                    LOG.warning("Auditor connectivity self-test unavailable: %s", type(exc).__name__)
+                    self._send({"ok": False, "reviewer": "unavailable", "reason": type(exc).__name__}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+
             if path == "/v1/admin/jobs/import":
                 if not _is_job_importer(self):
                     self._forbidden()

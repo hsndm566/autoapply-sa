@@ -48,6 +48,17 @@ class ServiceBaytSyncTests(unittest.TestCase):
         except urllib.error.HTTPError as error:
             return error.code, json.loads(error.read().decode("utf-8"))
 
+    def test_auditor_self_test_is_protected_and_non_submitting(self) -> None:
+        status, payload = self._request("/v1/admin/auditor/self-test", body={})
+        self.assertEqual(status, 403)
+        self.assertFalse(payload["ok"])
+
+        from unittest.mock import patch
+        with patch("auditor.configured_ai_reviewer", return_value={"decision": "approve", "confidence": 1.0, "reasons": ["connectivity"], "required_fixes": []}):
+            status, payload = self._request("/v1/admin/auditor/self-test", body={}, token="unit-test-import-token")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {"ok": True, "reviewer": "available", "schema_valid": True})
+
     def test_import_is_authenticated_and_bayt_only(self) -> None:
         status, payload = self._request("/v1/admin/jobs/import", body={"jobs": [{"title": "Barista", "company": "Example", "url": "https://www.bayt.com/en/saudi-arabia/jobs/barista-1/"}]})
         self.assertEqual(status, 403)
