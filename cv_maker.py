@@ -95,28 +95,6 @@ def health() -> dict[str, object]:
     return {"ready": ready, "database_ready": db_ready, "bank_configured": bank["configured"], "admin_configured": bool(os.environ.get("ADMIN_API_TOKEN")), "model_provider": provider, "price_sar": bank["amount_sar"]}
 
 
-def _normalise_item(value: object, field: str) -> str:
-    if isinstance(value, str):
-        return clean(value, 1500)
-    if not isinstance(value, dict):
-        return ""
-    if field == "experience":
-        primary = clean(value.get("title", value.get("position", value.get("role", ""))), 300)
-        organisation = clean(value.get("company", value.get("organization", value.get("employer", ""))), 300)
-        location = clean(value.get("location", ""), 160)
-        dates = clean(value.get("dates", value.get("date", "")), 100)
-        description = clean(value.get("description", value.get("details", value.get("responsibilities", ""))), 1000)
-        heading = " — ".join(item for item in (primary, organisation) if item)
-        context = " | ".join(item for item in (location, dates) if item)
-        return " · ".join(item for item in (heading, context, description) if item)
-    if field == "education":
-        degree = clean(value.get("degree", value.get("qualification", "")), 400)
-        institution = clean(value.get("institution", value.get("university", value.get("school", ""))), 400)
-        dates = clean(value.get("dates", value.get("date", "")), 100)
-        return " · ".join(item for item in (" — ".join(item for item in (degree, institution) if item), dates) if item)
-    return " · ".join(clean(item, 600) for item in value.values() if clean(item, 600))
-
-
 def _normalise_result(payload: object) -> dict[str, object] | None:
     if not isinstance(payload, dict) or not isinstance(payload.get("english"), dict) or not isinstance(payload.get("arabic"), dict):
         return None
@@ -130,7 +108,7 @@ def _normalise_result(payload: object) -> dict[str, object] | None:
             value = source.get(field, [])
             if isinstance(value, str):
                 value = [value]
-            version[field] = [_normalise_item(item, field) for item in value if _normalise_item(item, field)] if isinstance(value, list) else []
+            version[field] = [clean(item, 1500) for item in value if clean(item, 1500)] if isinstance(value, list) else []
         if not version["headline"] or not version["summary"]:
             return None
         normalised[language] = version
