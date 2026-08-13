@@ -79,6 +79,26 @@ class ServiceBaytSyncTests(unittest.TestCase):
         self.assertEqual(queue["bayt"]["by_route_status"]["browser_handoff_ready"], 1)
         self.assertEqual(queue["bayt"]["execution_mode"], "browser_handoff_only")
 
+    def test_diversified_queue_is_read_only_and_employer_balanced(self) -> None:
+        jobs = [
+            {"title": "Barista", "company": "Same Employer", "location": "Riyadh", "url": "https://www.bayt.com/en/saudi-arabia/jobs/barista-diverse-1/", "category": "service_and_entry", "status": "new"},
+            {"title": "Waiter", "company": "Same Employer", "location": "Riyadh", "url": "https://www.bayt.com/en/saudi-arabia/jobs/waiter-diverse-2/", "category": "service_and_entry", "status": "new"},
+            {"title": "Customer Service Agent", "company": "Other Employer", "location": "Jeddah", "url": "https://jobs.ashbyhq.com/other/jobs/3", "category": "service_and_entry", "status": "new"},
+            {"title": "Administrative Assistant", "company": "Third Employer", "location": "Dammam", "url": "https://job-boards.greenhouse.io/third/jobs/4", "category": "administrative", "status": "new"},
+        ]
+        status, imported = self._request("/v1/admin/jobs/import", body={"jobs": jobs}, token="unit-test-import-token")
+        self.assertEqual(status, 200)
+        self.assertEqual(imported["import"]["inserted"], 4)
+
+        status, payload = self._request("/v1/portal-queues/diversified?limit=4")
+        self.assertEqual(status, 200)
+        queue = payload["queue"]
+        self.assertFalse(queue["submits_applications"])
+        self.assertEqual(queue["execution_mode"], "browser_handoff_only")
+        self.assertLessEqual(queue["selected_by_source"].get("bayt", 0), 2)
+        self.assertEqual(sum(1 for item in queue["selected"] if item["company"] == "Same Employer"), 1)
+        self.assertTrue(all("REQUIRE" in item["handoff_reason"] or "READY" in item["handoff_reason"] for item in queue["selected"]))
+
 
 if __name__ == "__main__":
     unittest.main()

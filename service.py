@@ -29,6 +29,7 @@ import bayt_profile_adapter
 import campaign_worker
 import contact_import
 import db
+import diversity_queue
 
 try:
     import orchestrator
@@ -220,6 +221,22 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 self._send({"ok": True, "bayt": bayt_profile_adapter.queue_summary(db.DB_PATH)})
             except Exception as exc:
                 self._send({"ok": False, "error": "bayt_queue_unavailable", "detail": type(exc).__name__}, HTTPStatus.SERVICE_UNAVAILABLE)
+            return
+        if path == "/v1/portal-queues/diversified":
+            try:
+                limit = int(parse_qs(parsed.query).get("limit", ["10"])[0])
+                ready = bayt_profile_adapter.profile_ready()
+                self._send({
+                    "ok": True,
+                    "queue": diversity_queue.queue_summary(
+                        db.DB_PATH, limit=limit, bayt_profile_ready=ready
+                    ),
+                })
+            except ValueError as exc:
+                self._send({"ok": False, "error": "invalid_queue_limit", "detail": str(exc)}, HTTPStatus.BAD_REQUEST)
+            except Exception as exc:
+                LOG.exception("diversified queue unavailable: %s", exc)
+                self._send({"ok": False, "error": "diversified_queue_unavailable", "detail": type(exc).__name__}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
         parts = [segment for segment in path.split("/") if segment]
         if len(parts) == 3 and parts[:2] == ["v1", "campaigns"]:

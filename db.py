@@ -47,6 +47,14 @@ CREATE TABLE IF NOT EXISTS applications (
     created_at REAL DEFAULT (strftime('%s','now')),
     updated_at REAL DEFAULT (strftime('%s','now'))
 );
+CREATE TABLE IF NOT EXISTS browser_handoff_attempts (
+    job_url TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    last_detail TEXT,
+    updated_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+);
+
 CREATE TABLE IF NOT EXISTS dead_letter (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id TEXT,
@@ -192,6 +200,7 @@ CREATE TABLE IF NOT EXISTS service_health (
 );
 
 CREATE INDEX IF NOT EXISTS idx_status ON applications(status);
+CREATE INDEX IF NOT EXISTS idx_browser_handoff_updated ON browser_handoff_attempts(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_client ON applications(client_id);
 CREATE INDEX IF NOT EXISTS idx_campaign_status ON campaigns(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_events ON campaign_events(campaign_id, created_at DESC);
@@ -304,6 +313,40 @@ def import_discovered_jobs(rows: Iterable[dict[str, Any]]) -> dict[str, int]:
 
 def posting_hash(company: str, role: str, url: str = "") -> str:
     return hashlib.sha256(f"{company}|{role}|{url}".encode("utf-8")).hexdigest()
+
+
+BROWSER_HANDOFF_ATTEMPT_STATUSES = {
+    "browser_timeout", "form_changed", "transient_error", "captcha", "login_required",
+    "unsupported_question", "submitted", "abandoned",
+}
+
+
+def record_browser_handoff_attempt(job_url: str, status: str, detail: str = "") -> dict[str, Any]:
+    """Persist browser inspection outcome only; this function cannot submit a form."""
+    clean_url = str(job_url or "").strip()
+    clean_status = str(status or "").strip()
+    if not clean_url.startswith(("https://", "http://")):
+        raise ValueError("job_url must be an absolute HTTP(S) URL")
+    if clean_status not in BROWSER_HANDOFF_ATTEMPT_STATUSES:
+        raise ValueError("unsupported browser handoff status")
+    with connection() as c:
+        c.execute(
+            """
+            INSERT INTO browser_handoff_attempts(job_url,status,attempt_count,last_detail,updated_at)
+            VALUES(?,?,?,?,?)
+            ON CONFLICT(job_url) DO UPDATE SET
+                status=excluded.status,
+                attempt_count=browser_handoff_attempts.attempt_count+1,
+                last_detail=excluded.last_detail,
+                updated_at=excluded.updated_at
+            """,
+            (clean_url, clean_status, 1, str(detail or "")[:500], _now()),
+        )
+        row = c.execute(
+            "SELECT job_url,status,attempt_count,last_detail,updated_at FROM browser_handoff_attempts WHERE job_url=?",
+            (clean_url,),
+        ).fetchone()
+    return dict(row) if row else {}
 
 
 # ---- Legacy orchestrator compatibility -------------------------------------------------
