@@ -415,6 +415,28 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 })
                 return
 
+            if path == "/v1/admin/auditor/review":
+                if not _is_job_importer(self):
+                    self._forbidden()
+                    return
+                data = self._read_json()
+                system_prompt = str(data.get("system_prompt") or "")
+                package = data.get("package")
+                if not system_prompt or not isinstance(package, dict):
+                    self._send({"ok": False, "error": "system_prompt_and_package_required"}, HTTPStatus.BAD_REQUEST)
+                    return
+                try:
+                    import auditor
+                    result = auditor.configured_ai_reviewer(system_prompt, package)
+                    required = {"decision", "confidence", "reasons", "required_fixes"}
+                    if not isinstance(result, dict) or not required.issubset(result):
+                        raise ValueError("reviewer response schema invalid")
+                    self._send({"ok": True, "review": result})
+                except Exception as exc:
+                    LOG.warning("Auditor review bridge unavailable: %s", type(exc).__name__)
+                    self._send({"ok": False, "error": "reviewer_unavailable", "reason": type(exc).__name__}, HTTPStatus.SERVICE_UNAVAILABLE)
+                return
+
             if path == "/v1/admin/auditor/self-test":
                 if not _is_job_importer(self):
                     self._forbidden()

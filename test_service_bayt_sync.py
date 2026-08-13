@@ -48,6 +48,19 @@ class ServiceBaytSyncTests(unittest.TestCase):
         except urllib.error.HTTPError as error:
             return error.code, json.loads(error.read().decode("utf-8"))
 
+    def test_auditor_review_bridge_is_protected_and_non_submitting(self) -> None:
+        body = {"system_prompt": "Return the required JSON schema.", "package": {"job": {"role": "Coordinator"}}}
+        status, payload = self._request("/v1/admin/auditor/review", body=body)
+        self.assertEqual(status, 403)
+        self.assertFalse(payload["ok"])
+
+        from unittest.mock import patch
+        response = {"decision": "approve", "confidence": 0.95, "reasons": ["supported"], "required_fixes": []}
+        with patch("auditor.configured_ai_reviewer", return_value=response):
+            status, payload = self._request("/v1/admin/auditor/review", body=body, token="unit-test-import-token")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload, {"ok": True, "review": response})
+
     def test_auditor_self_test_is_protected_and_non_submitting(self) -> None:
         status, payload = self._request("/v1/admin/auditor/self-test", body={})
         self.assertEqual(status, 403)
