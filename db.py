@@ -23,6 +23,18 @@ DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "autoapply.db"))
 SCHEMA = """
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS discovered_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    company TEXT,
+    location TEXT,
+    url TEXT UNIQUE,
+    description TEXT,
+    easy_apply BOOLEAN,
+    category TEXT,
+    status TEXT DEFAULT 'new'
+);
+
 CREATE TABLE IF NOT EXISTS applications (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id TEXT NOT NULL,
@@ -238,6 +250,56 @@ def conn() -> sqlite3.Connection:
 def initialize() -> None:
     with connection() as c:
         c.execute("SELECT 1")
+
+
+def import_discovered_jobs(rows: Iterable[dict[str, Any]]) -> dict[str, int]:
+    """Idempotently import discovery leads without changing submitted/non-new remote state."""
+    accepted = inserted = updated = skipped = 0
+    with connection() as c:
+        for raw in rows:
+            if not isinstance(raw, dict):
+                skipped += 1
+                continue
+            url = str(raw.get("url") or "").strip()
+            if not url.startswith(("https://", "http://")):
+                skipped += 1
+                continue
+            title = str(raw.get("title") or "").strip()[:500]
+            company = str(raw.get("company") or "").strip()[:500]
+            if not title or not company:
+                skipped += 1
+                continue
+            existing = c.execute("SELECT id FROM discovered_jobs WHERE url=?", (url,)).fetchone()
+            c.execute(
+                """
+                INSERT INTO discovered_jobs(title, company, location, url, description, easy_apply, category, status)
+                VALUES(?,?,?,?,?,?,?,?)
+                ON CONFLICT(url) DO UPDATE SET
+                  title=excluded.title,
+                  company=excluded.company,
+                  location=excluded.location,
+                  description=excluded.description,
+                  easy_apply=excluded.easy_apply,
+                  category=excluded.category,
+                  status=CASE WHEN discovered_jobs.status='new' THEN excluded.status ELSE discovered_jobs.status END
+                """,
+                (
+                    title,
+                    company,
+                    str(raw.get("location") or "").strip()[:500],
+                    url,
+                    str(raw.get("description") or "")[:20000],
+                    bool(raw.get("easy_apply", False)),
+                    str(raw.get("category") or "other").strip()[:120] or "other",
+                    str(raw.get("status") or "new").strip()[:120] or "new",
+                ),
+            )
+            accepted += 1
+            if existing is None:
+                inserted += 1
+            else:
+                updated += 1
+    return {"accepted": accepted, "inserted": inserted, "updated": updated, "skipped": skipped}
 
 
 def posting_hash(company: str, role: str, url: str = "") -> str:

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import cgi
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -46,6 +47,7 @@ CV_STORAGE_DIR = Path(os.environ.get("CV_STORAGE_DIR", os.path.join(os.path.dirn
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt"}
 CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "https://hsndm.tech")
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
+JOB_IMPORT_TOKEN = os.environ.get("JOB_IMPORT_TOKEN", "")
 ALLOW_LEGACY_EXTERNAL_EXECUTION = os.environ.get("ALLOW_LEGACY_EXTERNAL_EXECUTION", "false").lower() == "true"
 
 
@@ -75,7 +77,12 @@ def _campaign_token(handler: BaseHTTPRequestHandler) -> str:
 
 def _is_admin(handler: BaseHTTPRequestHandler) -> bool:
     presented = handler.headers.get("X-Admin-Token", "").strip()
-    return bool(ADMIN_API_TOKEN and presented and presented == ADMIN_API_TOKEN)
+    return bool(ADMIN_API_TOKEN and presented and hmac.compare_digest(presented, ADMIN_API_TOKEN))
+
+
+def _is_job_importer(handler: BaseHTTPRequestHandler) -> bool:
+    presented = handler.headers.get("X-Job-Import-Token", "").strip()
+    return bool(JOB_IMPORT_TOKEN and presented and hmac.compare_digest(presented, JOB_IMPORT_TOKEN))
 
 
 def _store_cv(upload: cgi.FieldStorage | None) -> tuple[str | None, str | None, str | None]:
@@ -140,7 +147,7 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
         if origin and origin == CORS_ORIGIN:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Campaign-Token, X-Admin-Token")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Campaign-Token, X-Admin-Token, X-Job-Import-Token")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
     def _send(self, payload: dict[str, object], code: int = 200) -> None:
@@ -278,6 +285,22 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                     return
                 campaign = db.activate_campaign(campaign_id) if action == "start" else db.pause_campaign(campaign_id)
                 self._send({"ok": True, "campaign": db.campaign_summary(campaign_id), "action": action})
+                return
+
+            if path == "/v1/admin/jobs/import":
+                if not _is_job_importer(self):
+                    self._forbidden()
+                    return
+                data = self._read_json()
+                rows = data.get("jobs")
+                if not isinstance(rows, list) or not rows:
+                    self._send({"ok": False, "error": "jobs_list_required"}, HTTPStatus.BAD_REQUEST)
+                    return
+                if len(rows) > 500:
+                    self._send({"ok": False, "error": "jobs_limit_exceeded"}, HTTPStatus.BAD_REQUEST)
+                    return
+                counts = db.import_discovered_jobs(rows)
+                self._send({"ok": True, "import": counts, "external_execution_enabled": False})
                 return
 
             if path == "/v1/admin/contacts/import":
