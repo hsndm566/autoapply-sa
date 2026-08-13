@@ -79,6 +79,24 @@ class ServiceBaytSyncTests(unittest.TestCase):
         self.assertEqual(queue["bayt"]["by_route_status"]["browser_handoff_ready"], 1)
         self.assertEqual(queue["bayt"]["execution_mode"], "browser_handoff_only")
 
+    def test_browser_outcome_recorder_is_authenticated_and_non_submitting(self) -> None:
+        outcome = {
+            "url": "https://www.bayt.com/en/saudi-arabia/jobs/timeout-1/",
+            "status": "browser_timeout",
+            "detail": "extension timeout",
+        }
+        status, payload = self._request("/v1/admin/portal-handoffs/outcomes", body=outcome)
+        self.assertEqual(status, 403)
+        self.assertFalse(payload["ok"])
+
+        status, payload = self._request(
+            "/v1/admin/portal-handoffs/outcomes", body=outcome, token="unit-test-import-token"
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["submits_applications"])
+        self.assertEqual(payload["record"]["status"], "browser_timeout")
+        self.assertEqual(payload["record"]["attempt_count"], 1)
+
     def test_diversified_queue_is_read_only_and_employer_balanced(self) -> None:
         jobs = [
             {"title": "Barista", "company": "Same Employer", "location": "Riyadh", "url": "https://www.bayt.com/en/saudi-arabia/jobs/barista-diverse-1/", "category": "service_and_entry", "status": "new"},

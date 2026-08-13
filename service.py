@@ -304,6 +304,27 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 self._send({"ok": True, "campaign": db.campaign_summary(campaign_id), "action": action})
                 return
 
+            if path == "/v1/admin/portal-handoffs/outcomes":
+                if not _is_job_importer(self):
+                    self._forbidden()
+                    return
+                data = self._read_json()
+                try:
+                    record = db.record_browser_handoff_attempt(
+                        str(data.get("url") or ""),
+                        str(data.get("status") or ""),
+                        str(data.get("detail") or ""),
+                    )
+                except ValueError as exc:
+                    self._send({"ok": False, "error": "invalid_handoff_outcome", "detail": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    return
+                self._send({
+                    "ok": True,
+                    "submits_applications": False,
+                    "record": record,
+                })
+                return
+
             if path == "/v1/admin/auditor/self-test":
                 if not _is_job_importer(self):
                     self._forbidden()
