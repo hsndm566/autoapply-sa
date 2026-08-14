@@ -1,0 +1,65 @@
+{
+  "name": "Hassan Adam",
+  "location": "Jeddah, Saudi Arabia",
+  "nationality": "Saudi Arabia",
+  "nationality_verification": "Confirmed directly by the candidate on 2026-08-14.",
+  "email": "hasanadam506@gmail.com",
+  "phone": "+966 57 144 8656",
+  "linkedin": "hsndm",
+  "summary": "Industrial Engineer specializing in process optimization, supply chain logistics, and operations management. Proven ability to streamline workflows, coordinate cross-functional teams, and leverage Lean methodologies.",
+  "education": [
+    {
+      "degree": "Bachelor of Science in Industrial Engineering",
+      "institution": "University of Business and Technology (UBT), Jeddah",
+      "dates": "March 2022 - Present"
+    },
+    {
+      "degree": "STEM Diploma",
+      "institution": "International Philippine School in Jeddah (IPSJ), Jeddah",
+      "dates": "January 2014 - November 2019"
+    }
+  ],
+  "experience": [
+    {
+      "role": "Logistics & Operations Coordinator",
+      "company": "UBT, Jeddah",
+      "dates": "June 2022 - December 2025",
+      "description": "Orchestrated comprehensive travel, accommodation, and logistics frameworks for international athletic contingents. Recruited and directed large-scale volunteer workforces for high-profile events including the Jeddah Marathon. Administered critical liaison operations to guarantee seamless operational continuity and elite guest experiences."
+    },
+    {
+      "role": "Purchasing Assistant",
+      "company": "Aljabr, Dammam",
+      "dates": "March 2024 - August 2024",
+      "description": "Directed procurement operations to guarantee uninterrupted supply chain flow and timely material delivery. Optimized vendor relationships to establish collaborative and cost-effective communication channels. Executed purchase orders and conducted market research to negotiate advantageous product offerings."
+    },
+    {
+      "role": "Production Management Secretary",
+      "company": "Piece of Fabric Est., Jeddah",
+      "dates": "February 2021 - November 2022",
+      "description": "Engineered standardized production schedules to maximize operational output and minimize facility downtime. Administered systematic inventory audits and localized supply chain replenishment to sustain continuous manufacturing."
+    },
+    {
+      "role": "Educational Operations Assistant",
+      "company": "AGS Advanced Generations School, Jeddah",
+      "dates": "January 2019 - December 2019",
+      "description": "Administered structured environments through behavioral reinforcement and individualized support mechanisms. Streamlined communication channels between staff and external stakeholders to foster operational cohesion."
+    }
+  ],
+  "skills": [
+    "Lean Manufacturing",
+    "Process Optimization",
+    "Supply Chain Logistics",
+    "Inventory Management",
+    "Vendor Relations",
+    "Risk Management",
+    "Cross-Functional Leadership",
+    "Data Analysis"
+  ],
+  "certifications": [
+    "OSHA 30-Hour General Industry",
+    "ISO 9001:2015 & Risk Management Certificate",
+    "Business Analysis Virtual Work Experience (BCG & Misk)",
+    "Professional Certificate in Productivity (PCP)"
+  ],
+  "languages": ["English", "Arabic", "Somali", "Filipino"]
+}
