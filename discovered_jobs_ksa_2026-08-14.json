@@ -1,128 +1,114 @@
 [
   {
+    "title": "External Contractors AI Mentor Talent Pool - Contractor Roles",
+    "company": "Udacity",
     "platform": "greenhouse",
-    "url": "https://boards.greenhouse.io/opswat/jobs/4623211005",
-    "title": "Inside Sales Representative",
-    "company": "OPSWAT",
+    "url": "https://boards.greenhouse.io/udacity/jobs/7253104002",
     "location": "Saudi Arabia"
   },
   {
+    "title": "Security Consultant Saudi Arabia",
+    "company": "Tenable",
+    "platform": "greenhouse",
+    "url": "https://boards.greenhouse.io/tenableinc/jobs/4031858008",
+    "location": "Saudi Arabia"
+  },
+  {
+    "title": "Business Consultant - Hybrid",
+    "company": "Property Finder",
+    "platform": "greenhouse",
+    "url": "https://boards.greenhouse.io/propertyfinder/jobs/5962705003?gh_jid=5962705003",
+    "location": "Saudi Arabia"
+  },
+  {
+    "title": "Strategic Account Executive - Saudi Arabia",
+    "company": "ElevenLabs",
     "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/leantech/39c656f5-3c5a-4bb4-aff5-370b8b7892c8",
+    "url": "https://jobs.ashbyhq.com/elevenlabs/c5f6c9f4-593f-4ab9-9b08-466eee6c3fb8",
+    "location": "Saudi Arabia"
+  },
+  {
+    "title": "Solutions Architect",
+    "company": "Cohere",
+    "platform": "ashby",
+    "url": "https://jobs.ashbyhq.com/cohere/67c4c05a-f7ab-48dc-a779-af835e2d36f1",
+    "location": "Saudi Arabia"
+  },
+  {
     "title": "Compliance officer - KSA",
     "company": "Lean Technologies",
-    "location": "Riyadh, Saudi Arabia"
+    "platform": "ashby",
+    "url": "https://jobs.ashbyhq.com/LeanTech/39c656f5-3c5a-4bb4-aff5-370b8b7892c8",
+    "location": "Saudi Arabia"
   },
   {
+    "title": "AI Training Contributor - Arabic (Saudi Arabia) - Remote",
+    "company": "Lilt",
     "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/uipath/37c4d6c5-15f1-491b-afb8-8cdb41a22792",
-    "title": "Senior Solution Engineer",
-    "company": "UiPath",
-    "location": "Riyadh, Saudi Arabia"
+    "url": "https://jobs.ashbyhq.com/lilt-production/6fd0de5a-41c8-4b16-87cf-d16395faba96",
+    "location": "Saudi Arabia"
   },
   {
-    "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/sarjai/01655541-b0b9-484e-b8aa-7888b12a6176",
     "title": "Content Creator",
     "company": "Sarj.ai",
+    "platform": "ashby",
+    "url": "https://jobs.ashbyhq.com/sarjai/01655541-b0b9-484e-b8aa-7888b12a6176",
     "location": "Riyadh, Saudi Arabia"
   },
   {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/extremenetworks/d91abd19-18f0-4454-9866-b53fc5f4aad4",
-    "title": "Partner Account Manager",
-    "company": "Extreme Networks",
-    "location": "Riyadh, Saudi Arabia"
-  },
-  {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/jobgether/9869671f-b83b-4e97-bc1f-567edad6315c",
-    "title": "Product Owner",
-    "company": "Jobgether",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/ajax/09e3c957-8623-4bc2-84bc-1abb8c102c23",
-    "title": "Business Development Manager",
-    "company": "Ajax",
-    "location": "Riyadh, Saudi Arabia"
-  },
-  {
-    "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/elevenlabs/6966d3c8-5ad3-a93f-8232-3cb1",
-    "title": "Strategic Account Executive",
-    "company": "ElevenLabs",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/cohere/bb0c781f-b2ca-47fb-90bf-ee13dbf58718",
-    "title": "Engineering Manager, FDE Agentic Platform",
-    "company": "Cohere",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/kyra/57b7b877-3c4b-4f05-a7ea-6e9ede60f2ec",
-    "title": "MENA Senior Campaign Manager",
-    "company": "Kyra",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/toogeza/1432219b-42e9-4fde-8c94-39c55f346211",
-    "title": "Representative Director – Japan",
-    "company": "Toogeza",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "ashby",
-    "url": "https://jobs.ashbyhq.com/quartermaster/a3e17947-2de8-44b5-b2d1-b43997264f5d",
-    "title": "Field Operations Lead - Arabian Gulf",
-    "company": "Quartermaster",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/jobgether/88c6b4ee-5db6-4715-8696-cb9f02021c9b",
-    "title": "Senior Content Producer – Social Media",
-    "company": "Jobgether",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/jobgether/ba0d5607-cbbe-4fbc-9865-fa3ed530b68f",
     "title": "Bilingual Immigration Paralegal",
     "company": "Jobgether",
+    "platform": "lever",
+    "url": "https://jobs.lever.co/jobgether/ba0d5607-cbbe-4fbc-9865-fa3ed530b68f",
     "location": "Saudi Arabia"
   },
   {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/jobgether/2b9e41c8-c3e2-4d3b-bbf6-3dddfdc41d12",
-    "title": "Senior Data Engineer - Web Scraping",
+    "title": "Performance Engineer - Benchmarking",
     "company": "Jobgether",
+    "platform": "lever",
+    "url": "https://jobs.lever.co/jobgether/bb8eadbb-6741-4e44-b456-de80c84dff57",
     "location": "Saudi Arabia"
   },
   {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/strategicgears/ddaeaf08-9ad4-4d1b-9f3d-2623759b20eb",
-    "title": "Market Research Manager",
-    "company": "Strategic Gears",
-    "location": "Saudi Arabia"
-  },
-  {
-    "platform": "lever",
-    "url": "https://jobs.lever.co/jobgether/15ac3337-6fc3-4484-a4b2-52f926dabd9f",
-    "title": "Recruiter and Interviewer Application",
+    "title": "Irrigation Systems Design Assistant",
     "company": "Jobgether",
+    "platform": "lever",
+    "url": "https://jobs.lever.co/jobgether/b0eb7e1c-b8a8-4673-a603-7487b9eda173",
     "location": "Saudi Arabia"
   },
   {
+    "title": "Project Epsilon - Arabic Data Trainer",
+    "company": "Welo Global",
     "platform": "lever",
-    "url": "https://jobs.lever.co/jobgether/95c880aa-45a3-4b4c-bcef-e3c27958e40d",
-    "title": "Partner Manager - Marketplace",
+    "url": "https://jobs.lever.co/weloglobal/35aeb137-cc00-4707-9740-b0f2232145fe/apply",
+    "location": "Saudi Arabia"
+  },
+  {
+    "title": "Content Operations Analyst",
     "company": "Jobgether",
+    "platform": "lever",
+    "url": "https://jobs.lever.co/jobgether/ec37b24d-29a4-4dbe-a7dc-c3b6a93d6ff2",
+    "location": "Saudi Arabia"
+  },
+  {
+    "title": "Creative Producer (Performance Marketing)",
+    "company": "Jobgether",
+    "platform": "lever",
+    "url": "https://jobs.lever.co/jobgether/fcc32275-f8fa-4f79-8156-559fe2bdd559",
+    "location": "Saudi Arabia"
+  },
+  {
+    "title": "Maintenance Integration Engineer",
+    "company": "Jobgether",
+    "platform": "lever",
+    "url": "https://jobs.lever.co/jobgether/88d11510-2c07-4ff3-a02a-543aa6d0c59b/apply",
+    "location": "Saudi Arabia"
+  },
+  {
+    "title": "Java Gen AI Engineer",
+    "company": "Jobgether",
+    "platform": "lever",
+    "url": "https://jobs.lever.co/jobgether/3fcd4554-0cea-41cc-8ceb-076cd4e35f19",
     "location": "Saudi Arabia"
   }
 ]
