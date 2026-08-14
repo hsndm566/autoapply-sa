@@ -584,6 +584,22 @@ def campaign_summary(campaign_id: str) -> dict[str, Any] | None:
         evidence_count = c.execute(
             "SELECT COUNT(*) AS count FROM application_evidence WHERE campaign_id=?", (campaign_id,)
         ).fetchone()["count"]
+        email_send_count = c.execute(
+            "SELECT COUNT(*) AS count FROM application_evidence WHERE campaign_id=? AND evidence_type='email_smtp_accepted'", (campaign_id,)
+        ).fetchone()["count"]
+        last_application_row = c.execute(
+            "SELECT MAX(created_at) AS created_at FROM application_evidence WHERE campaign_id=?", (campaign_id,)
+        ).fetchone()
+        evidence_rows = c.execute(
+            """SELECT ae.id,ae.evidence_type,ae.campaign_job_id,ae.created_at,
+                      cj.company,cj.title,cj.location
+               FROM application_evidence ae
+               LEFT JOIN campaign_jobs cj ON cj.id=ae.campaign_job_id
+               WHERE ae.campaign_id=?
+               ORDER BY ae.created_at DESC
+               LIMIT 100""",
+            (campaign_id,),
+        ).fetchall()
         outbox_rows = c.execute(
             "SELECT status,COUNT(*) AS count FROM action_outbox WHERE campaign_id=? GROUP BY status", (campaign_id,)
         ).fetchall()
@@ -592,6 +608,20 @@ def campaign_summary(campaign_id: str) -> dict[str, Any] | None:
     campaign["job_counts"] = {row["status"]: row["count"] for row in job_rows}
     campaign["outbox_counts"] = {row["status"]: row["count"] for row in outbox_rows}
     campaign["evidence_count"] = evidence_count
+    campaign["email_send_count"] = email_send_count
+    campaign["last_application_at"] = last_application_row["created_at"] if last_application_row else None
+    campaign["verified_applications"] = [
+        {
+            "id": row["id"],
+            "evidence_type": row["evidence_type"],
+            "campaign_job_id": row["campaign_job_id"],
+            "company": row["company"],
+            "title": row["title"],
+            "location": row["location"],
+            "created_at": row["created_at"],
+        }
+        for row in evidence_rows
+    ]
     campaign["external_execution_enabled"] = bool(campaign["execution_enabled"])
     return campaign
 

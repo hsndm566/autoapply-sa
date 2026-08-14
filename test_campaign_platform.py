@@ -132,6 +132,28 @@ class CampaignPlatformTests(unittest.TestCase):
         self.assertGreaterEqual(len(events["events"]), 2)
         self.assertIn("campaign_activated", {event["event_type"] for event in events["events"]})
 
+    def test_campaign_summary_exposes_only_evidence_linked_application_facts(self):
+        campaign, token = db.create_campaign(
+            candidate_name="Test Candidate", candidate_email="candidate@example.com", target_role="Operations Analyst"
+        )
+        job_id, created = db.add_campaign_job(
+            campaign["id"], company="Verified Company", title="Operations Analyst", job_url="https://jobs.example.com/verified"
+        )
+        self.assertTrue(created)
+        db.record_evidence(campaign["id"], "email_smtp_accepted", "smtp-message-id", campaign_job_id=job_id)
+        db.record_evidence(campaign["id"], "greenhouse_submit_confirmation", "confirmation-digest", campaign_job_id=job_id)
+
+        status, response = self.request("GET", f"/v1/campaigns/{campaign['id']}", headers={"X-Campaign-Token": token})
+
+        self.assertEqual(status, 200)
+        summary = response["campaign"]
+        self.assertEqual(summary["evidence_count"], 2)
+        self.assertEqual(summary["email_send_count"], 1)
+        self.assertIsNotNone(summary["last_application_at"])
+        self.assertEqual(len(summary["verified_applications"]), 2)
+        self.assertEqual(summary["verified_applications"][0]["company"], "Verified Company")
+        self.assertNotIn("smtp-message-id", str(summary))
+
     def test_campaign_api_accepts_multipart_cv_and_stores_an_isolated_artifact(self):
         status, created = self.multipart_request(
             "/v1/campaigns",
