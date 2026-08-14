@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  autoapply-sa:
+    build: .
+    container_name: autoapply-sa
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - autoapply-data:/data/autoapply
+    env_file:
+      - .env
+    environment:
+      - PORT=8080
+      - CV_STORAGE_DIR=/data/autoapply/cv
+      - DB_PATH=/data/autoapply/autoapply.db
+
+volumes:
+  autoapply-data:
+    driver: local
