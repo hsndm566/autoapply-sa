@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AutoApply runtime state, secrets, and generated artifacts
+*.db
+*.db-wal
+*.db-shm
+.job_import_token
+.runtime_secrets_from_gist
+*_output.txt
+heartbeat_log.txt
+application_results_*.json
+*_report.json
+*_stdout*.txt
+/data/
+evidence/
+logs/

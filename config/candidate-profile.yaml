@@ -38,21 +38,23 @@ targeting:
 
   portals:
     preferred:
-      - "Bayt.com"
-      - "LinkedIn KSA"
       - "Jadeer"
       - "Gulftalent"
       - "Naukrigulf"
       - "*.sa company career pages"
       - "Taqat"
       - "Hirect"
-    flag_for_manual_review:
+      - "Greenhouse"
       - "Ashby"
       - "Lever"
-      - "Greenhouse"
+    skip:
+      - "Bayt.com"
+      - "LinkedIn"
+      - "Indeed"
+    flag_for_manual_review:
       - "Workday (non-KSA companies)"
-    reason: "These portals predominantly serve international/startup 
-             companies outside Saudi market — do not auto-submit"
+    reason: "Skipping heavy CAPTCHA sites (Bayt, LinkedIn, Indeed).
+             Focusing on low-friction KSA-specific portals and direct pages."
 
   industries:
     preferred:

@@ -10,12 +10,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import secrets
 import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
 from typing import Any, Iterable
+from urllib.parse import urlparse
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "autoapply.db"))
@@ -220,6 +222,27 @@ def _now() -> float:
 
 def _json(value: Any) -> str:
     return json.dumps(value or {}, separators=(",", ":"), ensure_ascii=False)
+
+
+def _required_text(value: Any, field_name: str, limit: int = 500) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} is required")
+    return value.strip()[:limit]
+
+
+def _validated_email(value: Any) -> str:
+    email = _required_text(value, "candidate_email", 320).lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise ValueError("candidate_email is invalid")
+    return email
+
+
+def _validated_http_url(value: Any, field_name: str) -> str:
+    url = _required_text(value, field_name, 2000)
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"{field_name} must be an absolute HTTP(S) URL")
+    return url
 
 
 def _row(row: sqlite3.Row | None) -> dict[str, Any] | None:
@@ -438,6 +461,9 @@ def create_campaign(
     cv_original_name: str | None = None,
     cv_sha256: str | None = None,
 ) -> tuple[dict[str, Any], str]:
+    clean_name = _required_text(candidate_name, "candidate_name", 200)
+    clean_email = _validated_email(candidate_email)
+    clean_role = _required_text(target_role, "target_role", 500)
     campaign_id = str(uuid.uuid4())
     access_token = secrets.token_urlsafe(32)
     now = _now()
@@ -448,8 +474,8 @@ def create_campaign(
                 seniority,language,cv_path,cv_original_name,cv_sha256,status,created_at,updated_at
             ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                campaign_id, _token_hash(access_token), candidate_name.strip(), candidate_email.strip().lower(),
-                target_role.strip(), city.strip(), industry.strip(), seniority.strip(), language.strip(),
+                campaign_id, _token_hash(access_token), clean_name, clean_email, clean_role,
+                str(city or "").strip(), str(industry or "").strip(), str(seniority or "").strip(), str(language or "").strip(),
                 cv_path, cv_original_name, cv_sha256, "intake_received", now, now,
             ),
         )
@@ -581,7 +607,10 @@ def add_campaign_job(
     path_state: str = "discovered",
     fit_score: float | None = None,
 ) -> tuple[str, bool]:
-    job_hash = posting_hash(company, title, job_url)
+    clean_company = _required_text(company, "company", 500)
+    clean_title = _required_text(title, "title", 500)
+    clean_url = _validated_http_url(job_url, "job_url")
+    job_hash = posting_hash(clean_company, clean_title, clean_url)
     job_id = str(uuid.uuid4())
     with connection() as c:
         try:
@@ -589,7 +618,7 @@ def add_campaign_job(
                 """INSERT INTO campaign_jobs(
                    id,campaign_id,job_hash,source,company,title,location,job_url,path_state,fit_score,status,created_at,updated_at
                 ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (job_id, campaign_id, job_hash, source, company, title, location, job_url, path_state, fit_score, "discovered", _now(), _now()),
+                (job_id, campaign_id, job_hash, str(source or "").strip()[:120], clean_company, clean_title, str(location or "").strip()[:500], clean_url, str(path_state or "discovered").strip()[:120], fit_score, "discovered", _now(), _now()),
             )
             return job_id, True
         except sqlite3.IntegrityError:
@@ -756,11 +785,20 @@ def record_evidence(
     campaign_job_id: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> str:
+    if not get_campaign(campaign_id):
+        raise ValueError("campaign_id is unknown")
+    clean_type = _required_text(evidence_type, "evidence_type", 120)
+    clean_value = _required_text(value, "evidence_value", 4000)
+    if campaign_job_id:
+        with connection() as c:
+            linked = c.execute("SELECT 1 FROM campaign_jobs WHERE id=? AND campaign_id=?", (campaign_job_id, campaign_id)).fetchone()
+        if linked is None:
+            raise ValueError("campaign_job_id does not belong to campaign")
     evidence_id = str(uuid.uuid4())
     with connection() as c:
         c.execute(
             "INSERT INTO application_evidence(id,campaign_id,campaign_job_id,evidence_type,value,metadata_json,created_at) VALUES(?,?,?,?,?,?,?)",
-            (evidence_id, campaign_id, campaign_job_id, evidence_type, value[:4000], _json(metadata), _now()),
+            (evidence_id, campaign_id, campaign_job_id, clean_type, clean_value, _json(metadata), _now()),
         )
     return evidence_id
 
