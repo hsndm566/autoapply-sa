@@ -17,6 +17,7 @@ import re
 import shutil
 import tempfile
 import threading
+import subprocess
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -430,11 +431,22 @@ def build_server(port: int = PORT) -> ThreadingHTTPServer:
     return ThreadingHTTPServer(("0.0.0.0", port), AutoApplyHandler)
 
 
+def start_heartbeat():
+    try:
+        LOG.info("Starting background heartbeat monitor...")
+        subprocess.Popen(["python3", "-u", "heartbeat_monitor.py"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    except Exception as exc:
+        LOG.error("Failed to start heartbeat monitor: %s", exc)
+
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
     db.initialize()
     # Establish local observability at boot without delaying health checks on public listing APIs.
     campaign_worker.run_maintenance_cycle(discover_campaigns=False)
+    
+    # Start the autonomous application heartbeat in the background
+    threading.Thread(target=start_heartbeat, daemon=True).start()
+    
     scheduler = BackgroundScheduler()
     scheduler.add_job(run_safe_maintenance, "interval", minutes=5, id="safe-maintenance", replace_existing=True)
     scheduler.start()
