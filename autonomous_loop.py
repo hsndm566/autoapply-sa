@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import json
 import time
+import os
+from config_loader import should_apply, load_config
 from greenhouse_submit import submit_greenhouse
 from ashby_submit import submit_ashby
 from lever_submit import submit_lever
@@ -23,10 +25,20 @@ def run_loop():
     
     results = []
     count = 0
+    config = load_config()
+    
+    # Ensure log directories exist
+    os.makedirs("logs", exist_ok=True)
+    
     for job in jobs:
-        if count >= 10:
+        if count >= config.get("execution", {}).get("daily_application_cap", 50):
             break
             
+        allowed, reason = should_apply(job['title'], job['location'], job['platform'])
+        if not allowed:
+            print(f"SKIPPING {job['title']} at {job['company']}: {reason}")
+            continue
+
         print(f"Processing {job['title']} at {job['company']} ({job['platform']})...")
         
         if job['platform'] == 'greenhouse':

@@ -1,0 +1,112 @@
+candidate:
+  name: "Hasan Adam"
+  location: "Jeddah, Saudi Arabia"
+  languages: ["English", "Arabic"]
+  current_role: "Governance Intern"
+  background: ["Industrial Engineering", "Automation", "Lean Six Sigma"]
+
+targeting:
+  geography:
+    allowed: ["Saudi Arabia", "KSA", "المملكة العربية السعودية"]
+    cities: ["Jeddah", "Riyadh", "Dammam", "Al Khobar", "Makkah", 
+             "Madinah", "Yanbu", "Jubail", "Tabuk", "Abha"]
+    remote: "KSA-only remote accepted, global remote rejected"
+    reject_if_outside_ksa: true
+
+  seniority:
+    allowed: 
+      - "Entry Level"
+      - "Junior"
+      - "Graduate"
+      - "Intern"
+      - "Associate"
+      - "Trainee"
+      - "Fresh Graduate"
+    reject_title_keywords:
+      - "Senior"
+      - "Manager"
+      - "Lead"
+      - "Head of"
+      - "Director"
+      - "VP"
+      - "Vice President"
+      - "Chief"
+      - "Principal"
+      - "Architect"
+      - "Partner"
+    if_unsure: "flag_for_manual_review"
+
+  portals:
+    preferred:
+      - "Bayt.com"
+      - "LinkedIn KSA"
+      - "Jadeer"
+      - "Gulftalent"
+      - "Naukrigulf"
+      - "*.sa company career pages"
+      - "Taqat"
+      - "Hirect"
+    flag_for_manual_review:
+      - "Ashby"
+      - "Lever"
+      - "Greenhouse"
+      - "Workday (non-KSA companies)"
+    reason: "These portals predominantly serve international/startup 
+             companies outside Saudi market — do not auto-submit"
+
+  industries:
+    preferred:
+      - "Industrial Engineering"
+      - "Automation"
+      - "Operations"
+      - "Process Improvement"
+      - "Governance"
+      - "Compliance"
+      - "Project Management"
+      - "AI/Tech adjacent"
+      - "Supply Chain"
+      - "Manufacturing"
+    acceptable:
+      - "General Engineering"
+      - "Business Operations"
+      - "Consulting"
+    reject:
+      - "Healthcare (clinical roles)"
+      - "Legal"
+      - "Accounting (unless operations-adjacent)"
+
+execution:
+  daily_application_cap: 50
+  batch_size: 10
+  delay_between_applications_seconds: [45, 120]
+  captcha_behavior: "pause_and_flag"
+  on_unknown_field: "flag_for_manual_review"
+  
+  form_defaults:
+    gender: "Male"
+    nationality: "Saudi Arabian"
+    driving_license: "Yes"
+    notice_period: "Immediately available"
+    expected_salary: "negotiable"
+    years_of_experience: "0-2"
+    willing_to_relocate: "Yes, within KSA"
+    cover_letter: "generate_from_cv_and_jd"
+
+  stop_conditions:
+    - "more than 15 bounces in email batch"
+    - "Railway/cloud spend exceeds $4.50 USD"
+    - "application error rate exceeds 30% in a single batch"
+    - "any submission to a role outside KSA geography"
+
+logging:
+  track_per_application:
+    - timestamp
+    - company_name
+    - role_title
+    - portal_used
+    - seniority_detected
+    - location_confirmed
+    - submission_status
+    - flagged_reason
+  output_file: "logs/application_log.csv"
+  flag_file: "logs/manual_review_queue.csv"
