@@ -1,28 +1,14 @@
 #!/usr/bin/env python3
 import os
 import json
-import requests
 from playwright.sync_api import sync_playwright
+from browser_helper import get_browser_session, get_page, close_session
 
 def submit_lever(url, candidate_data):
-    api_key = os.environ.get("ANCHOR_API_KEY")
-    session_url = "https://api.anchorbrowser.io/v1/sessions"
-    headers = {"anchor-api-key": api_key, "Content-Type": "application/json"}
-    body = {
-        "browser": {"extra_stealth": {"active": True}},
-        "session": {"proxy": {"active": True, "country_code": "us"}}
-    }
-    
-    sid = None
     try:
-        r = requests.post(session_url, headers=headers, json=body, timeout=60)
-        data = r.json()["data"]
-        sid = data["id"]
-        cdp_url = data["cdp_url"]
-        
         with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp(cdp_url)
-            page = browser.contexts[0].new_page()
+            browser, sid, is_cloud = get_browser_session(p)
+            page = get_page(browser, is_cloud)
             
             # Lever URLs often end in /apply
             if not url.endswith('/apply'):
@@ -57,25 +43,17 @@ def submit_lever(url, candidate_data):
             fill_lever_field(page, "urls[LinkedIn]", "https://www.linkedin.com/in/hsndm")
 
             if success_count >= 2:
-                # CV Upload
-                # resume_input = page.query_selector('input[type="file"]')
-                # if resume_input:
-                #     resume_input.set_input_files(candidate_data["cv_path"])
-                
                 print(f"SUCCESS: Form filled for {url}")
-                browser.close()
+                close_session(browser, sid)
                 return {"ok": True, "submitted": True, "url": url}
             else:
                 print(f"FAILED: Form fields not found for {url}")
-                browser.close()
+                close_session(browser, sid)
                 return {"ok": False, "error": "Form fields not found", "url": url}
                 
     except Exception as e:
         print(f"ERROR: {str(e)}")
         return {"ok": False, "error": str(e), "url": url}
-    finally:
-        if sid:
-            requests.delete(f"{session_url}/{sid}", headers=headers)
 
 if __name__ == "__main__":
-    print("Lever cloud script ready.")
+    print("Lever submission script ready.")
