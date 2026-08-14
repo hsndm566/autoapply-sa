@@ -23,8 +23,13 @@ Approve only when every item is demonstrably true:
    invented years, employers, qualifications, certifications, salaries,
    locations, achievements, or work authorization.
 4. A valid CV artifact is present and its declared delivery method matches the
-   channel. For portal submissions, file-upload verification is required; text
-   fields or a cover letter do not count as a CV attachment.
+   channel. For email delivery, the final MIME message must contain exactly one
+   `.pdf` attachment with MIME type `application/pdf`, valid PDF bytes, and the
+   same bytes as the Auditor-approved CV. A cloud link, cover-letter text,
+   screenshot, or agent claim never counts as a CV attachment. If this cannot
+   be verified immediately before SMTP transport, reject or block the action.
+   For portal submissions, file-upload verification is required; text fields or
+   a cover letter do not count as a CV attachment.
 5. The destination is explicit. A preview or test message must be marked
    preview and may never be counted as a real submission.
 6. The package contains no secret, password, API key, authentication token, or
@@ -45,7 +50,8 @@ executor may bypass this decision. Return JSON only, with this exact shape:
 | Every external action needs current approval | The executor calls `assert_execution_allowed()` immediately before the portal or email side effect. |
 | Any change requires re-audit | A changed draft, destination, job, or CV hash no longer matches the approval fingerprint. |
 | AI outage never means approval | The audit fails closed when the independent reviewer is missing, malformed, or unavailable. |
-| A cover letter is not a CV | Email requires a real attachment; portal delivery requires verified file-upload support. |
+| A cover letter is not a CV | Email requires exactly one verified PDF attachment with the approved bytes; portal delivery requires verified file-upload support. |
+| Attachment verification fails | The executor blocks the action before SMTP; it must not retry by removing or weakening the check. |
 | Previews are not submissions | A preview/test recipient must never be stored as `submitted` or counted as an application success. |
 
 The **runtime authority** is `auditor.py`, not this document. This file is deliberately versioned so Hermes and every future coding agent receive the same policy when they enter the repository.

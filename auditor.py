@@ -208,6 +208,12 @@ def _validate_cv(candidate: Mapping[str, Any], submission: Mapping[str, Any]) ->
             "Email delivery requires the CV transport to be email_attachment.",
             "submission.cv_transport",
         ))
+    if channel == "email" and cv_path.suffix.casefold() != ".pdf":
+        findings.append(Finding(
+            "EMAIL_CV_PDF_REQUIRED",
+            "Every outgoing application email must attach a PDF CV.",
+            "candidate.cv_path",
+        ))
     return findings
 
 
@@ -423,15 +429,28 @@ def build_approved_email(
     cv_path = Path(_text(candidate.get("cv_path"))).expanduser()
     if not cv_path.is_file():
         raise PermissionError("Execution blocked: approved CV artifact is no longer available.")
+    if cv_path.suffix.casefold() != ".pdf":
+        raise PermissionError("Execution blocked: outgoing application emails require a PDF CV.")
+    cv_bytes = cv_path.read_bytes()
+    if not cv_bytes.startswith(b"%PDF-") or b"%%EOF" not in cv_bytes[-4096:]:
+        raise PermissionError("Execution blocked: CV is not a complete readable PDF artifact.")
+    if len(cv_bytes) == 0 or len(cv_bytes) > MAX_CV_BYTES:
+        raise PermissionError("Execution blocked: CV PDF size is invalid.")
 
     message = EmailMessage()
     message["From"] = sender
     message["To"] = _text(destination.get("recipient"))
     message["Subject"] = _text(destination.get("subject")) or f"Application — {_text(job.get('role'))} at {_text(job.get('company'))}"
     message.set_content(_text(package.get("draft")))
-    mime_type, _ = mimetypes.guess_type(str(cv_path))
-    maintype, subtype = (mime_type or "application/octet-stream").split("/", 1)
-    message.add_attachment(cv_path.read_bytes(), maintype=maintype, subtype=subtype, filename=cv_path.name)
+    message.add_attachment(cv_bytes, maintype="application", subtype="pdf", filename=cv_path.name)
+    attachments = list(message.iter_attachments())
+    if len(attachments) != 1:
+        raise PermissionError("Execution blocked: email message does not contain exactly one CV attachment.")
+    attachment = attachments[0]
+    if attachment.get_content_type() != "application/pdf":
+        raise PermissionError("Execution blocked: CV attachment MIME type is not application/pdf.")
+    if attachment.get_payload(decode=True) != cv_bytes:
+        raise PermissionError("Execution blocked: email attachment bytes do not match the approved CV.")
     return message
 
 

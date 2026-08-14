@@ -44,6 +44,21 @@ def _message_evidence(message: EmailMessage) -> str:
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def _assert_pdf_attachment(message: EmailMessage) -> None:
+    """Fail closed unless the outgoing MIME message contains exactly one valid PDF CV."""
+    attachments = list(message.iter_attachments())
+    if len(attachments) != 1:
+        raise PermissionError("EMAIL_CV_ATTACHMENT_MISSING_OR_DUPLICATE")
+    attachment = attachments[0]
+    if attachment.get_content_type() != "application/pdf":
+        raise PermissionError("EMAIL_CV_ATTACHMENT_NOT_PDF")
+    payload = attachment.get_payload(decode=True) or b""
+    if not payload.startswith(b"%PDF-") or b"%%EOF" not in payload[-4096:]:
+        raise PermissionError("EMAIL_CV_ATTACHMENT_INVALID_PDF")
+    if not attachment.get_filename() or not attachment.get_filename().lower().endswith(".pdf"):
+        raise PermissionError("EMAIL_CV_ATTACHMENT_FILENAME_INVALID")
+
+
 def _smtp_send(message: EmailMessage, sender: str, app_password: str) -> str:
     """Send via authenticated TLS and return the SMTP Message-ID evidence value."""
     context = ssl.create_default_context()
@@ -121,6 +136,8 @@ def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, 
         application_id = str(package.get("application_id") or "")
         message = auditor.build_approved_email(package, sender, approval_token)
         # `build_approved_email` rechecks a current, matching Auditor decision.
+        # Re-assert the final MIME payload immediately before transport as a second fail-closed boundary.
+        _assert_pdf_attachment(message)
         transport_evidence = send_fn(message, sender, password)
     except PermissionError as exc:
         return _block(action, f"AUDITOR_RECHECK_FAILED: {exc}")

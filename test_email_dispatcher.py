@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import auditor
 import db
@@ -95,6 +96,8 @@ class EmailDispatcherTests(unittest.TestCase):
             attachments = list(message.iter_attachments())
             self.assertEqual(1, len(attachments))
             self.assertEqual(self.cv.name, attachments[0].get_filename())
+            self.assertEqual("application/pdf", attachments[0].get_content_type())
+            self.assertEqual(self.cv.read_bytes(), attachments[0].get_payload(decode=True))
             return "smtp-message-accepted-001"
 
         result = email_dispatcher.dispatch_pending(send_fn=fake_send)
@@ -105,6 +108,46 @@ class EmailDispatcherTests(unittest.TestCase):
         summary = db.campaign_summary(self.campaign_id)
         self.assertEqual(1, summary["evidence_count"])
         self.assertIn("email_delivery_accepted", {item["event_type"] for item in db.list_campaign_events(self.campaign_id)})
+
+    def test_dispatch_blocks_if_final_mime_message_lacks_pdf(self) -> None:
+        action_id = self.queue_valid_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = "sender@example.com"
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        sent: list[object] = []
+
+        message_without_attachment = email_dispatcher.EmailMessage()
+        message_without_attachment["From"] = "sender@example.com"
+        message_without_attachment["To"] = "recruiting@brighttech.example"
+        message_without_attachment["Subject"] = "Application"
+        message_without_attachment.set_content("Draft")
+
+        def fake_send(message, _sender, _password):
+            sent.append(message)
+            return "should-not-be-called"
+
+        with patch.object(email_dispatcher.auditor, "build_approved_email", return_value=message_without_attachment):
+            result = email_dispatcher.dispatch_pending(send_fn=fake_send)
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual([], sent)
+        self.assertEqual("blocked", self.action_status(action_id))
+
+    def test_builder_blocks_incomplete_pdf_even_after_structural_approval(self) -> None:
+        package = self.package()
+        self.cv.write_bytes(b"%PDF-1.4\\nmissing EOF")
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        self.assertTrue(decision.approved, decision.summary)
+        with self.assertRaises(PermissionError):
+            auditor.build_approved_email(package, "sender@example.com", decision.approval_token)
+
+    def test_non_pdf_cv_is_rejected_before_queue(self) -> None:
+        non_pdf = Path(self.temp_dir.name) / "hasan-cv.docx"
+        non_pdf.write_bytes(b"PK\\x03\\x04not-a-real-docx")
+        package = self.package()
+        package["candidate"] = dict(package["candidate"], cv_path=str(non_pdf))
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        self.assertFalse(decision.approved)
+        self.assertIn("EMAIL_CV_PDF_REQUIRED", {finding.code for finding in decision.findings})
 
     def test_smtp_failure_is_uncertain_and_not_retried_as_a_duplicate(self) -> None:
         action_id = self.queue_valid_action()
