@@ -7,7 +7,6 @@ a source-specific upload proof and Auditor verification are in place.
 """
 from __future__ import annotations
 
-import cgi
 import hashlib
 import hmac
 import json
