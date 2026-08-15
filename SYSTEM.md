@@ -80,6 +80,7 @@ Never add secret values, live access tokens, candidate CV content, or client ema
 | `GET /v1/campaigns/{id}/events` | `X-Campaign-Token` | Campaign activity feed. Activity is not submission proof. |
 | `POST /v1/campaigns/{id}/start` | `X-Campaign-Token` | Enable safe discovery and drafting only. |
 | `POST /v1/campaigns/{id}/pause` | `X-Campaign-Token` | Pause future campaign work. |
+| `POST /v1/hermes/draft-applications` | `X-Hermes-Gateway-Token` | Accept up to 10 draft-only packages, run Auditor validation, and never queue or send. |
 | `POST /v1/admin/portal-handoffs/outcomes` | `X-Job-Import-Token` | Record browser handoff outcome. |
 | `POST /v1/admin/auditor/review` | `X-Job-Import-Token` | Request an auditor review. |
 | `POST /v1/admin/auditor/self-test` | `X-Job-Import-Token` | Verify reviewer connectivity. |
@@ -94,7 +95,8 @@ Never add secret values, live access tokens, candidate CV content, or client ema
 3. Give the candidate their private status link in the form `https://hsndm.tech/campaign/{campaign_id}#access={token}`. The fragment prevents the browser from sending the token in the HTTP request URL.
 4. The dashboard requests the existing campaign summary and event routes with `X-Campaign-Token`; it counts only `application_evidence` as application proof.
 5. Start a campaign only after confirming the candidate’s intent. The current `active_readonly` mode performs discovery and drafting only.
-6. Do not enable email or portal execution until the verified contact source, independent Auditor, and source-specific upload proof requirements in [`OPERATIONS_HANDOFF.md`](./OPERATIONS_HANDOFF.md) are complete.
+6. Hermes must submit draft packages only through `POST /v1/hermes/draft-applications` with `X-Hermes-Gateway-Token`; direct Gmail or SMTP access is prohibited. The gateway requires HTTPS source evidence, verified contact metadata, and Auditor approval, and it never queues or sends in draft mode.
+7. Do not enable email or portal execution until the verified contact source, independent Auditor, and source-specific upload proof requirements in [`OPERATIONS_HANDOFF.md`](./OPERATIONS_HANDOFF.md) are complete.
 
 ## 7. Add a new client safely
 

@@ -33,6 +33,7 @@ import campaign_worker
 import contact_import
 import db
 import diversity_queue
+import hermes_gateway
 
 try:
     import orchestrator
@@ -172,7 +173,7 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
         if origin and origin == CORS_ORIGIN:
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Campaign-Token, X-Admin-Token, X-Job-Import-Token")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Campaign-Token, X-Admin-Token, X-Job-Import-Token, X-Hermes-Gateway-Token")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
     def _send(self, payload: dict[str, object], code: int = 200) -> None:
@@ -300,6 +301,26 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path.rstrip("/") or "/"
         try:
+            if path == "/v1/hermes/draft-applications":
+                if not hermes_gateway.authorized(self.headers.get(hermes_gateway.GATEWAY_HEADER, "").strip()):
+                    self._forbidden()
+                    return
+                data = self._read_json()
+                if data.get("mode") != "draft_only":
+                    self._send({"ok": False, "error": "draft_only_mode_required"}, HTTPStatus.BAD_REQUEST)
+                    return
+                try:
+                    result = hermes_gateway.prepare_batch(str(data.get("campaign_id") or ""), data.get("applications"))
+                except ValueError as exc:
+                    self._send({"ok": False, "error": "invalid_draft_batch", "detail": str(exc)}, HTTPStatus.BAD_REQUEST)
+                    return
+                except Exception as exc:
+                    LOG.exception("Hermes draft gateway failed: %s", type(exc).__name__)
+                    self._send({"ok": False, "error": "draft_gateway_unavailable", "detail": type(exc).__name__}, HTTPStatus.SERVICE_UNAVAILABLE)
+                    return
+                self._send(result)
+                return
+
             if path == "/v1/campaigns":
                 values, upload = self._multipart_campaign()
                 required = ("candidate_name", "candidate_email", "target_role")
