@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
 import logging
 import os
@@ -17,6 +18,8 @@ import shutil
 import tempfile
 import threading
 import subprocess
+from email.parser import BytesParser
+from email.policy import default as email_default_policy
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -72,6 +75,27 @@ def _sanitize_text(value: object, limit: int = 250) -> str:
     return str(value or "").strip()[:limit]
 
 
+class _MultipartPart:
+    def __init__(self, *, filename: str | None, payload: bytes) -> None:
+        self.filename = filename
+        self.file = io.BytesIO(payload)
+
+
+class _MultipartForm:
+    def __init__(self, fields: dict[str, _MultipartPart | str]) -> None:
+        self._fields = fields
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._fields
+
+    def __getitem__(self, key: str) -> _MultipartPart | str:
+        return self._fields[key]
+
+    def getfirst(self, key: str, default: str = "") -> str:
+        value = self._fields.get(key, default)
+        return value if isinstance(value, str) else default
+
+
 def _campaign_token(handler: BaseHTTPRequestHandler) -> str:
     return handler.headers.get("X-Campaign-Token", "").strip()
 
@@ -86,7 +110,7 @@ def _is_job_importer(handler: BaseHTTPRequestHandler) -> bool:
     return bool(JOB_IMPORT_TOKEN and presented and hmac.compare_digest(presented, JOB_IMPORT_TOKEN))
 
 
-def _store_cv(upload: cgi.FieldStorage | None) -> tuple[str | None, str | None, str | None]:
+def _store_cv(upload: _MultipartPart | None) -> tuple[str | None, str | None, str | None]:
     if upload is None or not getattr(upload, "filename", None):
         return None, None, None
     name = _safe_name(upload.filename)
@@ -173,21 +197,37 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length else b"{}"
         return json.loads(raw.decode("utf-8")) if raw else {}
 
-    def _multipart_campaign(self) -> tuple[dict[str, str], cgi.FieldStorage | None]:
+    def _multipart_campaign(self) -> tuple[dict[str, str], _MultipartPart | None]:
         content_type = self.headers.get("Content-Type", "")
         if not content_type.startswith("multipart/form-data"):
             data = self._read_json()
             return {key: _sanitize_text(value) for key, value in data.items()}, None
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": content_type},
-        )
+        length = int(self.headers.get("Content-Length", "0") or 0)
+        if length <= 0 or length > MAX_UPLOAD_BYTES + 1024 * 1024:
+            raise ValueError("Multipart request is missing or exceeds the upload limit")
+        body = self.rfile.read(length)
+        header = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("ascii", "strict")
+        message = BytesParser(policy=email_default_policy).parsebytes(header + body)
+        if not message.is_multipart():
+            raise ValueError("Malformed multipart request")
+        fields: dict[str, _MultipartPart | str] = {}
+        for part in message.iter_parts():
+            name = part.get_param("name", header="content-disposition")
+            if not name:
+                continue
+            payload = part.get_payload(decode=True) or b""
+            filename = part.get_filename()
+            if filename:
+                fields[name] = _MultipartPart(filename=filename, payload=payload)
+            else:
+                charset = part.get_content_charset() or "utf-8"
+                fields[name] = payload.decode(charset, errors="replace")
+        form = _MultipartForm(fields)
         values: dict[str, str] = {}
         for key in ("candidate_name", "candidate_email", "target_role", "city", "industry", "seniority", "language"):
             if key in form and not getattr(form[key], "filename", None):
                 values[key] = _sanitize_text(form.getfirst(key, ""))
-        upload = form["cv"] if "cv" in form else None
+        upload = form["cv"] if "cv" in form and isinstance(form["cv"], _MultipartPart) else None
         return values, upload
 
     def do_OPTIONS(self) -> None:  # noqa: N802

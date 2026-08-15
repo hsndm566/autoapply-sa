@@ -19,6 +19,7 @@ import auditor
 import db
 
 ACTION_TYPE = "audited_email_application"
+REQUIRED_APPLICATION_SENDER = "apply@hsndm.tech"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 
@@ -132,6 +133,8 @@ def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, 
     sender, password = _sender(), _password()
     if not sender or not password:
         return _block(action, "GMAIL_CREDENTIALS_UNAVAILABLE")
+    if sender.casefold() != REQUIRED_APPLICATION_SENDER:
+        return _block(action, "SENDER_NOT_ALLOWED")
     try:
         application_id = str(package.get("application_id") or "")
         message = auditor.build_approved_email(package, sender, approval_token)
@@ -184,4 +187,4 @@ def dispatch_pending(*, limit: int = 5, send_fn: Callable[[EmailMessage, str, st
     return {"enabled": True, "claimed": len(actions), "results": results}
 
 
-__all__ = ["ACTION_TYPE", "dispatch_pending", "dispatch_one", "queue_audited_email_application"]
+__all__ = ["ACTION_TYPE", "REQUIRED_APPLICATION_SENDER", "dispatch_pending", "dispatch_one", "queue_audited_email_application"]

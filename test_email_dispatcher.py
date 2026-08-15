@@ -85,13 +85,13 @@ class EmailDispatcherTests(unittest.TestCase):
     def test_enabled_dispatcher_sends_audited_cv_attachment_and_records_evidence(self) -> None:
         action_id = self.queue_valid_action()
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
-        os.environ["GMAIL_USER"] = "sender@example.com"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
         os.environ["GMAIL_APP_PASSWORD"] = "app-password"
         sent: list[object] = []
 
         def fake_send(message, sender, password):
             sent.append((message, sender, password))
-            self.assertEqual("sender@example.com", sender)
+            self.assertEqual(email_dispatcher.REQUIRED_APPLICATION_SENDER, sender)
             self.assertEqual("app-password", password)
             attachments = list(message.iter_attachments())
             self.assertEqual(1, len(attachments))
@@ -109,15 +109,32 @@ class EmailDispatcherTests(unittest.TestCase):
         self.assertEqual(1, summary["evidence_count"])
         self.assertIn("email_delivery_accepted", {item["event_type"] for item in db.list_campaign_events(self.campaign_id)})
 
+    def test_personal_sender_is_blocked_before_transport(self) -> None:
+        action_id = self.queue_valid_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = "hasanadam506@gmail.com"
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        sent: list[object] = []
+
+        def fake_send(message, _sender, _password):
+            sent.append(message)
+            return "should-not-be-called"
+
+        result = email_dispatcher.dispatch_pending(send_fn=fake_send)
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual("SENDER_NOT_ALLOWED", result["results"][0]["reason"])
+        self.assertEqual([], sent)
+        self.assertEqual("blocked", self.action_status(action_id))
+
     def test_dispatch_blocks_if_final_mime_message_lacks_pdf(self) -> None:
         action_id = self.queue_valid_action()
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
-        os.environ["GMAIL_USER"] = "sender@example.com"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
         os.environ["GMAIL_APP_PASSWORD"] = "app-password"
         sent: list[object] = []
 
         message_without_attachment = email_dispatcher.EmailMessage()
-        message_without_attachment["From"] = "sender@example.com"
+        message_without_attachment["From"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
         message_without_attachment["To"] = "recruiting@brighttech.example"
         message_without_attachment["Subject"] = "Application"
         message_without_attachment.set_content("Draft")
@@ -152,9 +169,8 @@ class EmailDispatcherTests(unittest.TestCase):
     def test_smtp_failure_is_uncertain_and_not_retried_as_a_duplicate(self) -> None:
         action_id = self.queue_valid_action()
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
-        os.environ["GMAIL_USER"] = "sender@example.com"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
         os.environ["GMAIL_APP_PASSWORD"] = "app-password"
-
         def failing_send(_message, _sender, _password):
             raise TimeoutError("SMTP timed out")
 
