@@ -1,0 +1,28 @@
+name: Render health ping
+
+on:
+  schedule:
+    # Offset from the top of the hour to reduce scheduled-run congestion.
+    - cron: "7,17,27,37,47,57 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: render-health-ping
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    name: Check AutoApply SA Render health
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request the public health endpoint
+        env:
+          HEALTH_URL: https://autoapply-sa.onrender.com/healthz
+        run: |
+          curl --fail --silent --show-error --location \
+            --retry 2 --retry-all-errors \
+            --connect-timeout 10 --max-time 30 \
+            "$HEALTH_URL"
