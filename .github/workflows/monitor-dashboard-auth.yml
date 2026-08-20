@@ -1,0 +1,44 @@
+name: Monitor dashboard authentication
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autoapply-dashboard-auth-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install monitor dependency
+        run: pip install requests
+
+      - name: Check dashboard authentication dependencies
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+        run: python monitor_dashboard_auth.py
+
+      - name: Persist technical monitor state
+        run: |
+          if git diff --quiet -- monitor-state/dashboard-auth.json; then
+            echo "No monitor state change to persist."
+            exit 0
+          fi
+          git config user.name "AutoApply SA monitor"
+          git config user.email "apply@hsndm.tech"
+          git add monitor-state/dashboard-auth.json
+          git commit -m "Record dashboard auth monitor state"
+          git push
