@@ -54,6 +54,22 @@ class VerifiedContactWarmupTests(unittest.TestCase):
         findings = auditor.deterministic_review(package)
         self.assertEqual([], findings)
 
+    def test_tracking_append_refuses_existing_recipient_and_preserves_outcome_type(self) -> None:
+        tracking = self.root / "outcomes.csv"
+        tracking.write_text("recipient_email,sent_at,sender_used,source_event\n", encoding="utf-8")
+        warmup.append_tracking(
+            tracking,
+            "transport-uncertain@example.com",
+            "apply2@hsndm.tech",
+            "warmup-transport-uncertain-suppressed:transport_failed:HTTPError",
+        )
+        with tracking.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        self.assertEqual(1, len(rows))
+        self.assertEqual("warmup-transport-uncertain-suppressed:transport_failed:HTTPError", rows[0]["source_event"])
+        with self.assertRaisesRegex(ValueError, "already tracked"):
+            warmup.append_tracking(tracking, "transport-uncertain@example.com", "apply2@hsndm.tech", "duplicate")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

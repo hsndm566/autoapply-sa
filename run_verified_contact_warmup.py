@@ -130,7 +130,7 @@ def build_package(job: dict[str, Any], client: dict[str, str], cvs_dir: Path) ->
     }
 
 
-def append_tracking(path: Path, recipient: str, sender_email: str, message_id: str) -> None:
+def append_tracking(path: Path, recipient: str, sender_email: str, source_event: str) -> None:
     existing = sender.load_tracking(path)
     if recipient in existing:
         raise ValueError(f"tracking update refused for already tracked recipient: {recipient}")
@@ -143,7 +143,7 @@ def append_tracking(path: Path, recipient: str, sender_email: str, message_id: s
             "recipient_email": recipient,
             "sent_at": datetime.now(UTC).isoformat(),
             "sender_used": sender_email,
-            "source_event": f"warmup-brevo-accepted:{message_id}",
+            "source_event": source_event,
         })
 
 
@@ -203,7 +203,19 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
         result.update({"recipient_email": job["recipient_email"], "client_id": job["client_id"], "sender_email": client["sender_email"]})
         outcomes.append(result)
         if result.get("status") == "accepted":
-            append_tracking(tracking_path, job["recipient_email"], client["sender_email"], str(result.get("transport_evidence") or ""))
+            append_tracking(
+                tracking_path,
+                job["recipient_email"],
+                client["sender_email"],
+                f"warmup-brevo-accepted:{result.get('transport_evidence') or ''}",
+            )
+        elif result.get("status") == "uncertain":
+            append_tracking(
+                tracking_path,
+                job["recipient_email"],
+                client["sender_email"],
+                f"warmup-transport-uncertain-suppressed:{result.get('reason') or 'unknown'}",
+            )
         if index < len(queued) - 1:
             time.sleep(sender.next_delay_seconds())
     return outcomes
