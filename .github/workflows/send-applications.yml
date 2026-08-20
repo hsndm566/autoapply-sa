@@ -1,0 +1,40 @@
+name: Audited AutoApply SA application preflight
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autoapply-audited-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Validate bounded audited application batch without sending
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SENDER_DOMAIN: ${{ secrets.SENDER_DOMAIN }}
+        run: python send_applications.py --dry-run --limit 15
+
+      - name: Explain live-delivery boundary
+        run: |
+          echo "No email is sent by this workflow."
+          echo "Live delivery remains gated by verified contacts, actual approved PDFs, job URLs, current Auditor approval, and email_dispatcher."
