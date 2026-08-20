@@ -7,7 +7,9 @@ Gmail SMTP only when explicitly enabled by deployment configuration.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 import os
 import smtplib
 import ssl
@@ -17,11 +19,13 @@ from typing import Any, Mapping
 
 import auditor
 import db
+from warmup_config import WARMUP_CLIENTS, WARMUP_ENVIRONMENT_FLAG, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
 
 ACTION_TYPE = "audited_email_application"
 REQUIRED_APPLICATION_SENDER = "apply@hsndm.tech"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
+BREVO_SMTP_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 
 
 def _enabled() -> bool:
@@ -34,6 +38,38 @@ def _sender() -> str:
 
 def _password() -> str:
     return os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+
+
+def _brevo_api_key() -> str:
+    return os.environ.get("BREVO_API_KEY", "").strip()
+
+
+def _warmup_enabled() -> bool:
+    return os.environ.get(WARMUP_ENVIRONMENT_FLAG, "false").strip().lower() == "true"
+
+
+def _authorized_warmup_sender(package: Mapping[str, Any]) -> str:
+    """Return the only allowed Brevo sender for the explicit one-time warm-up scope."""
+    submission = dict(package.get("submission") or {})
+    job = dict(package.get("job") or {})
+    candidate = dict(package.get("candidate") or {})
+    try:
+        client_id = int(submission.get("client_id"))
+    except (TypeError, ValueError):
+        return ""
+    expected = WARMUP_CLIENTS.get(client_id, {})
+    sender = str(submission.get("sender_email") or "").strip().lower()
+    if not expected:
+        return ""
+    if not _warmup_enabled() or str(submission.get("warmup_scope") or "") != WARMUP_SCOPE:
+        return ""
+    if str(submission.get("evidence_type") or "") != WARMUP_EVIDENCE_TYPE:
+        return ""
+    if str(job.get("evidence_type") or "") != WARMUP_EVIDENCE_TYPE or str(job.get("url") or "").strip():
+        return ""
+    if sender != str(expected["sender_email"]).casefold() or str(candidate.get("full_name") or "") != str(expected["client_name"]):
+        return ""
+    return sender
 
 
 def _message_evidence(message: EmailMessage) -> str:
@@ -70,6 +106,36 @@ def _smtp_send(message: EmailMessage, sender: str, app_password: str) -> str:
         client.login(sender, app_password)
         client.send_message(message, from_addr=sender, to_addrs=[str(message["To"])])
     return str(message.get("Message-ID", ""))
+
+
+def _brevo_send(message: EmailMessage, sender: str, api_key: str) -> str:
+    """Deliver one already-audited MIME-equivalent message through Brevo's transactional API."""
+    import requests
+
+    attachment = list(message.iter_attachments())[0]
+    payload = attachment.get_payload(decode=True) or b""
+    request_body = {
+        "sender": {"email": sender},
+        "to": [{"email": str(message["To"])}],
+        "subject": str(message["Subject"]),
+        "textContent": message.get_body(preferencelist=("plain",)).get_content(),
+        "attachment": [{
+            "name": str(attachment.get_filename()),
+            "content": base64.b64encode(payload).decode("ascii"),
+        }],
+    }
+    response = requests.post(
+        BREVO_SMTP_ENDPOINT,
+        headers={"accept": "application/json", "api-key": api_key, "content-type": "application/json"},
+        data=json.dumps(request_body),
+        timeout=30,
+    )
+    response.raise_for_status()
+    result = response.json()
+    message_id = str(result.get("messageId") or "").strip()
+    if not message_id:
+        raise RuntimeError("Brevo accepted the request without a message ID")
+    return message_id
 
 
 def queue_audited_email_application(
@@ -116,7 +182,11 @@ def _block(action: Mapping[str, Any], reason: str) -> dict[str, Any]:
     return {"outbox_id": action["id"], "status": "blocked", "reason": reason}
 
 
-def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, str, str], str] = _smtp_send) -> dict[str, Any]:
+def dispatch_one(
+    action: Mapping[str, Any], *,
+    send_fn: Callable[[EmailMessage, str, str], str] = _smtp_send,
+    brevo_send_fn: Callable[[EmailMessage, str, str], str] = _brevo_send,
+) -> dict[str, Any]:
     """Perform one email delivery only after a boundary audit recheck.
 
     Errors before calling ``send_fn`` are terminally blocked. Errors from the
@@ -130,10 +200,12 @@ def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, 
         return _block(action, "OUTBOX_PACKAGE_INVALID")
     if not _enabled():
         return _block(action, "EMAIL_OUTREACH_DISABLED")
-    sender, password = _sender(), _password()
-    if not sender or not password:
-        return _block(action, "GMAIL_CREDENTIALS_UNAVAILABLE")
-    if sender.casefold() != REQUIRED_APPLICATION_SENDER:
+    warmup_sender = _authorized_warmup_sender(package)
+    transport = "brevo" if warmup_sender else "smtp"
+    sender, credential = (warmup_sender, _brevo_api_key()) if warmup_sender else (_sender(), _password())
+    if not sender or not credential:
+        return _block(action, "BREVO_CREDENTIALS_UNAVAILABLE" if transport == "brevo" else "GMAIL_CREDENTIALS_UNAVAILABLE")
+    if transport == "smtp" and sender.casefold() != REQUIRED_APPLICATION_SENDER:
         return _block(action, "SENDER_NOT_ALLOWED")
     try:
         application_id = str(package.get("application_id") or "")
@@ -141,7 +213,7 @@ def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, 
         # `build_approved_email` rechecks a current, matching Auditor decision.
         # Re-assert the final MIME payload immediately before transport as a second fail-closed boundary.
         _assert_pdf_attachment(message)
-        transport_evidence = send_fn(message, sender, password)
+        transport_evidence = brevo_send_fn(message, sender, credential) if transport == "brevo" else send_fn(message, sender, credential)
     except PermissionError as exc:
         return _block(action, f"AUDITOR_RECHECK_FAILED: {exc}")
     except Exception as exc:
@@ -152,7 +224,7 @@ def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, 
             str(action["campaign_id"]),
             "email_delivery_uncertain",
             "warning",
-            "SMTP transport failed; delivery was not recorded as successful.",
+            "Email transport failed; delivery was not recorded as successful.",
             {"outbox_id": action["id"], "error_type": type(exc).__name__},
         )
         return {"outbox_id": action["id"], "status": "uncertain", "reason": type(exc).__name__}
@@ -161,7 +233,7 @@ def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, 
     db.complete_action(str(action["id"]))
     db.record_evidence(
         str(action["campaign_id"]),
-        "email_smtp_accepted",
+        "email_brevo_accepted" if transport == "brevo" else "email_smtp_accepted",
         transport_evidence or evidence,
         campaign_job_id=str(action.get("campaign_job_id") or "") or None,
         metadata={"message_digest": evidence, "attachment_count": len(list(message.iter_attachments()))},
@@ -170,20 +242,24 @@ def dispatch_one(action: Mapping[str, Any], *, send_fn: Callable[[EmailMessage, 
         str(action["campaign_id"]),
         "email_delivery_accepted",
         "info",
-        "Gmail SMTP accepted an Auditor-approved CV-attached application email.",
-        {"outbox_id": action["id"], "message_digest": evidence},
+        "Brevo accepted an Auditor-approved CV-attached application email." if transport == "brevo" else "Gmail SMTP accepted an Auditor-approved CV-attached application email.",
+        {"outbox_id": action["id"], "message_digest": evidence, "transport": transport},
     )
-    return {"outbox_id": action["id"], "status": "accepted", "evidence": evidence}
+    return {"outbox_id": action["id"], "status": "accepted", "evidence": evidence, "transport": transport, "transport_evidence": transport_evidence}
 
 
-def dispatch_pending(*, limit: int = 5, send_fn: Callable[[EmailMessage, str, str], str] = _smtp_send) -> dict[str, Any]:
+def dispatch_pending(
+    *, limit: int = 5,
+    send_fn: Callable[[EmailMessage, str, str], str] = _smtp_send,
+    brevo_send_fn: Callable[[EmailMessage, str, str], str] = _brevo_send,
+) -> dict[str, Any]:
     """Claim and dispatch a bounded batch only when delivery is explicitly configured."""
     if not _enabled():
         return {"enabled": False, "claimed": 0, "results": []}
-    if not _sender() or not _password():
+    if not ((_sender() and _password()) or _brevo_api_key()):
         return {"enabled": True, "configuration": "incomplete", "claimed": 0, "results": []}
     actions = db.claim_ready_actions(ACTION_TYPE, limit=limit)
-    results = [dispatch_one(action, send_fn=send_fn) for action in actions]
+    results = [dispatch_one(action, send_fn=send_fn, brevo_send_fn=brevo_send_fn) for action in actions]
     return {"enabled": True, "claimed": len(actions), "results": results}
 
 

@@ -26,6 +26,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 from urllib.parse import urlparse
 
 import db
+from warmup_config import WARMUP_CLIENTS, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
 
 AUDITOR_VERSION = "1.0.0"
 MAX_CV_BYTES = 10 * 1024 * 1024
@@ -168,6 +169,32 @@ def _valid_public_job_url(url: str) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc) and len(url) >= 16
 
 
+def _is_verified_contact_warmup(package: Mapping[str, Any]) -> bool:
+    """Allow the explicitly authorized verified-contact scope to omit a public job URL.
+
+    This does not waive the identity, destination, PDF, individualized-draft, or
+    fingerprint-bound approval requirements. The dispatcher adds the second gate
+    requiring the one-time environment flag immediately before transport.
+    """
+    job = dict(package.get("job", {}))
+    candidate = dict(package.get("candidate", {}))
+    submission = dict(package.get("submission", {}))
+    try:
+        client_id = int(submission.get("client_id"))
+    except (TypeError, ValueError):
+        return False
+    expected = WARMUP_CLIENTS.get(client_id, {})
+    return bool(
+        expected
+        and _text(submission.get("warmup_scope")) == WARMUP_SCOPE
+        and _text(submission.get("evidence_type")) == WARMUP_EVIDENCE_TYPE
+        and _text(job.get("evidence_type")) == WARMUP_EVIDENCE_TYPE
+        and not _text(job.get("url"))
+        and _text(submission.get("sender_email")).casefold() == str(expected["sender_email"]).casefold()
+        and _text(candidate.get("full_name")) == str(expected["client_name"])
+    )
+
+
 def _validate_cv(candidate: Mapping[str, Any], submission: Mapping[str, Any]) -> list[Finding]:
     findings: list[Finding] = []
     cv_path = Path(_text(candidate.get("cv_path"))).expanduser()
@@ -228,11 +255,15 @@ def deterministic_review(package: Mapping[str, Any]) -> list[Finding]:
     company, role, job_url = _text(job.get("company")), _text(job.get("role")), _text(job.get("url"))
     channel = _canonical(submission.get("channel"))
     mode = _canonical(submission.get("mode"))
+    verified_contact_warmup = _is_verified_contact_warmup(package)
 
-    for field_name, value in (("job.company", company), ("job.role", role), ("job.url", job_url),
+    required_fields = (("job.company", company), ("job.role", role),
                               ("candidate.full_name", candidate.get("full_name")),
                               ("candidate.email", candidate.get("email")), ("draft", draft),
-                              ("submission.channel", channel), ("submission.mode", mode)):
+                              ("submission.channel", channel), ("submission.mode", mode))
+    if not verified_contact_warmup:
+        required_fields = (("job.url", job_url),) + required_fields
+    for field_name, value in required_fields:
         if not _text(value):
             findings.append(Finding("REQUIRED_FIELD_MISSING", f"Required field {field_name} is missing.", field_name))
 

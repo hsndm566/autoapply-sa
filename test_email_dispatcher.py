@@ -10,6 +10,7 @@ from unittest.mock import patch
 import auditor
 import db
 import email_dispatcher
+from warmup_config import WARMUP_ENVIRONMENT_FLAG, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
 
 
 class EmailDispatcherTests(unittest.TestCase):
@@ -19,7 +20,7 @@ class EmailDispatcherTests(unittest.TestCase):
         self.old_db_path = db.DB_PATH
         db.DB_PATH = os.path.join(self.temp_dir.name, "email-dispatch-test.db")
         self.addCleanup(setattr, db, "DB_PATH", self.old_db_path)
-        self.env_keys = ("EMAIL_OUTREACH_ENABLED", "GMAIL_USER", "GMAIL_APP_PASSWORD")
+        self.env_keys = ("EMAIL_OUTREACH_ENABLED", "GMAIL_USER", "GMAIL_APP_PASSWORD", "BREVO_API_KEY", WARMUP_ENVIRONMENT_FLAG)
         self.old_env = {key: os.environ.get(key) for key in self.env_keys}
         self.addCleanup(self._restore_env)
         for key in self.env_keys:
@@ -108,6 +109,44 @@ class EmailDispatcherTests(unittest.TestCase):
         summary = db.campaign_summary(self.campaign_id)
         self.assertEqual(1, summary["evidence_count"])
         self.assertIn("email_delivery_accepted", {item["event_type"] for item in db.list_campaign_events(self.campaign_id)})
+
+    def test_explicitly_gated_verified_contact_warmup_uses_brevo_with_exact_pdf(self) -> None:
+        package = self.package()
+        package.update({
+            "application_id": "warmup-brevo-001",
+            "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
+            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "submission": {
+                "channel": "email", "mode": "live", "cv_transport": "email_attachment",
+                "client_id": 2, "sender_email": "apply1@hsndm.tech",
+                "evidence_type": WARMUP_EVIDENCE_TYPE, "warmup_scope": WARMUP_SCOPE,
+            },
+        })
+        decision = auditor.audit_application(package["application_id"], package, require_ai_review=False)
+        self.assertTrue(decision.approved, decision.summary)
+        action_id, added = email_dispatcher.queue_audited_email_application(self.campaign_id, package, decision.approval_token)
+        self.assertTrue(added)
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ[WARMUP_ENVIRONMENT_FLAG] = "true"
+        os.environ["BREVO_API_KEY"] = "test-brevo-key"
+        sent: list[object] = []
+
+        def fake_brevo(message, sender, key):
+            sent.append((message, sender, key))
+            self.assertEqual("apply1@hsndm.tech", sender)
+            self.assertEqual("test-brevo-key", key)
+            attachments = list(message.iter_attachments())
+            self.assertEqual(1, len(attachments))
+            self.assertEqual("application/pdf", attachments[0].get_content_type())
+            self.assertEqual(self.cv.read_bytes(), attachments[0].get_payload(decode=True))
+            return "brevo-message-accepted-001"
+
+        result = email_dispatcher.dispatch_pending(brevo_send_fn=fake_brevo)
+        self.assertEqual(1, result["claimed"])
+        self.assertEqual("accepted", result["results"][0]["status"])
+        self.assertEqual("brevo", result["results"][0]["transport"])
+        self.assertEqual(1, len(sent))
+        self.assertEqual("completed", self.action_status(action_id))
 
     def test_personal_sender_is_blocked_before_transport(self) -> None:
         action_id = self.queue_valid_action()

@@ -781,6 +781,32 @@ def claim_ready_actions(action_type: str, limit: int = 5) -> list[dict[str, Any]
     return claimed
 
 
+def claim_action(action_id: str, action_type: str) -> dict[str, Any] | None:
+    """Lease exactly one pending action by ID for a deliberately bounded worker run."""
+    now = _now()
+    with connection() as c:
+        c.execute("BEGIN IMMEDIATE")
+        row = c.execute(
+            """SELECT id,campaign_id,campaign_job_id,action_type,payload_json,attempts
+               FROM action_outbox WHERE id=? AND action_type=? AND status='pending'""",
+            (action_id, action_type),
+        ).fetchone()
+        if row is None:
+            return None
+        changed = c.execute(
+            "UPDATE action_outbox SET status='claimed',attempts=attempts+1,locked_at=?,updated_at=? WHERE id=? AND status='pending'",
+            (now, now, action_id),
+        ).rowcount
+        if not changed:
+            return None
+        item = dict(row)
+        try:
+            item["payload"] = json.loads(item.pop("payload_json"))
+        except json.JSONDecodeError:
+            item["payload"] = {}
+        return item
+
+
 def complete_action(action_id: str, *, error: str | None = None) -> None:
     with connection() as c:
         c.execute(

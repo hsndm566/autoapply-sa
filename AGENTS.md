@@ -5,6 +5,7 @@
 ## Outbound Email Applications
 
 1. **Never send an application email directly through SMTP, Gmail, a browser, or any custom script.** Every email application must use `email_dispatcher.queue_audited_email_application()` and `email_dispatcher.dispatch_one()` / `dispatch_pending()`.
+   The only authorized transport exception is the dispatcher-internal Brevo path for the one-time `verified-contact-clients-2-3-2026-08-20` scope: client 2 may use `apply1@hsndm.tech` and client 3 may use `apply2@hsndm.tech`, only when the explicit one-time environment gate is set. The scheduled workflow does not set this gate and remains dry-run-only.
 2. **Every outgoing application email must contain exactly one CV PDF attachment.** The attachment must have a `.pdf` filename, MIME type `application/pdf`, a valid `%PDF-` signature, and a valid PDF ending marker.
 3. **The bytes attached to the email must exactly match the CV artifact that was approved by the Auditor.** Do not substitute, regenerate, rename, or modify the CV after approval.
 4. **If the CV is missing, unreadable, malformed, too large, non-PDF, duplicated, or cannot be verified in the final MIME message, block the action. Do not send.**
