@@ -26,7 +26,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 from urllib.parse import urlparse
 
 import db
-from warmup_config import WARMUP_CLIENTS, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
+from warmup_config import SCHEDULED_DELIVERY_SCOPE, WARMUP_CLIENTS, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
 
 AUDITOR_VERSION = "1.0.0"
 MAX_CV_BYTES = 10 * 1024 * 1024
@@ -169,8 +169,8 @@ def _valid_public_job_url(url: str) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc) and len(url) >= 16
 
 
-def _is_verified_contact_warmup(package: Mapping[str, Any]) -> bool:
-    """Allow the explicitly authorized verified-contact scope to omit a public job URL.
+def _is_verified_contact_scope(package: Mapping[str, Any]) -> bool:
+    """Allow the explicitly authorized verified-contact scopes to omit a public job URL.
 
     This does not waive the identity, destination, PDF, individualized-draft, or
     fingerprint-bound approval requirements. The dispatcher adds the second gate
@@ -186,7 +186,7 @@ def _is_verified_contact_warmup(package: Mapping[str, Any]) -> bool:
     expected = WARMUP_CLIENTS.get(client_id, {})
     return bool(
         expected
-        and _text(submission.get("warmup_scope")) == WARMUP_SCOPE
+        and _text(submission.get("warmup_scope")) in {WARMUP_SCOPE, SCHEDULED_DELIVERY_SCOPE}
         and _text(submission.get("evidence_type")) == WARMUP_EVIDENCE_TYPE
         and _text(job.get("evidence_type")) == WARMUP_EVIDENCE_TYPE
         and not _text(job.get("url"))
@@ -255,7 +255,7 @@ def deterministic_review(package: Mapping[str, Any]) -> list[Finding]:
     company, role, job_url = _text(job.get("company")), _text(job.get("role")), _text(job.get("url"))
     channel = _canonical(submission.get("channel"))
     mode = _canonical(submission.get("mode"))
-    verified_contact_warmup = _is_verified_contact_warmup(package)
+    verified_contact_warmup = _is_verified_contact_scope(package)
 
     required_fields = (("job.company", company), ("job.role", role),
                               ("candidate.full_name", candidate.get("full_name")),

@@ -3,6 +3,8 @@ from __future__ import annotations
 
 WARMUP_SCOPE = "verified-contact-clients-2-3-2026-08-20"
 WARMUP_ENVIRONMENT_FLAG = "AUTOAPPLY_ONE_TIME_WARMUP"
+SCHEDULED_DELIVERY_SCOPE = "verified-contact-clients-2-3-scheduled"
+SCHEDULED_DELIVERY_ENVIRONMENT_FLAG = "AUTOAPPLY_SCHEDULED_DELIVERY"
 WARMUP_EVIDENCE_TYPE = "verified_contact"
 WARMUP_CLIENTS = {
     2: {"sender_email": "apply1@hsndm.tech", "client_name": "Saif Ahmed Al Nimr"},

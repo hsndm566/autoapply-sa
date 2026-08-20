@@ -1,20 +1,19 @@
-name: Audited AutoApply SA application preflight
+name: Audited AutoApply SA scheduled delivery
 
 on:
   schedule:
     - cron: "0 6 * * *"
     - cron: "0 18 * * *"
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: autoapply-audited-preflight
+  group: autoapply-audited-scheduled-delivery
   cancel-in-progress: false
 
 jobs:
-  preflight:
+  deliver:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -28,13 +27,26 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Validate bounded audited application batch without sending
+      - name: Confirm scheduled Brevo credential is available
         env:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          SENDER_DOMAIN: ${{ secrets.SENDER_DOMAIN }}
-        run: python send_applications.py --dry-run --limit 15
+        run: test -n "$BREVO_API_KEY"
 
-      - name: Explain live-delivery boundary
+      - name: Deliver bounded audited application batch for active clients only
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          EMAIL_OUTREACH_ENABLED: "true"
+          AUTOAPPLY_SCHEDULED_DELIVERY: "true"
+        run: python run_scheduled_delivery.py
+
+      - name: Persist tracked delivery outcomes
         run: |
-          echo "No email is sent by this workflow."
-          echo "Live delivery remains gated by verified contacts, actual approved PDFs, job URLs, current Auditor approval, and email_dispatcher."
+          if git diff --quiet -- tracking.csv; then
+            echo "No tracking update to persist."
+            exit 0
+          fi
+          git config user.name "AutoApply SA scheduler"
+          git config user.email "apply@hsndm.tech"
+          git add tracking.csv
+          git commit -m "Record scheduled application delivery outcomes"
+          git push

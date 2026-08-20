@@ -10,7 +10,7 @@ from unittest.mock import patch
 import auditor
 import db
 import email_dispatcher
-from warmup_config import WARMUP_ENVIRONMENT_FLAG, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
+from warmup_config import SCHEDULED_DELIVERY_ENVIRONMENT_FLAG, SCHEDULED_DELIVERY_SCOPE, WARMUP_ENVIRONMENT_FLAG, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
 
 
 class EmailDispatcherTests(unittest.TestCase):
@@ -20,7 +20,7 @@ class EmailDispatcherTests(unittest.TestCase):
         self.old_db_path = db.DB_PATH
         db.DB_PATH = os.path.join(self.temp_dir.name, "email-dispatch-test.db")
         self.addCleanup(setattr, db, "DB_PATH", self.old_db_path)
-        self.env_keys = ("EMAIL_OUTREACH_ENABLED", "GMAIL_USER", "GMAIL_APP_PASSWORD", "BREVO_API_KEY", WARMUP_ENVIRONMENT_FLAG)
+        self.env_keys = ("EMAIL_OUTREACH_ENABLED", "GMAIL_USER", "GMAIL_APP_PASSWORD", "BREVO_API_KEY", WARMUP_ENVIRONMENT_FLAG, SCHEDULED_DELIVERY_ENVIRONMENT_FLAG)
         self.old_env = {key: os.environ.get(key) for key in self.env_keys}
         self.addCleanup(self._restore_env)
         for key in self.env_keys:
@@ -147,6 +147,22 @@ class EmailDispatcherTests(unittest.TestCase):
         self.assertEqual("brevo", result["results"][0]["transport"])
         self.assertEqual(1, len(sent))
         self.assertEqual("completed", self.action_status(action_id))
+
+    def test_scheduled_scope_requires_the_scheduled_environment_gate(self) -> None:
+        package = self.package()
+        package.update({
+            "application_id": "scheduled-brevo-001",
+            "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
+            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "submission": {
+                "channel": "email", "mode": "live", "cv_transport": "email_attachment",
+                "client_id": 2, "sender_email": "apply1@hsndm.tech",
+                "evidence_type": WARMUP_EVIDENCE_TYPE, "warmup_scope": SCHEDULED_DELIVERY_SCOPE,
+            },
+        })
+        self.assertEqual("", email_dispatcher._authorized_brevo_sender(package))
+        os.environ[SCHEDULED_DELIVERY_ENVIRONMENT_FLAG] = "true"
+        self.assertEqual("apply1@hsndm.tech", email_dispatcher._authorized_brevo_sender(package))
 
     def test_personal_sender_is_blocked_before_transport(self) -> None:
         action_id = self.queue_valid_action()

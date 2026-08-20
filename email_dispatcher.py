@@ -19,7 +19,14 @@ from typing import Any, Mapping
 
 import auditor
 import db
-from warmup_config import WARMUP_CLIENTS, WARMUP_ENVIRONMENT_FLAG, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
+from warmup_config import (
+    SCHEDULED_DELIVERY_ENVIRONMENT_FLAG,
+    SCHEDULED_DELIVERY_SCOPE,
+    WARMUP_CLIENTS,
+    WARMUP_ENVIRONMENT_FLAG,
+    WARMUP_EVIDENCE_TYPE,
+    WARMUP_SCOPE,
+)
 
 ACTION_TYPE = "audited_email_application"
 REQUIRED_APPLICATION_SENDER = "apply@hsndm.tech"
@@ -48,8 +55,12 @@ def _warmup_enabled() -> bool:
     return os.environ.get(WARMUP_ENVIRONMENT_FLAG, "false").strip().lower() == "true"
 
 
-def _authorized_warmup_sender(package: Mapping[str, Any]) -> str:
-    """Return the only allowed Brevo sender for the explicit one-time warm-up scope."""
+def _scheduled_delivery_enabled() -> bool:
+    return os.environ.get(SCHEDULED_DELIVERY_ENVIRONMENT_FLAG, "false").strip().lower() == "true"
+
+
+def _authorized_brevo_sender(package: Mapping[str, Any]) -> str:
+    """Return the only allowed Brevo sender for an explicitly enabled verified-contact scope."""
     submission = dict(package.get("submission") or {})
     job = dict(package.get("job") or {})
     candidate = dict(package.get("candidate") or {})
@@ -61,7 +72,11 @@ def _authorized_warmup_sender(package: Mapping[str, Any]) -> str:
     sender = str(submission.get("sender_email") or "").strip().lower()
     if not expected:
         return ""
-    if not _warmup_enabled() or str(submission.get("warmup_scope") or "") != WARMUP_SCOPE:
+    scope = str(submission.get("warmup_scope") or "")
+    allowed_scope = (scope == WARMUP_SCOPE and _warmup_enabled()) or (
+        scope == SCHEDULED_DELIVERY_SCOPE and _scheduled_delivery_enabled()
+    )
+    if not allowed_scope:
         return ""
     if str(submission.get("evidence_type") or "") != WARMUP_EVIDENCE_TYPE:
         return ""
@@ -200,7 +215,7 @@ def dispatch_one(
         return _block(action, "OUTBOX_PACKAGE_INVALID")
     if not _enabled():
         return _block(action, "EMAIL_OUTREACH_DISABLED")
-    warmup_sender = _authorized_warmup_sender(package)
+    warmup_sender = _authorized_brevo_sender(package)
     transport = "brevo" if warmup_sender else "smtp"
     sender, credential = (warmup_sender, _brevo_api_key()) if warmup_sender else (_sender(), _password())
     if not sender or not credential:
