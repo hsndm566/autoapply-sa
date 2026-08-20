@@ -1,4 +1,4 @@
-"""Three-client application preflight for AutoApply SA.
+"""Client-driven application preflight for AutoApply SA.
 
 This script does not send mail directly. Repository governance requires live
 applications to be queued with campaign_email.prepare_audited_campaign_email()
@@ -17,6 +17,7 @@ import csv
 import hashlib
 import html
 import os
+import random
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -29,11 +30,6 @@ MAX_TOTAL_PER_RUN = 15
 WAIT_BETWEEN_SENDS_SECONDS = (120, 240)
 REQUIRED_CLIENT_COLUMNS = {"sender_email", "client_name", "cv_file"}
 REQUIRED_JOB_COLUMNS = {"recipient_email", "company", "role", "city", "client_id"}
-ALLOWED_SENDERS = {
-    "apply@hsndm.tech",
-    "apply1@hsndm.tech",
-    "apply2@hsndm.tech",
-}
 OPTOUT_LINE = "If you'd prefer not to receive future applications from this platform, reply STOP."
 
 
@@ -48,11 +44,11 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def validate_sender_domain() -> None:
-    """Reject a mismatched configured sender domain without requiring a secret for local tests."""
+def validate_sender_domain(clients: dict[int, dict[str, str]]) -> None:
+    """Reject a configured sender domain that does not match every configured client sender."""
     configured = os.environ.get("SENDER_DOMAIN", "").strip().lower()
-    if configured and configured != "hsndm.tech":
-        raise ValueError("SENDER_DOMAIN must be hsndm.tech for the configured client identities")
+    if configured and any(client["sender_email"].rsplit("@", 1)[1] != configured for client in clients.values()):
+        raise ValueError("SENDER_DOMAIN must match every sender_email domain in clients.csv")
 
 
 def require_columns(fieldnames: list[str] | None, required: set[str], path: Path) -> None:
@@ -73,19 +69,24 @@ def load_clients(path: Path) -> dict[int, dict[str, str]]:
         reader = csv.DictReader(handle)
         require_columns(reader.fieldnames, REQUIRED_CLIENT_COLUMNS, path)
         clients: dict[int, dict[str, str]] = {}
-        for client_id, row in enumerate(reader, start=1):
+        for row_number, row in enumerate(reader, start=1):
+            raw_client_id = str(row.get("client_id") or row_number).strip()
+            try:
+                client_id = int(raw_client_id)
+            except ValueError as error:
+                raise ValueError(f"clients.csv row {row_number + 1} has an invalid client_id") from error
+            if client_id < 1 or client_id in clients:
+                raise ValueError(f"clients.csv client_id {client_id} must be unique and positive")
             sender_email = normalize_email(str(row["sender_email"]), "sender_email")
             client_name = str(row["client_name"] or "").strip()
             cv_file = str(row["cv_file"] or "").strip()
-            if sender_email not in ALLOWED_SENDERS:
-                raise ValueError(f"client_id {client_id} has an unsupported sender")
             if not client_name:
                 raise ValueError(f"client_id {client_id} has no client_name")
             if Path(cv_file).name != cv_file or not cv_file.lower().endswith(".pdf"):
                 raise ValueError(f"client_id {client_id} must use a PDF in cvs/")
             clients[client_id] = {"sender_email": sender_email, "client_name": client_name, "cv_file": cv_file}
-    if set(clients) != {1, 2, 3}:
-        raise ValueError("clients.csv must contain exactly three client rows")
+    if not clients:
+        raise ValueError("clients.csv must contain at least one client row")
     return clients
 
 
@@ -95,9 +96,11 @@ def load_jobs(path: Path, clients: dict[int, dict[str, str]]) -> list[dict[str, 
         require_columns(reader.fieldnames, REQUIRED_JOB_COLUMNS, path)
         jobs: list[dict[str, Any]] = []
         for number, row in enumerate(reader, start=2):
-            client_id = int(str(row["client_id"] or "").strip())
-            if client_id not in clients:
-                raise ValueError(f"jobs.csv row {number} references unknown client_id {client_id}")
+            raw_client_id = str(row["client_id"] or "").strip()
+            try:
+                client_id = int(raw_client_id)
+            except ValueError:
+                client_id = -1
             recipient_email = normalize_email(str(row["recipient_email"]), "recipient_email")
             company = str(row["company"] or "").strip()
             role = str(row["role"] or "").strip()
@@ -109,8 +112,14 @@ def load_jobs(path: Path, clients: dict[int, dict[str, str]]) -> list[dict[str, 
                     "role": role,
                     "city": city,
                     "client_id": client_id,
-                    "eligible": bool(company and role),
-                    "validation_error": "missing explicit company or role" if not company or not role else "",
+                    "eligible": bool(company and role and client_id in clients),
+                    "validation_error": (
+                        "unknown client_id"
+                        if client_id not in clients
+                        else "missing explicit company or role"
+                        if not company or not role
+                        else ""
+                    ),
                 }
             )
     return jobs
@@ -128,6 +137,11 @@ def load_tracking(path: Path) -> set[str]:
 def deterministic_sender(job: dict[str, Any], clients: dict[int, dict[str, str]]) -> str:
     """A client_id always maps to the same sender identity, independent of run order."""
     return clients[int(job["client_id"])]["sender_email"]
+
+
+def next_delay_seconds() -> int:
+    """Return the configured 2–4 minute delay for the audited live dispatcher to use."""
+    return random.randint(*WAIT_BETWEEN_SENDS_SECONDS)
 
 
 def has_valid_mx(email: str) -> bool:
@@ -163,7 +177,7 @@ def build_cover_letter(client_name: str, company: str, role: str, city: str) -> 
     location = f" in {html.escape(city)}" if city else ""
     return (
         f"Dear {html.escape(company)} Hiring Team,\n\n"
-        f"I am writing to apply for the {html.escape(role)} role{location} at {html.escape(company)}. "
+        f"My name is {html.escape(client_name)}, and I am writing to apply for the {html.escape(role)} role{location} at {html.escape(company)}. "
         "My CV is attached for your review.\n\n"
         "Kind regards,\n"
         f"{html.escape(client_name)}\n\n"
@@ -176,11 +190,12 @@ def select_batch(jobs: list[dict[str, Any]], tracked: set[str], clients: dict[in
     counts: Counter[str] = Counter()
     seen = set(tracked)
     for job in jobs:
+        if not job.get("eligible", True):
+            continue
         recipient = str(job["recipient_email"])
         sender = deterministic_sender(job, clients)
         if (
-            not job.get("eligible", True)
-            or recipient in seen
+            recipient in seen
             or counts[sender] >= MAX_PER_IDENTITY_PER_RUN
             or len(selected) >= min(limit, MAX_TOTAL_PER_RUN)
         ):
@@ -214,8 +229,8 @@ def main() -> None:
             "live delivery requires verified contacts, real approved PDFs, job URLs, current Auditor approval, "
             "and email_dispatcher.dispatch_pending()."
         )
-    validate_sender_domain()
     clients = load_clients(Path(args.clients))
+    validate_sender_domain(clients)
     jobs = load_jobs(Path(args.jobs), clients)
     ineligible_count = sum(1 for job in jobs if not job.get("eligible", True))
     selected = select_batch(jobs, load_tracking(Path(args.tracking)), clients, args.limit)

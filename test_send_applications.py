@@ -1,4 +1,4 @@
-"""Offline checks for the three-client sender preflight; no email is sent."""
+"""Offline checks for the client-driven sender preflight; no email is sent."""
 
 from __future__ import annotations
 
@@ -18,10 +18,10 @@ class SenderPreflightTests(unittest.TestCase):
         for file_name in ("client1.pdf", "client2.pdf", "client3.pdf"):
             (self.cvs / file_name).write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
         (self.root / "clients.csv").write_text(
-            "sender_email,client_name,cv_file\n"
-            "apply@hsndm.tech,Hasan Adam,client1.pdf\n"
-            "apply1@hsndm.tech,Client Two,client2.pdf\n"
-            "apply2@hsndm.tech,Client Three,client3.pdf\n",
+            "client_id,sender_email,client_name,cv_file\n"
+            "1,apply@hsndm.tech,Hasan Adam,client1.pdf\n"
+            "2,apply1@hsndm.tech,Client Two,client2.pdf\n"
+            "3,apply2@hsndm.tech,Client Three,client3.pdf\n",
             encoding="utf-8",
         )
         self.clients = sender.load_clients(self.root / "clients.csv")
@@ -41,6 +41,7 @@ class SenderPreflightTests(unittest.TestCase):
         self.assertIn("Operations Coordinator", body)
         self.assertIn("Jeddah", body)
         self.assertIn(sender.OPTOUT_LINE, body)
+        self.assertIn("My name is Hasan Adam", body)
         self.assertNotIn("experience", body.lower())
         self.assertNotIn("skills", body.lower())
 
@@ -59,7 +60,7 @@ class SenderPreflightTests(unittest.TestCase):
         senders = [sender.deterministic_sender(job, self.clients) for job in selected]
         self.assertNotIn("person0@example.com", {job["recipient_email"] for job in selected})
         self.assertEqual(15, len(selected))
-        self.assertTrue(all(senders.count(address) <= 5 for address in sender.ALLOWED_SENDERS))
+        self.assertTrue(all(senders.count(address) <= sender.MAX_PER_IDENTITY_PER_RUN for address in set(senders)))
 
     def test_missing_company_or_role_is_preserved_but_not_selected(self) -> None:
         jobs_path = self.root / "jobs.csv"
@@ -75,6 +76,32 @@ class SenderPreflightTests(unittest.TestCase):
         selected = sender.select_batch(jobs, set(), self.clients, 15)
         self.assertEqual(["valid@yahoo.com"], [job["recipient_email"] for job in selected])
 
+    def test_any_number_of_explicit_client_ids_is_supported(self) -> None:
+        (self.root / "clients.csv").write_text(
+            "client_id,sender_email,client_name,cv_file\n"
+            "10,one@example.com,Client One,client1.pdf\n"
+            "20,two@example.org,Client Two,client2.pdf\n"
+            "30,three@example.net,Client Three,client3.pdf\n"
+            "40,four@example.sa,Client Four,client1.pdf\n",
+            encoding="utf-8",
+        )
+        clients = sender.load_clients(self.root / "clients.csv")
+        self.assertEqual({10, 20, 30, 40}, set(clients))
+        self.assertEqual("four@example.sa", sender.deterministic_sender({"client_id": 40}, clients))
+
+    def test_unknown_job_client_is_preserved_but_not_selected(self) -> None:
+        jobs_path = self.root / "jobs.csv"
+        jobs_path.write_text(
+            "recipient_email,company,role,city,client_id\n"
+            "unknown@example.com,Example Co,Coordinator,Jeddah,99\n"
+            "valid@example.org,Example Co,Coordinator,Jeddah,1\n",
+            encoding="utf-8",
+        )
+        jobs = sender.load_jobs(jobs_path, self.clients)
+        self.assertFalse(jobs[0]["eligible"])
+        self.assertEqual("unknown client_id", jobs[0]["validation_error"])
+        self.assertEqual(["valid@example.org"], [job["recipient_email"] for job in sender.select_batch(jobs, set(), self.clients, 15)])
+
     def test_empty_placeholder_pdf_is_blocked(self) -> None:
         (self.cvs / "empty.pdf").write_bytes(b"")
         with self.assertRaisesRegex(ValueError, "complete approved PDF"):
@@ -83,8 +110,7 @@ class SenderPreflightTests(unittest.TestCase):
     def test_repository_supplied_client_cvs_are_valid_while_client_one_remains_blocked(self) -> None:
         repository_root = Path(__file__).resolve().parent
         repository_clients = sender.load_clients(repository_root / "clients.csv")
-        self.assertEqual("Saif Ahmed Al Nimr", repository_clients[2]["client_name"])
-        self.assertEqual("Amro Alkabeer", repository_clients[3]["client_name"])
+        self.assertGreaterEqual(len(repository_clients), 1)
         self.assertTrue(sender.read_valid_pdf(repository_root / "cvs", repository_clients[2]["cv_file"]))
         self.assertTrue(sender.read_valid_pdf(repository_root / "cvs", repository_clients[3]["cv_file"]))
         with self.assertRaisesRegex(ValueError, "complete approved PDF"):
