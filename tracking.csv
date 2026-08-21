@@ -112,3 +112,12 @@ info@sipco.com.sa,2026-08-20T11:22:34.869755+00:00,apply1@hsndm.tech,warmup-brev
 info@tascoutsourcing.com,2026-08-20T11:26:15.039619+00:00,apply2@hsndm.tech,warmup-transport-uncertain-suppressed:transport_failed:HTTPError
 info@saudireadymix.com.sa,2026-08-20T11:26:15.039656+00:00,apply2@hsndm.tech,warmup-transport-uncertain-suppressed:transport_failed:HTTPError
 career-ksa@groupeseb.com,2026-08-21T15:01:33.864821+00:00,apply1@hsndm.tech,scheduled-transport-uncertain-suppressed:HTTPError
+info@nabatat.com.sa,2026-08-21T18:36:09.246680+00:00,apply1@hsndm.tech,scheduled-transport-uncertain-suppressed:ReadTimeout
+info@saudicable.com,2026-08-21T18:40:26.522047+00:00,apply2@hsndm.tech,scheduled-transport-uncertain-suppressed:ReadTimeout
+info@tabukpharmaceuticals.com,2026-08-21T18:44:09.367567+00:00,apply1@hsndm.tech,scheduled-brevo-accepted:<202608211844.38698453713@smtp-relay.mailin.fr>
+info@thiqah.sa,2026-08-21T18:47:02.096534+00:00,apply2@hsndm.tech,scheduled-transport-uncertain-suppressed:ReadTimeout
+support@nana.sa,2026-08-21T18:50:20.571660+00:00,apply1@hsndm.tech,scheduled-brevo-accepted:<202608211850.36953835016@smtp-relay.mailin.fr>
+info@najrancement.com,2026-08-21T18:54:23.408067+00:00,apply2@hsndm.tech,scheduled-transport-uncertain-suppressed:ReadTimeout
+info@yasref.com,2026-08-21T18:57:51.104192+00:00,apply1@hsndm.tech,scheduled-brevo-accepted:<202608211857.12823339000@smtp-relay.mailin.fr>
+info@saned.com.sa,2026-08-21T19:00:39.362509+00:00,apply2@hsndm.tech,scheduled-transport-uncertain-suppressed:ReadTimeout
+info@wood.com,2026-08-21T19:03:21.915185+00:00,apply1@hsndm.tech,scheduled-brevo-accepted:<202608211903.24582386152@smtp-relay.mailin.fr>
