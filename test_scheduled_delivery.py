@@ -47,6 +47,24 @@ class ScheduledDeliveryTests(unittest.TestCase):
         self.assertNotIn("client3-0@example3.com", {job["recipient_email"] for job in selected})
         self.assertEqual(2, skipped["tracked"])
 
+    def test_invalid_client_cv_excludes_the_entire_client_without_blocking_the_other_active_client(self) -> None:
+        (self.root / "client2.pdf").write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
+        (self.root / "client3.pdf").write_bytes(b"not a pdf")
+        clients = {
+            2: {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": "client2.pdf"},
+            3: {"client_name": "Amro Alkabeer", "sender_email": "apply2@hsndm.tech", "cv_file": "client3.pdf"},
+        }
+
+        deliverable, blocked_clients = scheduled.deliverable_active_clients(clients, self.root)
+        selected, skipped = scheduled.select_jobs(self.root / "jobs.csv", set(), deliverable)
+
+        self.assertEqual(frozenset({2}), deliverable)
+        self.assertEqual(5, len(selected))
+        self.assertTrue(all(job["client_id"] == 2 for job in selected))
+        self.assertEqual(7, skipped["client_cv_invalid"])
+        self.assertEqual(1, len(blocked_clients))
+        self.assertIn("client 3", blocked_clients[0])
+
     def test_scheduled_package_uses_authorized_scope_and_passes_deterministic_review(self) -> None:
         cv = self.root / "client2.pdf"
         cv.write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
