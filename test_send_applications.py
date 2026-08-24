@@ -5,6 +5,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import send_applications as sender
 
@@ -106,6 +107,22 @@ class SenderPreflightTests(unittest.TestCase):
         (self.cvs / "empty.pdf").write_bytes(b"")
         with self.assertRaisesRegex(ValueError, "complete approved PDF"):
             sender.read_valid_pdf(self.cvs, "empty.pdf")
+
+    def test_local_delay_override_is_bounded_without_changing_default_schedule_range(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {sender.DELAY_MIN_ENV: "60", sender.DELAY_MAX_ENV: "120"},
+            clear=False,
+        ):
+            self.assertTrue(all(60 <= sender.next_delay_seconds() <= 120 for _ in range(30)))
+
+        with patch.dict(
+            "os.environ",
+            {sender.DELAY_MIN_ENV: "0", sender.DELAY_MAX_ENV: "120"},
+            clear=False,
+        ):
+            with self.assertRaisesRegex(ValueError, "delay range"):
+                sender.next_delay_seconds()
 
     def test_repository_supplied_client_cvs_are_valid_while_client_one_remains_blocked(self) -> None:
         repository_root = Path(__file__).resolve().parent

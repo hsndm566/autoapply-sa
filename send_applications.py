@@ -28,6 +28,8 @@ import dns.resolver
 MAX_PER_IDENTITY_PER_RUN = 5
 MAX_TOTAL_PER_RUN = 15
 WAIT_BETWEEN_SENDS_SECONDS = (120, 240)
+DELAY_MIN_ENV = "AUTOAPPLY_DELAY_MIN_SECONDS"
+DELAY_MAX_ENV = "AUTOAPPLY_DELAY_MAX_SECONDS"
 REQUIRED_CLIENT_COLUMNS = {"sender_email", "client_name", "cv_file"}
 REQUIRED_JOB_COLUMNS = {"recipient_email", "company", "role", "city", "client_id"}
 OPTOUT_LINE = "If you'd prefer not to receive future applications from this platform, reply STOP."
@@ -140,8 +142,12 @@ def deterministic_sender(job: dict[str, Any], clients: dict[int, dict[str, str]]
 
 
 def next_delay_seconds() -> int:
-    """Return the configured 2–4 minute delay for the audited live dispatcher to use."""
-    return random.randint(*WAIT_BETWEEN_SENDS_SECONDS)
+    """Return a validated dispatcher delay, defaulting to the approved 2–4 minute schedule range."""
+    lower = int(os.environ.get(DELAY_MIN_ENV, str(WAIT_BETWEEN_SENDS_SECONDS[0])))
+    upper = int(os.environ.get(DELAY_MAX_ENV, str(WAIT_BETWEEN_SENDS_SECONDS[1])))
+    if lower < 1 or upper < lower:
+        raise ValueError("configured delivery delay range is invalid")
+    return random.randint(lower, upper)
 
 
 def has_valid_mx(email: str) -> bool:
