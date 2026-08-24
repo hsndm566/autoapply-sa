@@ -44,8 +44,13 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def select_jobs(path: Path, tracked: set[str]) -> tuple[list[dict[str, Any]], dict[str, int]]:
+def select_jobs(
+    path: Path,
+    tracked: set[str],
+    deliverable_client_ids: frozenset[int] | set[int] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
     """Select in source order, up to the per-client cap, only client 2/3 contacts."""
+    deliverable_client_ids = set(ACTIVE_CLIENT_IDS if deliverable_client_ids is None else deliverable_client_ids)
     selected: list[dict[str, Any]] = []
     skipped = Counter()
     per_client = Counter()
@@ -61,6 +66,9 @@ def select_jobs(path: Path, tracked: set[str]) -> tuple[list[dict[str, Any]], di
                 skipped["inactive_client"] += 1
                 continue
             client_id = int(raw_client_id)
+            if client_id not in deliverable_client_ids:
+                skipped["client_cv_invalid"] += 1
+                continue
             if per_client[client_id] >= MAX_PER_IDENTITY_PER_RUN:
                 skipped["per_identity_cap"] += 1
                 continue
@@ -94,6 +102,27 @@ def select_jobs(path: Path, tracked: set[str]) -> tuple[list[dict[str, Any]], di
             })
             per_client[client_id] += 1
     return selected, dict(skipped)
+
+
+def deliverable_active_clients(
+    clients: dict[int, dict[str, str]],
+    cvs_dir: Path,
+) -> tuple[frozenset[int], list[str]]:
+    """Return active clients with one valid approved CV; exclude an invalid client as a whole."""
+    deliverable: set[int] = set()
+    blocked_clients: list[str] = []
+    for client_id in ACTIVE_CLIENT_IDS:
+        client = clients.get(client_id)
+        if not client or not is_authorized_warmup_sender(client_id, str(client.get("sender_email") or "")):
+            blocked_clients.append(f"client {client_id}: sender identity is not authorized for scheduled delivery")
+            continue
+        try:
+            sender.read_valid_pdf(cvs_dir, client["cv_file"])
+        except (FileNotFoundError, ValueError) as error:
+            blocked_clients.append(f"client {client_id}: skipped because its CV is invalid ({error})")
+            continue
+        deliverable.add(client_id)
+    return frozenset(deliverable), blocked_clients
 
 
 def build_package(job: dict[str, Any], client: dict[str, str], cvs_dir: Path) -> dict[str, Any]:
@@ -185,9 +214,20 @@ def main() -> None:
         if client.get("sender_email") != expected["sender_email"] or client.get("client_name") != expected["client_name"]:
             raise ValueError(f"clients.csv does not match the authorized identity for client {client_id}")
     tracking_path, cvs_dir = Path(args.tracking), Path(args.cvs_dir)
-    selected, skipped = select_jobs(Path(args.jobs), sender.load_tracking(tracking_path))
+    deliverable_client_ids, blocked_clients = deliverable_active_clients(clients, cvs_dir)
+    selected, skipped = select_jobs(
+        Path(args.jobs),
+        sender.load_tracking(tracking_path),
+        deliverable_client_ids,
+    )
     ready, blocked = preflight(selected, clients, cvs_dir)
-    print(json.dumps({"selected": len(selected), "ready": len(ready), "blocked": blocked, "skipped": skipped}, sort_keys=True))
+    print(json.dumps({
+        "selected": len(selected),
+        "ready": len(ready),
+        "blocked_clients": blocked_clients,
+        "blocked": blocked,
+        "skipped": skipped,
+    }, sort_keys=True))
     if blocked:
         raise SystemExit(2)
     if not ready:
