@@ -61,12 +61,12 @@ jobs:
     if: ${{ needs.deliver.result == 'success' }}
     runs-on: ubuntu-latest
     env:
-      HEALTHCHECKS_SCHEDULED_DELIVERY_URL: ${{ secrets.HEALTHCHECKS_SCHEDULED_DELIVERY_URL }}
+      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
     steps:
       - name: Ping Healthchecks.io when configured
-        if: ${{ env.HEALTHCHECKS_SCHEDULED_DELIVERY_URL != '' }}
+        if: ${{ env.HEALTHCHECKS_URL != '' }}
         continue-on-error: true
-        run: curl --fail --silent --show-error --max-time 10 --retry 3 "$HEALTHCHECKS_SCHEDULED_DELIVERY_URL"
+        run: curl --fail --silent --show-error --max-time 10 --retry 3 "$HEALTHCHECKS_URL"
 
   monitor-failure:
     name: Signal scheduled-delivery failure
@@ -74,9 +74,9 @@ jobs:
     if: ${{ always() && needs.deliver.result == 'failure' }}
     runs-on: ubuntu-latest
     env:
-      HEALTHCHECKS_SCHEDULED_DELIVERY_URL: ${{ secrets.HEALTHCHECKS_SCHEDULED_DELIVERY_URL }}
+      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
     steps:
       - name: Ping Healthchecks.io failure endpoint when configured
-        if: ${{ env.HEALTHCHECKS_SCHEDULED_DELIVERY_URL != '' }}
+        if: ${{ env.HEALTHCHECKS_URL != '' }}
         continue-on-error: true
-        run: curl --fail --silent --show-error --max-time 10 --retry 3 "${HEALTHCHECKS_SCHEDULED_DELIVERY_URL%/}/fail"
+        run: curl --fail --silent --show-error --max-time 10 --retry 3 "${HEALTHCHECKS_URL%/}/fail"
