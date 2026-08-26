@@ -1,0 +1,25 @@
+name: Development Supabase delivery-sync test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync-test:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_DEV_URL: ${{ secrets.SUPABASE_DEV_URL }}
+      SUPABASE_DEV_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Synchronize one development test application
+        run: python test_supabase_sync.py

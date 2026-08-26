@@ -4,6 +4,7 @@ from __future__ import annotations
 import csv
 import tempfile
 import unittest
+from unittest.mock import AsyncMock, patch
 from pathlib import Path
 
 import auditor
@@ -72,6 +73,48 @@ class ScheduledDeliveryTests(unittest.TestCase):
         client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
         package = scheduled.build_package(next(job for job in selected if job["client_id"] == 2), client, self.root)
         self.assertEqual([], auditor.deterministic_review(package))
+
+    def test_accepted_delivery_retains_tracking_when_supabase_sync_is_unavailable(self) -> None:
+        tracking = self.root / "tracking.csv"
+        cv = self.root / "client2.pdf"
+        cv.write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
+        job = {
+            "recipient_email": "recipient@example.test",
+            "company": "Example Company",
+            "role": "Industrial Engineer",
+            "city": "Jeddah",
+            "client_id": 2,
+        }
+        client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
+        package = scheduled.build_package(job, client, self.root)
+        ready = [(
+            job,
+            client,
+            package,
+            auditor.AuditDecision(
+                application_id=str(package["application_id"]),
+                approved=True,
+                approval_token="token",
+                fingerprint="fixture",
+                status="approved",
+            ),
+        )]
+
+        with (
+            patch.dict("os.environ", {"EMAIL_OUTREACH_ENABLED": "true", "AUTOAPPLY_SCHEDULED_DELIVERY": "true", "BREVO_API_KEY": "test"}),
+            patch.object(scheduled.shared, "create_client_campaign", return_value="campaign-1"),
+            patch.object(scheduled.email_dispatcher, "queue_audited_email_application", return_value=("action-1", True)),
+            patch.object(scheduled.db, "claim_action", return_value={"id": "action-1"}),
+            patch.object(scheduled.email_dispatcher, "dispatch_one", return_value={"status": "accepted", "transport": "brevo", "transport_evidence": "message-1"}),
+            patch.object(scheduled.sender, "next_delay_seconds", return_value=0),
+            patch.object(scheduled.supabase_delivery_sync, "sync_accepted_application", new=AsyncMock(return_value={"skipped": True, "reason": "not_configured"})) as synchronize,
+        ):
+            outcomes = scheduled.execute(ready, tracking, self.root)
+
+        self.assertEqual("accepted", outcomes[0]["status"])
+        self.assertTrue(tracking.exists())
+        self.assertIn("recipient@example.test", tracking.read_text(encoding="utf-8"))
+        synchronize.assert_called_once()
 
 
 if __name__ == "__main__":
