@@ -9,6 +9,7 @@ environment gate is the only path that enables transport.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import csv
 import hashlib
 import json
@@ -201,8 +202,8 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
         outcomes.append(result)
         if result.get("status") == "accepted":
             shared.append_tracking(tracking_path, job["recipient_email"], client["sender_email"], f"scheduled-brevo-accepted:{result.get('transport_evidence') or ''}")
-            sync_result = supabase_delivery_sync.sync_accepted_delivery(
-                candidate_id=None,
+            try:
+                sync_result = asyncio.run(supabase_delivery_sync.sync_accepted_application(
                 external_application_id=external_application_id,
                 external_client_id=int(job["client_id"]),
                 sender_email=client["sender_email"],
@@ -210,14 +211,12 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
                 company=job["company"],
                 role=job["role"],
                 city=job["city"],
-                delivery_channel="email",
                 provider_message_id=str(result.get("transport_evidence") or "") or None,
-                send_status="accepted",
                 sent_at=datetime.now(timezone.utc),
-                provider=str(result.get("transport") or "brevo"),
-            )
-            if not sync_result.synced:
-                print(json.dumps({"supabase_delivery_sync": sync_result.status}, sort_keys=True))
+                ))
+                print(json.dumps({"supabase_delivery_sync": sync_result}, sort_keys=True))
+            except Exception as error:
+                print(json.dumps({"supabase_delivery_sync": {"synced": False, "reason": type(error).__name__}}, sort_keys=True))
         elif result.get("status") == "uncertain":
             shared.append_tracking(tracking_path, job["recipient_email"], client["sender_email"], f"scheduled-transport-uncertain-suppressed:{result.get('reason') or 'unknown'}")
         if index < len(queued) - 1:

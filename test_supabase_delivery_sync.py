@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import unittest
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -141,6 +142,28 @@ class SupabaseDeliverySyncTests(unittest.TestCase):
         )
 
         self.assertEqual("skipped_non_accepted", result.status)
+        self.assertEqual([], database.upserts)
+
+    def test_async_api_returns_requested_no_mapping_summary(self) -> None:
+        database = FakeSupabase(mapping_exists=False)
+        original_server_client = sync._server_client
+        sync._server_client = lambda: database
+        try:
+            result = asyncio.run(sync.sync_accepted_application(
+                external_application_id="scheduled-application-4",
+                external_client_id=3,
+                sender_email="apply2@hsndm.tech",
+                recipient_email="recipient@example.test",
+                company="Example Company",
+                role="Customer Service Representative",
+                city="Jeddah",
+                provider_message_id=None,
+                sent_at="2026-08-26T00:00:00+00:00",
+            ))
+        finally:
+            sync._server_client = original_server_client
+
+        self.assertEqual({"skipped": True, "reason": "no_mapping"}, result)
         self.assertEqual([], database.upserts)
 
 

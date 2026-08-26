@@ -7,6 +7,7 @@ credential values or recipient addresses.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import os
@@ -222,3 +223,47 @@ def sync_accepted_delivery(
             type(error).__name__,
         )
         return DeliverySyncResult("failed", reason=type(error).__name__)
+
+
+async def sync_accepted_application(
+    *,
+    external_application_id: str,
+    external_client_id: int,
+    sender_email: str,
+    recipient_email: str,
+    company: str,
+    role: str,
+    city: str | None,
+    provider_message_id: str | None,
+    sent_at: datetime | str,
+) -> dict[str, object]:
+    """Synchronize one accepted email without blocking the scheduled sender.
+
+    The sync implementation is isolated in a worker thread because the official
+    Supabase Python client is synchronous. This public async contract lets the
+    sender await the database result while preserving an entirely server-side
+    credential boundary.
+    """
+    result = await asyncio.to_thread(
+        sync_accepted_delivery,
+        candidate_id=None,
+        external_application_id=external_application_id,
+        external_client_id=external_client_id,
+        sender_email=sender_email,
+        recipient_email=recipient_email,
+        company=company,
+        role=role,
+        city=city,
+        delivery_channel="email",
+        provider_message_id=provider_message_id,
+        send_status="accepted",
+        sent_at=sent_at,
+        provider=PROVIDER,
+    )
+    if result.status == "synced":
+        return {"synced": True, "application_id": result.application_id}
+    if result.status == "skipped_mapping_missing":
+        return {"skipped": True, "reason": "no_mapping"}
+    if result.status.startswith("skipped_"):
+        return {"skipped": True, "reason": result.reason or result.status.removeprefix("skipped_")}
+    return {"synced": False, "reason": result.reason or result.status}

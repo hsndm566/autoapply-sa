@@ -4,7 +4,7 @@ from __future__ import annotations
 import csv
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from pathlib import Path
 
 import auditor
@@ -107,7 +107,7 @@ class ScheduledDeliveryTests(unittest.TestCase):
             patch.object(scheduled.db, "claim_action", return_value={"id": "action-1"}),
             patch.object(scheduled.email_dispatcher, "dispatch_one", return_value={"status": "accepted", "transport": "brevo", "transport_evidence": "message-1"}),
             patch.object(scheduled.sender, "next_delay_seconds", return_value=0),
-            patch.object(scheduled.supabase_delivery_sync, "sync_accepted_delivery", return_value=scheduled.supabase_delivery_sync.DeliverySyncResult("skipped_unconfigured")) as synchronize,
+            patch.object(scheduled.supabase_delivery_sync, "sync_accepted_application", new=AsyncMock(return_value={"skipped": True, "reason": "not_configured"})) as synchronize,
         ):
             outcomes = scheduled.execute(ready, tracking, self.root)
 
