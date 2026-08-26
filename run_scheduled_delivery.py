@@ -37,6 +37,36 @@ from warmup_config import (
 
 MAX_PER_IDENTITY_PER_RUN = 5
 ACTIVE_CLIENT_IDS = frozenset(WARMUP_CLIENTS)
+_glitchtip_sdk: Any | None = None
+
+
+def initialize_glitchtip() -> bool:
+    """Enable optional Sentry-compatible GlitchTip reporting without changing runner behavior."""
+    global _glitchtip_sdk
+    dsn = os.environ.get("GLITCHTIP_DSN", "").strip()
+    if not dsn:
+        return False
+    try:
+        import sentry_sdk
+
+        sentry_sdk.init(dsn=dsn, traces_sample_rate=0.0, auto_session_tracking=False)
+        _glitchtip_sdk = sentry_sdk
+        return True
+    except Exception:
+        # Monitoring must never block or change delivery behavior.
+        _glitchtip_sdk = None
+        return False
+
+
+def report_exception(error: BaseException) -> None:
+    """Report caught non-fatal failures when optional monitoring is configured."""
+    if _glitchtip_sdk is None:
+        return
+    try:
+        _glitchtip_sdk.capture_exception(error)
+    except Exception:
+        # Preserve all existing sender error handling even if telemetry is unavailable.
+        return
 
 
 def parse_args() -> argparse.Namespace:
@@ -174,7 +204,8 @@ def apply_optional_personalization(package: dict[str, Any], job: dict[str, Any],
             city=str(job.get("city") or ""),
             job_description_text=str(job.get("job_description_text") or ""),
         ))
-    except Exception:
+    except Exception as error:
+        report_exception(error)
         personalized_body = None
     if personalized_body:
         package["draft"] = personalized_body
@@ -242,6 +273,7 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
                 ))
                 print(json.dumps({"supabase_delivery_sync": sync_result}, sort_keys=True))
             except Exception as error:
+                report_exception(error)
                 print(json.dumps({"supabase_delivery_sync": {"synced": False, "reason": type(error).__name__}}, sort_keys=True))
         elif result.get("status") == "uncertain":
             shared.append_tracking(tracking_path, job["recipient_email"], client["sender_email"], f"scheduled-transport-uncertain-suppressed:{result.get('reason') or 'unknown'}")
@@ -251,6 +283,7 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
 
 
 def main() -> None:
+    initialize_glitchtip()
     args = parse_args()
     clients = sender.load_clients(Path(args.clients))
     for client_id, expected in WARMUP_CLIENTS.items():

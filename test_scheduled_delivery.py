@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import csv
+import sys
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 from pathlib import Path
 
 import auditor
@@ -34,6 +36,19 @@ class ScheduledDeliveryTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def test_glitchtip_initialization_is_disabled_without_dsn(self) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            scheduled._glitchtip_sdk = None
+            self.assertFalse(scheduled.initialize_glitchtip())
+
+    def test_glitchtip_initializes_with_a_configured_dsn(self) -> None:
+        init = Mock()
+        fake_sdk = SimpleNamespace(init=init)
+        with patch.dict("os.environ", {"GLITCHTIP_DSN": "https://public@example.test/1"}, clear=True), patch.dict(sys.modules, {"sentry_sdk": fake_sdk}):
+            scheduled._glitchtip_sdk = None
+            self.assertTrue(scheduled.initialize_glitchtip())
+        init.assert_called_once_with(dsn="https://public@example.test/1", traces_sample_rate=0.0, auto_session_tracking=False)
 
     def test_only_clients_two_and_three_are_selected_at_five_each(self) -> None:
         selected, skipped = scheduled.select_jobs(self.root / "jobs.csv", set())
