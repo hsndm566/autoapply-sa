@@ -37,6 +37,8 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           EMAIL_OUTREACH_ENABLED: "true"
           AUTOAPPLY_SCHEDULED_DELIVERY: "true"
+          SUPABASE_DEV_URL: ${{ secrets.SUPABASE_DEV_URL }}
+          SUPABASE_DEV_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
         run: python run_scheduled_delivery.py
 
       - name: Persist tracked delivery outcomes

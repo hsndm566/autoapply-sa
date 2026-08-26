@@ -15,6 +15,7 @@ import json
 import os
 import time
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,7 @@ import db
 import email_dispatcher
 import run_verified_contact_warmup as shared
 import send_applications as sender
+import supabase_delivery_sync
 from warmup_config import (
     SCHEDULED_DELIVERY_ENVIRONMENT_FLAG,
     SCHEDULED_DELIVERY_SCOPE,
@@ -178,7 +180,7 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
         raise RuntimeError("BREVO_API_KEY is required for scheduled delivery")
 
     campaign_ids: dict[int, str] = {}
-    queued: list[tuple[dict[str, Any], dict[str, str], str]] = []
+    queued: list[tuple[dict[str, Any], dict[str, str], str, str]] = []
     for job, client, package, decision in ready:
         client_id = int(job["client_id"])
         if client_id not in ACTIVE_CLIENT_IDS or not is_authorized_warmup_sender(client_id, client["sender_email"]):
@@ -187,10 +189,10 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
         action_id, added = email_dispatcher.queue_audited_email_application(campaign_id, package, decision.approval_token)
         if not added:
             raise RuntimeError(f"existing action prevents a duplicate scheduled delivery for {job['recipient_email']}")
-        queued.append((job, client, action_id))
+        queued.append((job, client, action_id, str(package["application_id"])))
 
     outcomes: list[dict[str, Any]] = []
-    for index, (job, client, action_id) in enumerate(queued):
+    for index, (job, client, action_id, external_application_id) in enumerate(queued):
         action = db.claim_action(action_id, email_dispatcher.ACTION_TYPE)
         if action is None:
             raise RuntimeError(f"could not claim queued scheduled action for {job['recipient_email']}")
@@ -199,6 +201,23 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
         outcomes.append(result)
         if result.get("status") == "accepted":
             shared.append_tracking(tracking_path, job["recipient_email"], client["sender_email"], f"scheduled-brevo-accepted:{result.get('transport_evidence') or ''}")
+            sync_result = supabase_delivery_sync.sync_accepted_delivery(
+                candidate_id=None,
+                external_application_id=external_application_id,
+                external_client_id=int(job["client_id"]),
+                sender_email=client["sender_email"],
+                recipient_email=job["recipient_email"],
+                company=job["company"],
+                role=job["role"],
+                city=job["city"],
+                delivery_channel="email",
+                provider_message_id=str(result.get("transport_evidence") or "") or None,
+                send_status="accepted",
+                sent_at=datetime.now(timezone.utc),
+                provider=str(result.get("transport") or "brevo"),
+            )
+            if not sync_result.synced:
+                print(json.dumps({"supabase_delivery_sync": sync_result.status}, sort_keys=True))
         elif result.get("status") == "uncertain":
             shared.append_tracking(tracking_path, job["recipient_email"], client["sender_email"], f"scheduled-transport-uncertain-suppressed:{result.get('reason') or 'unknown'}")
         if index < len(queued) - 1:
