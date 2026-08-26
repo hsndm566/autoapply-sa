@@ -71,17 +71,29 @@ class _ServerPostgrestQuery:
         self.conflict_target = on_conflict
         return self
 
+    def insert(self, payload: Mapping[str, Any]) -> "_ServerPostgrestQuery":
+        self.operation = "insert"
+        self.payload = payload
+        return self
+
     def execute(self) -> _RestResponse:
         endpoint = f"{self.client.base_url}/{self.table_name}"
         if self.operation == "select":
             response = requests.get(endpoint, headers=self.client.headers, params=self.params, timeout=20)
         else:
-            if self.payload is None or self.conflict_target is None:
+            if self.payload is None:
+                raise RuntimeError("delivery-sync write request is incomplete")
+            if self.operation == "upsert" and self.conflict_target is None:
                 raise RuntimeError("delivery-sync upsert request is incomplete")
             response = requests.post(
                 endpoint,
-                headers={**self.client.headers, "Prefer": "resolution=merge-duplicates,return=representation"},
-                params={"on_conflict": self.conflict_target},
+                headers={
+                    **self.client.headers,
+                    "Prefer": "resolution=merge-duplicates,return=representation"
+                    if self.operation == "upsert"
+                    else "return=representation",
+                },
+                params={"on_conflict": self.conflict_target} if self.operation == "upsert" else None,
                 json=dict(self.payload),
                 timeout=20,
             )
@@ -191,6 +203,51 @@ def _application_id_from_response(client: Any, external_application_id: str, res
     return None
 
 
+def _record_delivery_audit_event(
+    database: Any,
+    *,
+    candidate_id: str,
+    application_id: str,
+    provider_message_id: str | None,
+    sender_email: str,
+    recipient_email_hash: str,
+    company: str,
+    role: str,
+    city: str | None,
+    external_application_id: str,
+    package_hash: str | None,
+) -> None:
+    """Append delivery evidence without allowing audit availability to block sender sync."""
+    message_id = (provider_message_id or "").strip() or None
+    try:
+        database.schema(SCHEMA).table("audit_events").insert(
+            {
+                "candidate_id": candidate_id,
+                "application_id": application_id,
+                "stage": 4,
+                "event_type": "delivery_confirmed",
+                "actor_type": "system",
+                "payload": {
+                    "provider_message_id": message_id,
+                    "sender_email": sender_email,
+                    "recipient_email_hash": recipient_email_hash,
+                    "company": company,
+                    "role": role,
+                    "city": city,
+                    "external_application_id": external_application_id,
+                },
+                "idempotency_key": message_id or f"accepted:{external_application_id}",
+                **({"package_hash": package_hash} if package_hash else {}),
+            }
+        ).execute()
+    except Exception as error:
+        LOGGER.warning(
+            "Supabase delivery audit insert failed for external application %s (%s)",
+            external_application_id,
+            type(error).__name__,
+        )
+
+
 def sync_accepted_delivery(
     *,
     candidate_id: str | None,
@@ -206,6 +263,7 @@ def sync_accepted_delivery(
     send_status: str,
     sent_at: datetime | str,
     provider: str = PROVIDER,
+    package_hash: str | None = None,
     client: Any | None = None,
 ) -> DeliverySyncResult:
     """Upsert a mapping-backed accepted send and its idempotent initial event.
@@ -243,6 +301,7 @@ def sync_accepted_delivery(
         if not sent_at_value:
             return DeliverySyncResult("skipped_invalid_input", reason="sent_at is required")
         message_id = (provider_message_id or "").strip() or None
+        recipient_email_hash = hash_recipient_email(recipient_email)
         application_response = (
             database.schema(SCHEMA)
             .table("email_applications")
@@ -252,7 +311,7 @@ def sync_accepted_delivery(
                     "external_application_id": external_application_id,
                     "external_client_id": external_client_id,
                     "sender_email": sender_email,
-                    "recipient_email_hash": hash_recipient_email(recipient_email),
+                    "recipient_email_hash": recipient_email_hash,
                     "company": company.strip(),
                     "role": role.strip(),
                     "city": city.strip() if city else None,
@@ -292,6 +351,19 @@ def sync_accepted_delivery(
             )
             .execute()
         )
+        _record_delivery_audit_event(
+            database,
+            candidate_id=mapped_candidate_id,
+            application_id=application_id,
+            provider_message_id=message_id,
+            sender_email=sender_email,
+            recipient_email_hash=recipient_email_hash,
+            company=company.strip(),
+            role=role.strip(),
+            city=city.strip() if city else None,
+            external_application_id=external_application_id,
+            package_hash=package_hash.strip() if package_hash else None,
+        )
         return DeliverySyncResult("synced", application_id=application_id)
     except requests.HTTPError as error:
         status_code = getattr(error.response, "status_code", "unknown")
@@ -321,6 +393,7 @@ async def sync_accepted_application(
     city: str | None,
     provider_message_id: str | None,
     sent_at: datetime | str,
+    package_hash: str | None = None,
 ) -> dict[str, object]:
     """Synchronize one accepted email without blocking the scheduled sender.
 
@@ -344,6 +417,7 @@ async def sync_accepted_application(
         send_status="accepted",
         sent_at=sent_at,
         provider=PROVIDER,
+        package_hash=package_hash,
     )
     if result.status == "synced":
         return {"synced": True, "application_id": result.application_id}
