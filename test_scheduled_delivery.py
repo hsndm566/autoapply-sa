@@ -127,9 +127,11 @@ class ScheduledDeliveryTests(unittest.TestCase):
             outcomes = scheduled.execute(ready, tracking, self.root)
 
         self.assertEqual("accepted", outcomes[0]["status"])
+        self.assertEqual("fixture", outcomes[0]["package_hash"])
         self.assertTrue(tracking.exists())
         self.assertIn("recipient@example.test", tracking.read_text(encoding="utf-8"))
         synchronize.assert_called_once()
+        self.assertEqual("fixture", synchronize.call_args.kwargs["package_hash"])
 
 
 if __name__ == "__main__":

@@ -238,7 +238,7 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
         raise RuntimeError("BREVO_API_KEY is required for scheduled delivery")
 
     campaign_ids: dict[int, str] = {}
-    queued: list[tuple[dict[str, Any], dict[str, str], str, str]] = []
+    queued: list[tuple[dict[str, Any], dict[str, str], str, str, str]] = []
     for job, client, package, decision in ready:
         client_id = int(job["client_id"])
         if client_id not in ACTIVE_CLIENT_IDS or not is_authorized_warmup_sender(client_id, client["sender_email"]):
@@ -247,15 +247,15 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
         action_id, added = email_dispatcher.queue_audited_email_application(campaign_id, package, decision.approval_token)
         if not added:
             raise RuntimeError(f"existing action prevents a duplicate scheduled delivery for {job['recipient_email']}")
-        queued.append((job, client, action_id, str(package["application_id"])))
+        queued.append((job, client, action_id, str(package["application_id"]), decision.fingerprint))
 
     outcomes: list[dict[str, Any]] = []
-    for index, (job, client, action_id, external_application_id) in enumerate(queued):
+    for index, (job, client, action_id, external_application_id, package_hash) in enumerate(queued):
         action = db.claim_action(action_id, email_dispatcher.ACTION_TYPE)
         if action is None:
             raise RuntimeError(f"could not claim queued scheduled action for {job['recipient_email']}")
         result = email_dispatcher.dispatch_one(action)
-        result.update({"recipient_email": job["recipient_email"], "client_id": job["client_id"], "sender_email": client["sender_email"]})
+        result.update({"recipient_email": job["recipient_email"], "client_id": job["client_id"], "sender_email": client["sender_email"], "package_hash": package_hash})
         outcomes.append(result)
         if result.get("status") == "accepted":
             shared.append_tracking(tracking_path, job["recipient_email"], client["sender_email"], f"scheduled-brevo-accepted:{result.get('transport_evidence') or ''}")
@@ -270,6 +270,7 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
                 city=job["city"],
                 provider_message_id=str(result.get("transport_evidence") or "") or None,
                 sent_at=datetime.now(timezone.utc),
+                package_hash=str(result.get("package_hash") or "") or None,
                 ))
                 print(json.dumps({"supabase_delivery_sync": sync_result}, sort_keys=True))
             except Exception as error:
