@@ -58,9 +58,17 @@ def _server_client() -> Any | None:
         LOGGER.warning("Supabase delivery sync skipped because development server credentials are not configured")
         return None
     try:
-        from supabase import create_client
+        from postgrest import SyncPostgrestClient
 
-        return create_client(url, service_role_key)
+        # Modern Supabase secret API keys are server-only credentials and must be
+        # supplied through the API-key header rather than as a JWT bearer token.
+        # The direct PostgREST client provides exactly the schema/table interface
+        # used below, while avoiding unrelated Auth/Realtime initialization that
+        # expects a user JWT.
+        return SyncPostgrestClient(
+            f"{url.rstrip('/')}/rest/v1",
+            headers={"apikey": service_role_key},
+        )
     except Exception as error:
         LOGGER.warning("Supabase delivery sync client initialization failed (%s)", type(error).__name__)
         return None

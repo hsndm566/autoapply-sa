@@ -5,6 +5,7 @@ import unittest
 import asyncio
 from datetime import datetime, timezone
 from typing import Any
+from unittest.mock import patch
 
 import supabase_delivery_sync as sync
 
@@ -69,6 +70,22 @@ class FakeSupabase:
 
 
 class SupabaseDeliverySyncTests(unittest.TestCase):
+    def test_server_client_uses_api_key_header_for_modern_secret(self) -> None:
+        with patch.dict(
+            "os.environ",
+            {
+                "SUPABASE_DEV_URL": "https://dev.example.test/",
+                "SUPABASE_DEV_SERVICE_ROLE_KEY": "sb_secret_test",
+            },
+            clear=False,
+        ), patch("postgrest.SyncPostgrestClient") as postgrest_client:
+            sync._server_client()
+
+        postgrest_client.assert_called_once_with(
+            "https://dev.example.test/rest/v1",
+            headers={"apikey": "sb_secret_test"},
+        )
+
     def test_hash_recipient_email_normalizes_before_hashing(self) -> None:
         self.assertEqual(sync.hash_recipient_email("person@example.test"), sync.hash_recipient_email(" Person@Example.Test "))
 
