@@ -22,6 +22,7 @@ from typing import Any
 
 import auditor
 import db
+import email_personalization
 import email_dispatcher
 import run_verified_contact_warmup as shared
 import send_applications as sender
@@ -101,6 +102,7 @@ def select_jobs(
                 "company": company,
                 "role": role,
                 "city": str(row.get("city") or "").strip(),
+                "job_description_text": str(row.get("job_description_text") or "").strip(),
                 "client_id": client_id,
             })
             per_client[client_id] += 1
@@ -158,12 +160,36 @@ def build_package(job: dict[str, Any], client: dict[str, str], cvs_dir: Path) ->
     }
 
 
+def apply_optional_personalization(package: dict[str, Any], job: dict[str, Any], client: dict[str, str]) -> str:
+    """Optionally replace a generic draft before the existing audit-and-queue boundary."""
+
+    if not email_personalization.personalization_enabled():
+        return "skipped"
+    candidate_profile = {"full_name": client["client_name"]}
+    try:
+        personalized_body = asyncio.run(email_personalization.personalize_email_body(
+            candidate_profile=candidate_profile,
+            company=str(job["company"]),
+            role=str(job["role"]),
+            city=str(job.get("city") or ""),
+            job_description_text=str(job.get("job_description_text") or ""),
+        ))
+    except Exception:
+        personalized_body = None
+    if personalized_body:
+        package["draft"] = personalized_body
+        return "used"
+    return "fallback"
+
+
 def preflight(jobs: list[dict[str, Any]], clients: dict[int, dict[str, str]], cvs_dir: Path) -> tuple[list[tuple[dict[str, Any], dict[str, str], dict[str, Any], auditor.AuditDecision]], list[str]]:
     blocked = shared.assert_runtime_ready(jobs, clients, cvs_dir)
     ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], auditor.AuditDecision]] = []
     for job in jobs:
         client = clients[int(job["client_id"])]
         package = build_package(job, client, cvs_dir)
+        personalization_status = apply_optional_personalization(package, job, client)
+        print(json.dumps({"email_personalization": {"application_id": package["application_id"], "status": personalization_status}}, sort_keys=True))
         decision = auditor.audit_application(package["application_id"], package, require_ai_review=False)
         if decision.approved:
             ready.append((job, client, package, decision))
