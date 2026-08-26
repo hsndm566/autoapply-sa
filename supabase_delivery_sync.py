@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Mapping
 
+import requests
+
 
 LOGGER = logging.getLogger(__name__)
 SCHEMA = "autoapply_baseline"
@@ -32,6 +34,83 @@ class DeliverySyncResult:
     @property
     def synced(self) -> bool:
         return self.status == "synced"
+
+
+@dataclass(frozen=True)
+class _RestResponse:
+    data: object
+
+
+class _ServerPostgrestQuery:
+    """Small server-only adapter for the REST calls used by delivery sync."""
+
+    def __init__(self, client: "_ServerPostgrestClient", table_name: str) -> None:
+        self.client = client
+        self.table_name = table_name
+        self.params: list[tuple[str, str]] = []
+        self.operation = "select"
+        self.payload: Mapping[str, Any] | None = None
+        self.conflict_target: str | None = None
+
+    def select(self, columns: str) -> "_ServerPostgrestQuery":
+        self.params.append(("select", columns))
+        return self
+
+    def eq(self, name: str, value: object) -> "_ServerPostgrestQuery":
+        normalized = str(value).lower() if isinstance(value, bool) else str(value)
+        self.params.append((name, f"eq.{normalized}"))
+        return self
+
+    def limit(self, count: int) -> "_ServerPostgrestQuery":
+        self.params.append(("limit", str(count)))
+        return self
+
+    def upsert(self, payload: Mapping[str, Any], *, on_conflict: str) -> "_ServerPostgrestQuery":
+        self.operation = "upsert"
+        self.payload = payload
+        self.conflict_target = on_conflict
+        return self
+
+    def execute(self) -> _RestResponse:
+        endpoint = f"{self.client.base_url}/{self.table_name}"
+        if self.operation == "select":
+            response = requests.get(endpoint, headers=self.client.headers, params=self.params, timeout=20)
+        else:
+            if self.payload is None or self.conflict_target is None:
+                raise RuntimeError("delivery-sync upsert request is incomplete")
+            response = requests.post(
+                endpoint,
+                headers={**self.client.headers, "Prefer": "resolution=merge-duplicates,return=representation"},
+                params={"on_conflict": self.conflict_target},
+                json=dict(self.payload),
+                timeout=20,
+            )
+        response.raise_for_status()
+        return _RestResponse(response.json())
+
+
+class _ServerPostgrestClient:
+    """Server-only REST client that avoids initializing Auth or Realtime clients."""
+
+    def __init__(self, project_url: str, secret_key: str, schema: str = "public") -> None:
+        self.base_url = f"{project_url.rstrip('/')}/rest/v1"
+        self.secret_key = secret_key
+        self.schema_name = schema
+
+    @property
+    def headers(self) -> dict[str, str]:
+        # Modern Supabase secret keys must be sent as apikey values, not bearer JWTs.
+        return {
+            "apikey": self.secret_key,
+            "Accept-Profile": self.schema_name,
+            "Content-Profile": self.schema_name,
+        }
+
+    def schema(self, schema_name: str) -> "_ServerPostgrestClient":
+        return _ServerPostgrestClient(self.base_url.removesuffix("/rest/v1"), self.secret_key, schema_name)
+
+    def table(self, table_name: str) -> _ServerPostgrestQuery:
+        return _ServerPostgrestQuery(self, table_name)
 
 
 def hash_recipient_email(recipient_email: str) -> str:
@@ -58,17 +137,7 @@ def _server_client() -> Any | None:
         LOGGER.warning("Supabase delivery sync skipped because development server credentials are not configured")
         return None
     try:
-        from postgrest import SyncPostgrestClient
-
-        # Modern Supabase secret API keys are server-only credentials and must be
-        # supplied through the API-key header rather than as a JWT bearer token.
-        # The direct PostgREST client provides exactly the schema/table interface
-        # used below, while avoiding unrelated Auth/Realtime initialization that
-        # expects a user JWT.
-        return SyncPostgrestClient(
-            f"{url.rstrip('/')}/rest/v1",
-            headers={"apikey": service_role_key},
-        )
+        return _ServerPostgrestClient(url, service_role_key)
     except Exception as error:
         LOGGER.warning("Supabase delivery sync client initialization failed (%s)", type(error).__name__)
         return None

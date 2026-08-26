@@ -1,8 +1,8 @@
 """Offline tests for the server-only accepted-delivery Supabase sync helper."""
 from __future__ import annotations
 
-import unittest
 import asyncio
+import unittest
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import patch
@@ -78,12 +78,19 @@ class SupabaseDeliverySyncTests(unittest.TestCase):
                 "SUPABASE_DEV_SERVICE_ROLE_KEY": "sb_secret_test",
             },
             clear=False,
-        ), patch("postgrest.SyncPostgrestClient") as postgrest_client:
-            sync._server_client()
+        ):
+            client = sync._server_client()
 
-        postgrest_client.assert_called_once_with(
-            "https://dev.example.test/rest/v1",
-            headers={"apikey": "sb_secret_test"},
+        self.assertIsInstance(client, sync._ServerPostgrestClient)
+        assert client is not None
+        self.assertEqual("https://dev.example.test/rest/v1", client.base_url)
+        self.assertEqual(
+            {
+                "apikey": "sb_secret_test",
+                "Accept-Profile": "public",
+                "Content-Profile": "public",
+            },
+            client.headers,
         )
 
     def test_hash_recipient_email_normalizes_before_hashing(self) -> None:
