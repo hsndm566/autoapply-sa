@@ -5,3 +5,4 @@ requests==2.32.3
 python-telegram-bot==20.7
 playwright==1.62.0
 supabase>=2.6.0,<3.0.0
+sentry-sdk==2.19.2

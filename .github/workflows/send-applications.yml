@@ -38,6 +38,7 @@ jobs:
           EMAIL_OUTREACH_ENABLED: "true"
           AUTOAPPLY_SCHEDULED_DELIVERY: "true"
           ENABLE_EMAIL_PERSONALIZATION: ${{ vars.ENABLE_EMAIL_PERSONALIZATION || 'false' }}
+          GLITCHTIP_DSN: ${{ secrets.GLITCHTIP_DSN }}
           SUPABASE_DEV_URL: ${{ secrets.SUPABASE_DEV_URL }}
           SUPABASE_DEV_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
         run: python run_scheduled_delivery.py
@@ -53,3 +54,29 @@ jobs:
           git add tracking.csv
           git commit -m "Record scheduled application delivery outcomes"
           git push
+
+  monitor-success:
+    name: Signal scheduled-delivery success
+    needs: [deliver]
+    if: ${{ needs.deliver.result == 'success' }}
+    runs-on: ubuntu-latest
+    env:
+      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
+    steps:
+      - name: Ping Healthchecks.io when configured
+        if: ${{ env.HEALTHCHECKS_URL != '' }}
+        continue-on-error: true
+        run: curl --fail --silent --show-error --max-time 10 --retry 3 "$HEALTHCHECKS_URL"
+
+  monitor-failure:
+    name: Signal scheduled-delivery failure
+    needs: [deliver]
+    if: ${{ always() && needs.deliver.result == 'failure' }}
+    runs-on: ubuntu-latest
+    env:
+      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
+    steps:
+      - name: Ping Healthchecks.io failure endpoint when configured
+        if: ${{ env.HEALTHCHECKS_URL != '' }}
+        continue-on-error: true
+        run: curl --fail --silent --show-error --max-time 10 --retry 3 "${HEALTHCHECKS_URL%/}/fail"
