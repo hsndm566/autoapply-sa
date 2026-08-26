@@ -293,6 +293,14 @@ def sync_accepted_delivery(
             .execute()
         )
         return DeliverySyncResult("synced", application_id=application_id)
+    except requests.HTTPError as error:
+        status_code = getattr(error.response, "status_code", "unknown")
+        LOGGER.warning(
+            "Supabase delivery sync failed for external application %s (HTTP status %s)",
+            external_application_id,
+            status_code,
+        )
+        return DeliverySyncResult("failed", reason=f"http_{status_code}")
     except Exception as error:
         LOGGER.warning(
             "Supabase delivery sync failed for external application %s (%s)",
