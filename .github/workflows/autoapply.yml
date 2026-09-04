@@ -20,7 +20,7 @@ jobs:
           python -c "import urllib.request,os,json; tok=os.environ['TELEGRAM_BOT_TOKEN']; urllib.request.urlopen(urllib.request.Request('https://api.telegram.org/bot'+tok+'/getMe')); print('BOT OK')"
       - name: Ping Greenhouse endpoint
         run: |
-          python -c "import urllib.request,json;urllib.request.urlopen(urllib.request.Request('https://boards-api.greenhouse.io/v1/boards/airbnb/jobs?content=false',headers={'User-Agent':'Mozilla/5'}),timeout=10);print('GH OK')" 2>&1
+          python -c "import urllib.request,json;urllib.request.urlopen(urllib.request.Request('https://boards-api.greenhouse.io/v1/boards/airbnb/jobs?content=false',headers={'User-Agent':'Mozilla/5'}),timeout=30);print('GH OK')" 2>&1
       - name: Rotate stale run
         run: echo "diagnostics complete"
 
