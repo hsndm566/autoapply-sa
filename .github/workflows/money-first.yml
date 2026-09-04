@@ -5,6 +5,9 @@ on:
     - cron: '0 5 * * *'   # 05:00 UTC = 08:00 Saudi time, every day
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   money:
     runs-on: ubuntu-latest
