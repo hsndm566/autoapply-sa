@@ -5,6 +5,9 @@ on:
     - cron: '0 6 * * *'   # 06:00 UTC daily (early Saudi morning, catch fresh posts)
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   arabic:
     runs-on: ubuntu-latest
