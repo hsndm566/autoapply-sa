@@ -33,7 +33,9 @@ def _ensure_schema() -> None:
 
 def seed_from_campaign_job(campaign_id: str, campaign_job: dict[str, Any]) -> dict[str, Any]:
     source = str(campaign_job.get("source") or "unknown")
-    posting_id = str(campaign_job.get("id") or campaign_job.get("job_hash") or "")
+    # campaign_jobs.id is a generated row id. job_hash is deterministic for the
+    # campaign opportunity and therefore gives review URLs a stable identity.
+    posting_id = str(campaign_job.get("job_hash") or campaign_job.get("id") or "")
     path_state = str(campaign_job.get("path_state") or "portal_complex")
     draftable = path_state in {"direct_email", "portal_upload_verified"}
     return {
@@ -52,7 +54,7 @@ def seed_from_campaign_job(campaign_id: str, campaign_job: dict[str, Any]) -> di
         "_state": "path_verified" if draftable else "needs_review",
         "_path": path_state,
         "_review": None if draftable else {"reason": "path_not_draftable", "detail": path_state, "at": ""},
-        "_raw": {"campaign_job_id": campaign_job.get("id")},
+        "_raw": {"campaign_job_id": campaign_job.get("id"), "job_hash": campaign_job.get("job_hash")},
         "_campaign_id": campaign_id,
     }
 
