@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+import campaign_worker
 import db
 import review_runtime
 import service_review
+from review_store import CampaignReviewStore
 
 
 GOOD = {
@@ -28,6 +31,8 @@ class ReviewApiTests(unittest.TestCase):
         self.old_db = db.DB_PATH
         self.old_complete = review_runtime.complete
         self.old_profile_loader = review_runtime.profile_loader
+        self.old_groq = os.environ.get("GROQ_API_KEY")
+        self.old_auto_draft = os.environ.get("AUTO_DRAFT_ENABLED")
         db.DB_PATH = f"{self.tmp.name}/review.db"
         db.initialize()
 
@@ -48,6 +53,14 @@ class ReviewApiTests(unittest.TestCase):
         review_runtime.complete = self.old_complete
         review_runtime.profile_loader = self.old_profile_loader
         db.DB_PATH = self.old_db
+        if self.old_groq is None:
+            os.environ.pop("GROQ_API_KEY", None)
+        else:
+            os.environ["GROQ_API_KEY"] = self.old_groq
+        if self.old_auto_draft is None:
+            os.environ.pop("AUTO_DRAFT_ENABLED", None)
+        else:
+            os.environ["AUTO_DRAFT_ENABLED"] = self.old_auto_draft
         self.tmp.cleanup()
 
     def request(self, method: str, path: str, body=None, token: str = ""):
@@ -89,7 +102,7 @@ class ReviewApiTests(unittest.TestCase):
         self.assertEqual(body["queue"][0]["state"], "path_verified")
 
     def test_cross_campaign_token_cannot_read_queue(self):
-        campaign_a, token_a, _ = self.create_campaign_job("a@example.com")
+        _campaign_a, token_a, _ = self.create_campaign_job("a@example.com")
         campaign_b, _token_b, _ = self.create_campaign_job("b@example.com")
         status, _body = self.request(
             "GET",
@@ -134,6 +147,23 @@ class ReviewApiTests(unittest.TestCase):
             token,
         )
         self.assertEqual(status, 404)
+
+    def test_autonomous_worker_drafts_but_never_approves_or_submits(self):
+        campaign, _token, job_id = self.create_campaign_job()
+        db.activate_campaign(campaign["id"])
+        os.environ["GROQ_API_KEY"] = "test-key-present"
+        os.environ["AUTO_DRAFT_ENABLED"] = "true"
+
+        result = campaign_worker.draft_verified_campaign_jobs(max_drafts=1)
+        self.assertEqual(result["drafted"], 1)
+
+        rec = CampaignReviewStore(campaign["id"]).get_record("greenhouse", job_id)
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec["_state"], "drafted")
+        self.assertIsNone(rec["_draft"]["approved_by"])
+        self.assertNotIn("_submission", rec)
+        with db.connection() as c:
+            self.assertEqual(0, c.execute("SELECT COUNT(*) AS n FROM application_evidence WHERE campaign_id=?", (campaign["id"],)).fetchone()["n"])
 
 
 if __name__ == "__main__":
