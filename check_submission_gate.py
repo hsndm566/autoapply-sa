@@ -60,17 +60,36 @@ def main() -> None:
     if "approve_draft(" in loop:
         fail("autonomous_loop.py is not allowed to approve its own drafts")
 
-    scheduled = text(".github/workflows/send-applications.yml")
-    if "scheduled_review_preflight.py" not in scheduled:
-        fail("scheduled workflow is not routed to review-only preflight")
+    legacy_workflow = text(".github/workflows/send-applications.yml")
+    if "schedule:" in legacy_workflow:
+        fail("legacy file-backed sender must not have a scheduled trigger")
+    if "workflow_dispatch:" not in legacy_workflow:
+        fail("retired legacy sender workflow should be manual verification only")
     for token in (
         'EMAIL_OUTREACH_ENABLED: "true"',
         'AUTOAPPLY_SCHEDULED_DELIVERY: "true"',
         "python run_scheduled_delivery.py",
+        "python run_verified_contact_warmup.py",
         "BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}",
     ):
-        if token in scheduled:
-            fail(f"scheduled workflow contains live-delivery capability: {token}")
+        if token in legacy_workflow:
+            fail(f"legacy workflow contains live-delivery capability: {token}")
+
+    # These customer/runtime artifacts are forbidden in the current repository
+    # tree. They belong on the private service volume or another private store.
+    forbidden_paths = (
+        "autoapply.db",
+        "clients.csv",
+        "clients",
+        "cvs",
+        "hasan_profile.json",
+        "email_outreach_pending.csv",
+        "tracking.csv",
+        "Job_Application_Tracker.csv",
+    )
+    for relative in forbidden_paths:
+        if (ROOT / relative).exists():
+            fail(f"tracked customer/runtime artifact still exists: {relative}")
 
     # Legacy code may still import protected adapters, but the adapters themselves
     # must be impossible to call with URL-only arguments. This blocks old scripts
