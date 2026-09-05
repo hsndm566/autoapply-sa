@@ -21,11 +21,11 @@ class HermesGatewayTests(unittest.TestCase):
         self.old_token = os.environ.get("HERMES_GATEWAY_TOKEN")
         os.environ["HERMES_GATEWAY_TOKEN"] = "gateway-test-token"
         self.addCleanup(self._restore_token)
-        self.cv = Path(self.temp_dir.name) / "saif-cv.pdf"
-        self.cv.write_bytes(b"%PDF-1.4\nSaif preview CV\n%%EOF")
+        self.cv = Path(self.temp_dir.name) / "candidate-cv.pdf"
+        self.cv.write_bytes(b"%PDF-1.4\nSample preview CV\n%%EOF")
         campaign, _token = db.create_campaign(
-            candidate_name="Saif Ahmed Al-Nimr",
-            candidate_email="saif@example.com",
+            candidate_name="Sample Candidate",
+            candidate_email="candidate@example.test",
             target_role="Supply Chain Coordinator",
             cv_path=str(self.cv),
             cv_original_name=self.cv.name,
