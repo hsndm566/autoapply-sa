@@ -38,6 +38,9 @@ def main() -> None:
         if "mark_submitted(" not in source:
             fail(f"{filename} does not produce verified submission evidence")
 
+    if (ROOT / "captcha_solver.py").exists():
+        fail("CAPTCHA solver must not exist in the production repository tree")
+
     email = text("email_dispatcher.py")
     if "guard(review_record)" not in email:
         fail("email_dispatcher.dispatch_one does not recheck the human approval record")
@@ -46,11 +49,25 @@ def main() -> None:
     if "mark_submitted(" not in email:
         fail("email dispatcher does not validate provider evidence through mark_submitted")
 
+    campaign_email = text("campaign_email.py")
+    if "human_approval_record" not in campaign_email or "guard(approval)" not in campaign_email:
+        fail("campaign email queueing does not require a human approval record")
+    if "human_approval_record=approval" not in campaign_email:
+        fail("campaign email does not carry human approval into the durable outbox")
+
+    hermes = text("hermes_gateway.py")
+    if "CampaignReviewStore" not in hermes:
+        fail("Hermes email opportunities are not persisted into the human review ledger")
+    if '"_state": "needs_review"' not in hermes:
+        fail("Hermes external drafts are not forced through grounded human review")
+
     runtime = text("submission_runtime.py")
     if "guard(rec)" not in runtime:
         fail("submission runtime does not reload and guard the persisted record")
     if "store.save_record(submitted)" not in runtime:
         fail("submission runtime does not persist submitted_verified back to the review ledger")
+    if "_queue_direct_email" not in runtime or "queued_for_delivery" not in runtime:
+        fail("approved direct-email records are not routed through the audited outbox")
 
     loop = text("autonomous_loop.py")
     forbidden = ("submit_greenhouse(", "submit_lever(", "submit_ashby(", "submit_application(")
@@ -75,8 +92,6 @@ def main() -> None:
         if token in legacy_workflow:
             fail(f"legacy workflow contains live-delivery capability: {token}")
 
-    # These customer/runtime artifacts are forbidden in the current repository
-    # tree. They belong on the private service volume or another private store.
     forbidden_paths = (
         "autoapply.db",
         "clients.csv",
@@ -92,9 +107,6 @@ def main() -> None:
         if (ROOT / relative).exists():
             fail(f"tracked customer/runtime artifact still exists: {relative}")
 
-    # Legacy code may still import protected adapters, but the adapters themselves
-    # must be impossible to call with URL-only arguments. This blocks old scripts
-    # from becoming an alternate employer-facing route.
     for filename in ("greenhouse_submit.py", "lever_submit.py", "ashby_submit.py"):
         if "rec: dict[str, Any]" not in text(filename):
             fail(f"{filename} does not require a canonical approval record")
