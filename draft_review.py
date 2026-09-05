@@ -193,6 +193,8 @@ def approve_draft(
         raise ValueError("approve_draft requires a named human approver")
     if rec.get("_state") != "drafted":
         raise ValueError(f"cannot approve from state {rec.get('_state')!r}; expected 'drafted'")
+    if rec.get("_path") not in DRAFTABLE_PATHS:
+        raise ValueError(f"cannot approve undraftable path {rec.get('_path')!r}")
 
     draft = dict(rec.get("_draft") or {})
     if draft.get("flagged_claims"):
@@ -235,6 +237,7 @@ def is_submittable(rec: dict[str, Any]) -> bool:
     draft = rec.get("_draft") or {}
     return bool(
         rec.get("_state") == "audit_approved"
+        and rec.get("_path") in DRAFTABLE_PATHS
         and draft.get("approved_by")
         and draft.get("approved_at")
         and not draft.get("flagged_claims")
