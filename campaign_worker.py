@@ -1,10 +1,8 @@
 """Safe autonomous worker for AutoApply SA.
 
-The worker is intentionally conservative. It performs deterministic maintenance,
-records source/service health, recovers stale queue leases, and makes bounded
-read-only calls to public job-board listing APIs for active campaigns. Its audited
-email dispatcher remains disabled until separately configured, and it never submits
-portal forms. Every email side effect rechecks a current Auditor approval token.
+The worker performs deterministic maintenance, bounded public job discovery and
+grounded draft preparation. It never creates human approval and never submits a
+portal form. Employer-facing delivery remains behind ``submit_gate``.
 """
 from __future__ import annotations
 
@@ -21,6 +19,7 @@ import db
 import email_dispatcher
 import email_preparation
 import portal_sentinel
+import review_runtime
 
 LOG = logging.getLogger("campaign_worker")
 SOURCE_REGISTRY = Path(__file__).with_name("source_registry.json")
@@ -30,9 +29,71 @@ def _registry_sources() -> list[str]:
     try:
         data = json.loads(SOURCE_REGISTRY.read_text(encoding="utf-8"))
         return sorted({str(item.get("id") or item.get("source") or "").strip() for item in data.get("sources", []) if item.get("id") or item.get("source")})
-    except Exception as exc:  # source health must not crash the worker
+    except Exception as exc:
         LOG.warning("source registry unavailable: %s", exc)
         return []
+
+
+def draft_verified_campaign_jobs(*, max_campaigns: int = 20, max_drafts: int = 10) -> dict[str, object]:
+    """Draft verified jobs using campaign CV facts; never approve or submit them."""
+    if os.environ.get("AUTO_DRAFT_ENABLED", "true").strip().lower() != "true":
+        return {"enabled": False, "drafted": 0, "held": 0, "errors": 0}
+    if not os.environ.get("GROQ_API_KEY", "").strip():
+        return {"enabled": True, "configuration": "groq_unavailable", "drafted": 0, "held": 0, "errors": 0}
+
+    drafted = held = errors = attempted = 0
+    for campaign in db.list_campaigns_with_status("active_readonly", limit=max_campaigns):
+        if attempted >= max_drafts:
+            break
+        try:
+            review_service = review_runtime.service_for_campaign(str(campaign["id"]))
+            queue = review_service.queue()
+        except Exception as exc:
+            errors += 1
+            db.add_campaign_event(
+                str(campaign["id"]),
+                "auto_draft_unavailable",
+                "warning",
+                "Automatic drafting could not initialize for this campaign.",
+                {"error_type": type(exc).__name__},
+            )
+            continue
+        for item in queue:
+            if attempted >= max_drafts:
+                break
+            if item.get("state") != "path_verified":
+                continue
+            attempted += 1
+            try:
+                rec = review_service.draft(
+                    str(item.get("source") or ""),
+                    str(item.get("posting_id") or ""),
+                    lang="en",
+                )
+                if rec.get("_state") == "drafted":
+                    drafted += 1
+                else:
+                    held += 1
+            except Exception as exc:
+                errors += 1
+                db.add_campaign_event(
+                    str(campaign["id"]),
+                    "auto_draft_failed",
+                    "warning",
+                    "A path-verified job could not be drafted and remains unsent.",
+                    {
+                        "source": item.get("source"),
+                        "posting_id": item.get("posting_id"),
+                        "error_type": type(exc).__name__,
+                    },
+                )
+    return {
+        "enabled": True,
+        "attempted": attempted,
+        "drafted": drafted,
+        "held": held,
+        "errors": errors,
+    }
 
 
 def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, object]:
@@ -40,8 +101,8 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
     db.initialize()
     released = db.recover_stale_outbox()
     db.record_service_health("database", "healthy", "SQLite schema initialized and writable")
-    db.record_service_health("auditor_gate", "healthy", "External execution remains fail-closed until Auditor approval")
-    db.record_service_health("external_execution", "disabled", "No source-specific upload proof is enabled")
+    db.record_service_health("auditor_gate", "healthy", "External execution remains fail-closed until automated Auditor and human approval")
+    db.record_service_health("external_execution", "disabled", "Portal submission requires explicit human approval")
     try:
         bayt = bayt_profile_adapter.queue_summary(db.DB_PATH)
         bayt_state = "browser_handoff_ready" if bayt.get("profile_ready") else "waiting_for_profile"
@@ -53,8 +114,6 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
     for source in registry_sources:
         db.ensure_source_health(source, "configured")
 
-    # Campaign discovery only reads public ATS listing APIs and writes durable job
-    # options/events. It cannot queue an email or submit a portal application.
     discovery_result = (
         campaign_discovery.run_active_campaign_discovery(fetch=True)
         if discover_campaigns
@@ -65,8 +124,21 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
         "healthy" if discovery_result.get("enabled") else "disabled",
         f"processed={discovery_result.get('processed', 0)} skipped_cooldown={discovery_result.get('skipped_cooldown', 0)}",
     )
-    # The sentinel only performs bounded HTTP GET observations against already
-    # discovered URLs. It has no browser, CV, outbox, or submit interface.
+
+    try:
+        draft_limit = max(1, min(25, int(os.environ.get("AUTO_DRAFT_MAX_PER_CYCLE", "10"))))
+    except ValueError:
+        draft_limit = 10
+    drafting_result = draft_verified_campaign_jobs(max_drafts=draft_limit)
+    drafting_status = "healthy" if drafting_result.get("enabled") and "configuration" not in drafting_result else "disabled"
+    db.record_service_health(
+        "human_review_drafting",
+        drafting_status,
+        f"drafted={drafting_result.get('drafted', 0)} held={drafting_result.get('held', 0)} errors={drafting_result.get('errors', 0)}",
+    )
+
+    # The sentinel only performs bounded HTTP GET observations against discovered
+    # URLs. It has no browser, CV, outbox, or submit interface.
     sentinel_result = portal_sentinel.run_registered_probes(registry_sources)
     db.record_service_health(
         "portal_sentinel",
@@ -105,6 +177,7 @@ def run_maintenance_cycle(*, discover_campaigns: bool = True) -> dict[str, objec
         "released_stale_outbox": released,
         "configured_sources": registry_sources,
         "campaign_discovery": discovery_result,
+        "review_drafting": drafting_result,
         "portal_sentinel": sentinel_result,
         "email_preparation": preparation_result,
         "email_dispatch": email_result,
@@ -120,7 +193,7 @@ def main() -> None:
     while True:
         try:
             run_maintenance_cycle()
-        except Exception as exc:  # one failed maintenance pass must not kill the worker
+        except Exception as exc:
             LOG.exception("maintenance cycle failed: %s", exc)
             try:
                 db.record_service_health("worker", "degraded", str(exc))
