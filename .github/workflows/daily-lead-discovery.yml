@@ -1,0 +1,111 @@
+name: Daily Saudi Lead Discovery
+
+on:
+  schedule:
+    # 08:15 Asia/Riyadh (UTC+3)
+    - cron: "15 5 * * *"
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - codex/daily-lead-discovery
+    paths:
+      - "lead_discovery/**"
+      - ".github/workflows/daily-lead-discovery.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-saudi-lead-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover-leads:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: lead_discovery/requirements.txt
+
+      - name: Install local open-source crawler stack
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r lead_discovery/requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Run unit tests
+        working-directory: lead_discovery
+        run: python -m unittest -v test_lead_scraper.py
+
+      - name: Discover fresh Saudi leads
+        run: |
+          python lead_discovery/lead_scraper.py \
+            --output lead_results/latest.csv \
+            --json-output lead_results/latest.json \
+            --timelimit d \
+            --max-per-query 5 \
+            --max-crawl-urls 40 \
+            --max-results 120 \
+            --minimum-score 6
+
+      - name: Verify output contract
+        run: |
+          python - <<'PY'
+          import csv
+          import json
+          from pathlib import Path
+
+          csv_path = Path("lead_results/latest.csv")
+          json_path = Path("lead_results/latest.json")
+          assert csv_path.exists(), "CSV output missing"
+          assert json_path.exists(), "JSON evidence output missing"
+          with csv_path.open(encoding="utf-8-sig", newline="") as handle:
+              reader = csv.reader(handle)
+              header = next(reader)
+              rows = list(reader)
+          assert header == ["Name", "Post Content", "Date", "Link"], header
+          evidence = json.loads(json_path.read_text(encoding="utf-8"))
+          assert evidence["lead_count"] == len(rows)
+          print(f"Verified {len(rows)} leads")
+          PY
+
+      - name: Write run summary
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import csv
+          import json
+          from collections import Counter
+          from pathlib import Path
+
+          print("## Saudi lead discovery")
+          path = Path("lead_results/latest.json")
+          if not path.exists():
+              print("The scraper did not produce its evidence file.")
+          else:
+              data = json.loads(path.read_text(encoding="utf-8"))
+              leads = data.get("leads", [])
+              print(f"- Leads: {len(leads)}")
+              print(f"- Sources: {dict(Counter(x.get('source', '') for x in leads))}")
+              print(f"- Locations: {dict(Counter(x.get('matched_location', '') for x in leads))}")
+          PY
+
+      - name: Upload daily lead files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: saudi-leads-${{ github.run_id }}
+          path: |
+            lead_results/latest.csv
+            lead_results/latest.json
+          if-no-files-found: error
+          retention-days: 30
