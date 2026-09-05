@@ -26,6 +26,8 @@ jobs:
         run: python check_submission_gate.py
       - name: Run approval gate tests
         run: pytest test_approval_gate.py -v
+      - name: Run durable submission runtime tests
+        run: pytest test_submission_runtime.py -v
       - name: Run full pytest suite
         run: pytest -q
       - name: Run legacy unittest discovery
