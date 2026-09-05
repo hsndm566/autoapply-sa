@@ -1,4 +1,4 @@
-"""Offline tests for Auditor-gated durable Gmail application dispatch."""
+"""Offline tests for human + Auditor gated durable application dispatch."""
 from __future__ import annotations
 
 import os
@@ -10,6 +10,7 @@ from unittest.mock import patch
 import auditor
 import db
 import email_dispatcher
+from draft_review import approve_draft
 from warmup_config import SCHEDULED_DELIVERY_ENVIRONMENT_FLAG, SCHEDULED_DELIVERY_SCOPE, WARMUP_ENVIRONMENT_FLAG, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
 
 
@@ -64,11 +65,39 @@ class EmailDispatcherTests(unittest.TestCase):
             "submission": {"channel": "email", "mode": "live", "cv_transport": "email_attachment"},
         }
 
+    def human_approval(self, package: dict) -> dict:
+        job = dict(package.get("job") or {})
+        destination = dict(package.get("destination") or {})
+        rec = {
+            "source": "email",
+            "posting_id": str(package.get("application_id") or "test-email"),
+            "company": str(job.get("company") or ""),
+            "title": str(job.get("role") or job.get("title") or ""),
+            "job_url": str(job.get("url") or ""),
+            "_campaign_id": self.campaign_id,
+            "_path": "direct_email",
+            "_state": "drafted",
+            "_draft": {
+                "cover_letter": str(package.get("draft") or ""),
+                "subject": str(destination.get("subject") or ""),
+                "flagged_claims": [],
+                "approved_by": None,
+                "approved_at": None,
+                "approval_digest": None,
+            },
+        }
+        return approve_draft(rec, approved_by="test-human")
+
     def queue_valid_action(self) -> str:
         package = self.package()
         decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
         self.assertTrue(decision.approved, decision.summary)
-        action_id, added = email_dispatcher.queue_audited_email_application(self.campaign_id, package, decision.approval_token)
+        action_id, added = email_dispatcher.queue_audited_email_application(
+            self.campaign_id,
+            package,
+            decision.approval_token,
+            human_approval_record=self.human_approval(package),
+        )
         self.assertTrue(added)
         return action_id
 
@@ -124,7 +153,12 @@ class EmailDispatcherTests(unittest.TestCase):
         })
         decision = auditor.audit_application(package["application_id"], package, require_ai_review=False)
         self.assertTrue(decision.approved, decision.summary)
-        action_id, added = email_dispatcher.queue_audited_email_application(self.campaign_id, package, decision.approval_token)
+        action_id, added = email_dispatcher.queue_audited_email_application(
+            self.campaign_id,
+            package,
+            decision.approval_token,
+            human_approval_record=self.human_approval(package),
+        )
         self.assertTrue(added)
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
         os.environ[WARMUP_ENVIRONMENT_FLAG] = "true"
@@ -226,6 +260,7 @@ class EmailDispatcherTests(unittest.TestCase):
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
         os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
         os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+
         def failing_send(_message, _sender, _password):
             raise TimeoutError("SMTP timed out")
 
@@ -237,7 +272,25 @@ class EmailDispatcherTests(unittest.TestCase):
 
     def test_queue_rejects_a_package_without_current_auditor_approval(self) -> None:
         with self.assertRaises(PermissionError):
-            email_dispatcher.queue_audited_email_application(self.campaign_id, self.package(), "not-an-approval")
+            email_dispatcher.queue_audited_email_application(
+                self.campaign_id,
+                self.package(),
+                "not-an-approval",
+                human_approval_record=self.human_approval(self.package()),
+            )
+
+    def test_queue_rejects_human_approval_for_different_content(self) -> None:
+        package = self.package()
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        approval = self.human_approval(package)
+        changed = dict(package, draft="Different letter after human approval")
+        with self.assertRaises(PermissionError):
+            email_dispatcher.queue_audited_email_application(
+                self.campaign_id,
+                changed,
+                decision.approval_token,
+                human_approval_record=approval,
+            )
 
 
 if __name__ == "__main__":
