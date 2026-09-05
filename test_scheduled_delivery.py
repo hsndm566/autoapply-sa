@@ -11,6 +11,7 @@ from pathlib import Path
 
 import auditor
 import run_scheduled_delivery as scheduled
+from warmup_config import WARMUP_CLIENTS
 
 
 class ScheduledDeliveryTests(unittest.TestCase):
@@ -36,6 +37,10 @@ class ScheduledDeliveryTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    def client(self, client_id: int, cv_file: str) -> dict[str, str]:
+        fixture = WARMUP_CLIENTS[client_id]
+        return {"client_name": fixture["client_name"], "sender_email": fixture["sender_email"], "cv_file": cv_file}
 
     def test_glitchtip_initialization_is_disabled_without_dsn(self) -> None:
         with patch.dict("os.environ", {}, clear=True):
@@ -67,8 +72,8 @@ class ScheduledDeliveryTests(unittest.TestCase):
         (self.root / "client2.pdf").write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
         (self.root / "client3.pdf").write_bytes(b"not a pdf")
         clients = {
-            2: {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": "client2.pdf"},
-            3: {"client_name": "Amro Alkabeer", "sender_email": "apply2@hsndm.tech", "cv_file": "client3.pdf"},
+            2: self.client(2, "client2.pdf"),
+            3: self.client(3, "client3.pdf"),
         }
 
         deliverable, blocked_clients = scheduled.deliverable_active_clients(clients, self.root)
@@ -85,7 +90,7 @@ class ScheduledDeliveryTests(unittest.TestCase):
         cv = self.root / "client2.pdf"
         cv.write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
         selected, _ = scheduled.select_jobs(self.root / "jobs.csv", set())
-        client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
+        client = self.client(2, cv.name)
         package = scheduled.build_package(next(job for job in selected if job["client_id"] == 2), client, self.root)
         self.assertEqual([], auditor.deterministic_review(package))
 
@@ -100,7 +105,7 @@ class ScheduledDeliveryTests(unittest.TestCase):
             "city": "Jeddah",
             "client_id": 2,
         }
-        client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
+        client = self.client(2, cv.name)
         package = scheduled.build_package(job, client, self.root)
         ready = [(
             job,
