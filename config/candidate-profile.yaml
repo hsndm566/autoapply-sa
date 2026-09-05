@@ -1,20 +1,15 @@
-candidate:
-  name: "Hasan Adam"
-  location: "Jeddah, Saudi Arabia"
-  languages: ["English", "Arabic"]
-  current_role: "Governance Intern"
-  background: ["Industrial Engineering", "Automation", "Lean Six Sigma"]
+candidate: {}
 
 targeting:
   geography:
     allowed: ["Saudi Arabia", "KSA", "المملكة العربية السعودية"]
-    cities: ["Jeddah", "Riyadh", "Dammam", "Al Khobar", "Makkah", 
+    cities: ["Jeddah", "Riyadh", "Dammam", "Al Khobar", "Makkah",
              "Madinah", "Yanbu", "Jubail", "Tabuk", "Abha"]
     remote: "KSA-only remote accepted, global remote rejected"
     reject_if_outside_ksa: true
 
   seniority:
-    allowed: 
+    allowed:
       - "Entry Level"
       - "Junior"
       - "Graduate"
@@ -53,8 +48,7 @@ targeting:
       - "Indeed"
     flag_for_manual_review:
       - "Workday (non-KSA companies)"
-    reason: "Skipping heavy CAPTCHA sites (Bayt, LinkedIn, Indeed).
-             Focusing on low-friction KSA-specific portals and direct pages."
+    reason: "Skipping heavy CAPTCHA sites. Focusing on low-friction KSA-specific portals and direct pages."
 
   industries:
     preferred:
@@ -83,16 +77,8 @@ execution:
   delay_between_applications_seconds: [45, 120]
   captcha_behavior: "pause_and_flag"
   on_unknown_field: "flag_for_manual_review"
-  
-  form_defaults:
-    gender: "Male"
-    nationality: "Saudi Arabian"
-    driving_license: "Yes"
-    notice_period: "Immediately available"
-    expected_salary: "negotiable"
-    years_of_experience: "0-2"
-    willing_to_relocate: "Yes, within KSA"
-    cover_letter: "generate_from_cv_and_jd"
+
+  form_defaults: {}
 
   stop_conditions:
     - "more than 15 bounces in email batch"
