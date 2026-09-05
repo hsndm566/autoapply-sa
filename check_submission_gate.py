@@ -82,6 +82,7 @@ def main() -> None:
         "clients.csv",
         "clients",
         "cvs",
+        "jobs.csv",
         "hasan_profile.json",
         "email_outreach_pending.csv",
         "tracking.csv",
