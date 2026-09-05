@@ -14,3 +14,7 @@ respond within 1 hour of posting — speed wins on these platforms.
   - [Khamsat] الذكاء الاصطناعي والبرمجة: كيف تواكب السوق كمطور؟ | cats=['technical']
     PROPOSAL(AR): السلام عليكم ورحمة الله وبركاته. أرى طلبكم بخصوص: الذكاء الاصطناعي والبرمجة: كيف تواكب السوق كمطور؟. أنا مستعد لتنفيذ المهمة بدقة واحترافية ضمن الوقت المطلوب (التصنيف: technical). لدي خبرة في هذا النوع من الأعمال وأسلّم العمل سريعاً بجودة عالية. هل يمكنكم تأكيد التفاصيل والميزانية لنبدأ فوراً؟ وجزاكم الله خيراً.
 - SPEED RULE: respond <1h of posting (speed wins on Khamsat/Mostaql).
+
+## 2026-09-05 — ARABIC FREELANCE SCAN
+- gigs matched: 0
+- SPEED RULE: respond <1h of posting (speed wins on Khamsat/Mostaql).
