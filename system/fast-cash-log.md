@@ -13,3 +13,14 @@ _Tracks: Mostaql/Khamsat (verified Saudi), Remotasks (likely), Clickworker/Tolok
   - Toloka: eligible=UNVERIFIED live=False pay=PayPal/Skrill
   - DataAnnotation: eligible=UNVERIFIED live=True pay=PayPal (US-heavy, often rejects non-US)
   - Mturk: eligible=BLOCKED live=True pay=US-only
+
+## 2026-09-05 — FAST-CASH SCAN
+- ACTION (DEFAULT): DEFAULT: post a Khamsat CV/Excel gig today (Saudi-native, instant payout). No verified-live listing confirmed this run.
+- Community leads: r/forhire (live scan hit — owner reviews + replies), r/slavelabour (live scan hit — owner reviews + replies), r/freelance (live scan hit — owner reviews + replies)
+  - Khamsat: eligible=VERIFIED live=False pay=instant platform payout
+  - Mostaql: eligible=VERIFIED live=False pay=instant platform payout
+  - Remotasks: eligible=LIKELY live=True pay=weekly PayPal/AirTM
+  - Clickworker: eligible=UNVERIFIED live=True pay=PayPal (Saudi PayPal exists but geo-restricted)
+  - Toloka: eligible=UNVERIFIED live=False pay=PayPal/Skrill
+  - DataAnnotation: eligible=UNVERIFIED live=True pay=PayPal (US-heavy, often rejects non-US)
+  - Mturk: eligible=BLOCKED live=True pay=US-only
