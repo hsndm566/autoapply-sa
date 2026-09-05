@@ -55,6 +55,32 @@ def approved() -> dict:
     return rec
 
 
+def approved_email() -> dict:
+    rec = {
+        "source": "email",
+        "posting_id": "email-app-1",
+        "company": "Example Co",
+        "title": "Operations Analyst",
+        "job_url": "https://example.test/jobs/email-1",
+        "_campaign_id": "campaign-1",
+        "_path": "direct_email",
+        "_state": "drafted",
+        "_draft": {
+            "cover_letter": "I have four years of inventory planning and advanced Excel experience.",
+            "subject": "Operations Analyst application",
+            "flagged_claims": [],
+            "approved_by": None,
+            "approved_at": None,
+        },
+        "_raw": {
+            "contact_id": "contact-1",
+            "application_id": "email-app-1",
+            "recipient": "recruiter@example.test",
+        },
+    }
+    return approve_draft(rec, approved_by="campaign-owner")
+
+
 class FakeStore:
     def __init__(self, rec: dict):
         self.rec = rec
@@ -193,3 +219,45 @@ def test_missing_candidate_artifact_fails_before_adapter(monkeypatch):
     with pytest.raises(ValueError):
         submission_runtime.submit_approved("campaign-1", "greenhouse", "jobhash-1")
     assert calls == []
+
+
+def test_approved_email_is_queued_with_exact_human_record(monkeypatch):
+    rec = approved_email()
+    store = FakeStore(rec)
+    calls: list[dict] = []
+    monkeypatch.setattr(submission_runtime, "CampaignReviewStore", lambda _campaign_id: store)
+
+    def queue_email(campaign_id, contact_id, **kwargs):
+        calls.append({"campaign_id": campaign_id, "contact_id": contact_id, **kwargs})
+        return {"queued": True, "outbox_id": "outbox-1", "audit_status": "approved"}
+
+    monkeypatch.setattr(submission_runtime.campaign_email, "prepare_audited_campaign_email", queue_email)
+    result = submission_runtime.submit_approved("campaign-1", "email", "email-app-1")
+    assert result["status"] == "queued_for_delivery"
+    assert result["outbox_id"] == "outbox-1"
+    assert calls[0]["human_approval_record"]["_draft"]["approval_digest"]
+    assert store.rec["_submission_intent"]["outbox_id"] == "outbox-1"
+
+
+def test_email_submit_cannot_be_queued_twice(monkeypatch):
+    rec = approved_email()
+    rec["_submission_intent"] = {"channel": "email", "outbox_id": "outbox-1", "queued_at": "now"}
+    store = FakeStore(rec)
+    monkeypatch.setattr(submission_runtime, "CampaignReviewStore", lambda _campaign_id: store)
+    with pytest.raises(SubmissionRefused):
+        submission_runtime.submit_approved("campaign-1", "email", "email-app-1")
+
+
+def test_email_auditor_rejection_returns_to_review(monkeypatch):
+    rec = approved_email()
+    store = FakeStore(rec)
+    monkeypatch.setattr(submission_runtime, "CampaignReviewStore", lambda _campaign_id: store)
+    monkeypatch.setattr(
+        submission_runtime.campaign_email,
+        "prepare_audited_campaign_email",
+        lambda *a, **k: {"queued": False, "audit_status": "rejected", "findings": ["DRAFT_PLACEHOLDER"]},
+    )
+    result = submission_runtime.submit_approved("campaign-1", "email", "email-app-1")
+    assert result["status"] == "needs_review"
+    assert result["hold_reason"] == "email_audit_rejected"
+    assert store.rec["_state"] == "needs_review"
