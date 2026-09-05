@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Campaign-scoped durable storage for approval records.
-
-Kept separate from ``db.py`` so the approval subsystem can be added without
-rewriting the existing database module. Uses the same SQLite connection and
-foreign-keyed campaign ledger.
-"""
+"""Campaign-scoped durable storage for approval records."""
 from __future__ import annotations
 
 import json
@@ -36,12 +31,55 @@ def _ensure_schema() -> None:
         c.commit()
 
 
+def seed_from_campaign_job(campaign_id: str, campaign_job: dict[str, Any]) -> dict[str, Any]:
+    source = str(campaign_job.get("source") or "unknown")
+    posting_id = str(campaign_job.get("id") or campaign_job.get("job_hash") or "")
+    path_state = str(campaign_job.get("path_state") or "portal_complex")
+    draftable = path_state in {"direct_email", "portal_upload_verified"}
+    return {
+        "source": source,
+        "employer_key": str(campaign_job.get("company") or "").casefold().replace(" ", "-")[:120],
+        "posting_id": posting_id,
+        "company": str(campaign_job.get("company") or ""),
+        "title": str(campaign_job.get("title") or ""),
+        "location": str(campaign_job.get("location") or ""),
+        "employment_type": "Unknown",
+        "job_url": str(campaign_job.get("job_url") or ""),
+        "apply_url": str(campaign_job.get("job_url") or ""),
+        "description": "",
+        "application_mode": "email" if path_state == "direct_email" else "portal",
+        "required_fields": [],
+        "_state": "path_verified" if draftable else "needs_review",
+        "_path": path_state,
+        "_review": None if draftable else {"reason": "path_not_draftable", "detail": path_state, "at": ""},
+        "_raw": {"campaign_job_id": campaign_job.get("id")},
+        "_campaign_id": campaign_id,
+    }
+
+
 class CampaignReviewStore:
     def __init__(self, campaign_id: str) -> None:
         if not campaign_id:
             raise ValueError("campaign_id is required")
         self.campaign_id = campaign_id
         _ensure_schema()
+
+    def sync_campaign_jobs(self) -> int:
+        """Seed review records for discovered campaign jobs without overwriting review work."""
+        with db.connection() as c:
+            rows = c.execute(
+                "SELECT id,job_hash,source,company,title,location,job_url,path_state,status FROM campaign_jobs WHERE campaign_id=?",
+                (self.campaign_id,),
+            ).fetchall()
+        created = 0
+        for row in rows:
+            job = dict(row)
+            rec = seed_from_campaign_job(self.campaign_id, job)
+            if self.get_record(rec["source"], rec["posting_id"]) is not None:
+                continue
+            self.save_record(rec)
+            created += 1
+        return created
 
     def list_records(self) -> list[dict[str, Any]]:
         with db.connection() as c:
@@ -121,31 +159,6 @@ class CampaignReviewStore:
                     "approval_digest": (stored.get("_draft") or {}).get("approval_digest"),
                 },
             )
-
-
-def seed_from_campaign_job(campaign_id: str, campaign_job: dict[str, Any]) -> dict[str, Any]:
-    """Convert an existing campaign job row into the canonical review record once."""
-    source = str(campaign_job.get("source") or "unknown")
-    posting_id = str(campaign_job.get("id") or campaign_job.get("job_hash") or "")
-    path_state = str(campaign_job.get("path_state") or "portal_complex")
-    return {
-        "source": source,
-        "employer_key": str(campaign_job.get("company") or "").casefold().replace(" ", "-")[:120],
-        "posting_id": posting_id,
-        "company": str(campaign_job.get("company") or ""),
-        "title": str(campaign_job.get("title") or ""),
-        "location": str(campaign_job.get("location") or ""),
-        "employment_type": "Unknown",
-        "job_url": str(campaign_job.get("job_url") or ""),
-        "apply_url": str(campaign_job.get("job_url") or ""),
-        "description": str(campaign_job.get("description") or ""),
-        "application_mode": "email" if path_state == "direct_email" else "portal",
-        "required_fields": [],
-        "_state": "path_verified" if path_state in {"direct_email", "portal_upload_verified"} else "needs_review",
-        "_path": path_state,
-        "_raw": {"campaign_job_id": campaign_job.get("id")},
-        "_campaign_id": campaign_id,
-    }
 
 
 __all__ = ["CampaignReviewStore", "seed_from_campaign_job"]
