@@ -2,14 +2,14 @@
 """Framework-neutral human review service.
 
 The public HTTP service in this repo uses ``http.server`` rather than Flask or
-FastAPI. ``ReviewService`` is therefore the stable interface and ``service.py``
-mounts routes directly around it.
+FastAPI. ``ReviewService`` is therefore the stable interface and the service
+adapter mounts routes directly around it.
 """
 from __future__ import annotations
 
 from typing import Any, Protocol
 
-from draft_review import approve_draft, build_draft, pending_review, reject_draft
+from draft_review import approve_draft, build_draft, reject_draft
 from submit_gate import refusal_reason
 
 
@@ -26,8 +26,19 @@ class ReviewService:
         self.profile_loader = profile_loader
 
     def queue(self) -> list[dict[str, Any]]:
+        """Return everything requiring human attention, including draftable jobs."""
+        records = [
+            rec for rec in self.store.list_records()
+            if rec.get("_state") in {"path_verified", "drafted", "needs_review"}
+        ]
+        records.sort(
+            key=lambda r: (r.get("_review") or {}).get("at")
+            or (r.get("_draft") or {}).get("drafted_at")
+            or "",
+            reverse=True,
+        )
         items: list[dict[str, Any]] = []
-        for rec in pending_review(self.store.list_records()):
+        for rec in records:
             draft = rec.get("_draft") or {}
             review = rec.get("_review") or {}
             items.append(
@@ -66,6 +77,8 @@ class ReviewService:
         if lang not in {"en", "ar"}:
             raise ValueError("lang must be 'en' or 'ar'")
         rec = self._require(source, posting_id)
+        if rec.get("_state") not in {"path_verified", "needs_review"}:
+            raise ValueError(f"cannot draft from state {rec.get('_state')!r}")
         profile = self.profile_loader(rec)
         out = build_draft(rec, profile, self.complete, lang=lang)
         self.store.save_record(out)
