@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer
 from urllib.parse import unquote, urlparse
@@ -59,10 +58,6 @@ class ApprovalAutoApplyHandler(service.AutoApplyHandler):
         path = urlparse(self.path).path.rstrip("/") or "/"
         parts = _parts(path)
         # /v1/campaigns/{campaign_id}/review/{source}/{posting_id}/{action}
-        if len(parts) == 8 and parts[:2] == ["v1", "campaigns"] and parts[3] == "review":
-            campaign_id, source, posting_id, action = parts[2], parts[4], parts[5], parts[6]
-            # Accept the canonical 7-segment route below. The length check above
-            # is retained only to reject malformed paths with an extra segment.
         if len(parts) == 7 and parts[:2] == ["v1", "campaigns"] and parts[3] == "review":
             campaign_id, source, posting_id, action = parts[2], parts[4], parts[5], parts[6]
             if action not in {"draft", "approve", "reject"}:
@@ -79,8 +74,8 @@ class ApprovalAutoApplyHandler(service.AutoApplyHandler):
                     self._send({"ok": True, "state": rec.get("_state"), "record": rec})
                     return
                 if action == "approve":
-                    # Actor is derived from the authenticated campaign context.
-                    # Any approved_by field supplied by a client is deliberately ignored.
+                    # Actor comes from authenticated campaign context. Any
+                    # approved_by field supplied by a client is ignored.
                     rec = review_service.approve(
                         source,
                         posting_id,
@@ -129,8 +124,6 @@ def build_server(port: int = service.PORT) -> ThreadingHTTPServer:
 
 def main() -> None:
     # Reuse the existing boot sequence, scheduler, maintenance and health logic.
-    # service.main() resolves build_server at runtime, so replacing it here changes
-    # only the HTTP handler class without duplicating the service lifecycle.
     service.build_server = build_server
     service.main()
 
