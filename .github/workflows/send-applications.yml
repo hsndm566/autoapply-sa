@@ -1,20 +1,13 @@
-name: AutoApply SA scheduled review preparation
+name: Legacy application delivery guard
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
-    - cron: "0 18 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: autoapply-review-preflight
-  cancel-in-progress: false
-
 jobs:
-  prepare-review:
+  verify-retired-path:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -25,39 +18,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Verify approval chokepoints
+        run: python check_submission_gate.py
 
-      - name: Prepare bounded application batch for human review
-        env:
-          GLITCHTIP_DSN: ${{ secrets.GLITCHTIP_DSN }}
-          ENABLE_EMAIL_PERSONALIZATION: "false"
-          EMAIL_OUTREACH_ENABLED: "false"
-          AUTOAPPLY_SCHEDULED_DELIVERY: "false"
-        run: python scheduled_review_preflight.py
-
-  monitor-success:
-    name: Signal review-preflight success
-    needs: [prepare-review]
-    if: ${{ needs.prepare-review.result == 'success' }}
-    runs-on: ubuntu-latest
-    env:
-      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
-    steps:
-      - name: Ping Healthchecks.io when configured
-        if: ${{ env.HEALTHCHECKS_URL != '' }}
-        continue-on-error: true
-        run: curl --fail --silent --show-error --max-time 10 --retry 3 "$HEALTHCHECKS_URL"
-
-  monitor-failure:
-    name: Signal review-preflight failure
-    needs: [prepare-review]
-    if: ${{ always() && needs.prepare-review.result == 'failure' }}
-    runs-on: ubuntu-latest
-    env:
-      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
-    steps:
-      - name: Ping Healthchecks.io failure endpoint when configured
-        if: ${{ env.HEALTHCHECKS_URL != '' }}
-        continue-on-error: true
-        run: curl --fail --silent --show-error --max-time 10 --retry 3 "${HEALTHCHECKS_URL%/}/fail"
+      - name: Confirm legacy delivery remains disabled
+        run: |
+          test ! -f clients.csv
+          test ! -d cvs
+          echo "Legacy file-backed sender is retired. Production campaign discovery/review runs through the service datastore."
