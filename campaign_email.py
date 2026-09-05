@@ -1,8 +1,8 @@
-"""Prepare individualized campaign email intents for verified outreach contacts.
+"""Prepare individualized campaign email intents behind human + Auditor approval.
 
-This bridge does not write copy or send mail. A caller supplies one tailored draft
-for an explicit campaign, recruiter contact, and job context. The immutable package
-is then approved by the independent Auditor before it can enter the email outbox.
+This bridge does not write copy or send mail. A caller supplies one exact human-
+approved draft for an explicit campaign, verified recruiter contact, and job context.
+The immutable package is re-audited before it can enter the email outbox.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from typing import Any
 import auditor
 import db
 import email_dispatcher
+from submit_gate import guard
 
 
 def _campaign_package(
@@ -35,7 +36,7 @@ def _campaign_package(
             "full_name": str(campaign.get("candidate_name") or ""),
             "email": str(campaign.get("candidate_email") or ""),
             "cv_path": str(campaign.get("cv_path") or ""),
-            "cv_text": "",  # candidate facts may be added by an approved drafting stage; never infer them here.
+            "cv_text": "",
         },
         "draft": draft,
         "destination": {
@@ -54,15 +55,17 @@ def prepare_audited_campaign_email(
     application_id: str,
     job: Mapping[str, Any],
     draft: str,
-    subject: str = "",
+    subject: str,
+    human_approval_record: Mapping[str, Any],
+    campaign_job_id: str | None = None,
     ai_reviewer: Callable[[str, Mapping[str, Any]], Mapping[str, Any]] | None = None,
     require_ai_review: bool = True,
 ) -> dict[str, Any]:
-    """Audit and queue one campaign email for a single verified contact.
+    """Audit and queue one exact human-approved campaign email.
 
-    The caller must provide the tailored draft; this method neither generates nor
-    repairs application language. Any missing evidence, invalid CV, unavailable AI
-    review, unverified contact, or repeated campaign-contact pair is a stop.
+    Human approval is mandatory here rather than deferred to transport so no
+    unapproved intent can accumulate in the durable outbox. The dispatcher still
+    repeats the same gate check immediately before provider transport.
     """
     campaign = db.get_campaign(campaign_id)
     if not campaign:
@@ -70,6 +73,12 @@ def prepare_audited_campaign_email(
     contact = db.get_outreach_contact(contact_id)
     if not contact or contact.get("status") != "verified":
         raise PermissionError("only verified contacts may receive campaign application email")
+
+    approval = dict(human_approval_record or {})
+    guard(approval)
+    if str(approval.get("_campaign_id") or "") != str(campaign_id):
+        raise PermissionError("human approval belongs to a different campaign")
+
     package = _campaign_package(
         campaign,
         contact,
@@ -78,6 +87,10 @@ def prepare_audited_campaign_email(
         draft=draft,
         subject=subject,
     )
+    # Bind approval to the exact draft, subject, company and role before the
+    # independent Auditor spends any model capacity.
+    email_dispatcher._assert_review_matches_package(approval, package)
+
     reviewer = ai_reviewer or auditor.configured_ai_reviewer
     decision = auditor.audit_application(
         application_id,
@@ -90,19 +103,20 @@ def prepare_audited_campaign_email(
             campaign_id,
             "email_application_audit_rejected",
             "warning",
-            "Campaign email was not queued because the Auditor rejected its application package.",
+            "Human-approved campaign email was not queued because the Auditor rejected its exact package.",
             {"contact_id": contact_id, "application_id": application_id, "findings": [finding.code for finding in decision.findings]},
         )
         return {"queued": False, "audit_status": decision.status, "findings": [finding.code for finding in decision.findings]}
+
     outbox_id, added = email_dispatcher.queue_audited_email_application(
         campaign_id,
         package,
         decision.approval_token,
+        campaign_job_id=campaign_job_id,
+        human_approval_record=approval,
     )
     if not added:
         return {"queued": False, "audit_status": decision.status, "reason": "duplicate_application_intent", "outbox_id": outbox_id}
-    # Reserve only after a successful, idempotent queue insert. A duplicate reserve
-    # forces the action terminally blocked rather than sending a second email.
     if not db.reserve_campaign_contact(campaign_id, contact_id, outbox_id=outbox_id):
         db.block_action(outbox_id, "CAMPAIGN_CONTACT_ALREADY_RESERVED")
         return {"queued": False, "audit_status": decision.status, "reason": "campaign_contact_already_reserved", "outbox_id": outbox_id}
@@ -110,7 +124,7 @@ def prepare_audited_campaign_email(
         campaign_id,
         "email_application_queued",
         "info",
-        "An Auditor-approved CV-attached application email was queued for controlled delivery.",
+        "A human-approved and Auditor-approved CV-attached application email was queued for controlled delivery.",
         {"contact_id": contact_id, "application_id": application_id, "outbox_id": outbox_id},
     )
     return {"queued": True, "audit_status": decision.status, "outbox_id": outbox_id, "contact_id": contact_id}
