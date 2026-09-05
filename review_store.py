@@ -100,18 +100,40 @@ class CampaignReviewStore:
         return out
 
     def get_record(self, source: str, posting_id: str) -> dict[str, Any] | None:
+        """Resolve by canonical posting id, with campaign-job-id compatibility.
+
+        Review URLs expose the stable deterministic ``posting_id``. Existing
+        internal callers may still hold the generated ``campaign_jobs.id`` UUID,
+        so we accept that UUID as an alias without changing the canonical record.
+        """
+        clean_source = str(source)
+        clean_posting_id = str(posting_id)
         with db.connection() as c:
             row = c.execute(
                 "SELECT record_json FROM application_reviews WHERE campaign_id=? AND source=? AND posting_id=?",
-                (self.campaign_id, str(source), str(posting_id)),
+                (self.campaign_id, clean_source, clean_posting_id),
             ).fetchone()
-        if row is None:
-            return None
-        try:
-            rec = json.loads(row["record_json"])
-        except (TypeError, json.JSONDecodeError):
-            return None
-        return rec if isinstance(rec, dict) else None
+            if row is None:
+                rows = c.execute(
+                    "SELECT record_json FROM application_reviews WHERE campaign_id=? AND source=?",
+                    (self.campaign_id, clean_source),
+                ).fetchall()
+            else:
+                rows = [row]
+
+        for candidate in rows:
+            try:
+                rec = json.loads(candidate["record_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(rec, dict):
+                continue
+            if str(rec.get("posting_id") or "") == clean_posting_id:
+                return rec
+            raw = rec.get("_raw") or {}
+            if str(raw.get("campaign_job_id") or "") == clean_posting_id:
+                return rec
+        return None
 
     def save_record(self, rec: dict[str, Any]) -> None:
         source = str(rec.get("source") or "").strip()
