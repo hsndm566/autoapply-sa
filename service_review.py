@@ -71,12 +71,11 @@ class ApprovalAutoApplyHandler(service.AutoApplyHandler):
             review_service, actor = context
             try:
                 if action == "submit":
-                    # Authentication and campaign ownership were checked above.
-                    # The runtime reloads the persisted record and re-runs the
-                    # fail-closed gate before any adapter can touch an employer.
                     result = submission_runtime.submit_approved(campaign_id, source, posting_id)
-                    code = HTTPStatus.OK if result.get("status") == "submitted_verified" else HTTPStatus.CONFLICT
-                    self._send({"ok": result.get("status") == "submitted_verified", "result": result}, code)
+                    status = str(result.get("status") or "")
+                    success = status in {"submitted_verified", "queued_for_delivery"}
+                    code = HTTPStatus.OK if status == "submitted_verified" else HTTPStatus.ACCEPTED if status == "queued_for_delivery" else HTTPStatus.CONFLICT
+                    self._send({"ok": success, "result": result}, code)
                     return
 
                 body = self._read_json()
@@ -85,8 +84,6 @@ class ApprovalAutoApplyHandler(service.AutoApplyHandler):
                     self._send({"ok": True, "state": rec.get("_state"), "record": rec})
                     return
                 if action == "approve":
-                    # Actor comes from authenticated campaign context. Any
-                    # approved_by field supplied by a client is ignored.
                     rec = review_service.approve(
                         source,
                         posting_id,
@@ -100,6 +97,7 @@ class ApprovalAutoApplyHandler(service.AutoApplyHandler):
                             "state": rec.get("_state"),
                             "approved_by": actor,
                             "approval_digest": (rec.get("_draft") or {}).get("approval_digest"),
+                            "ready_to_submit": True,
                         }
                     )
                     return
@@ -143,7 +141,6 @@ def build_server(port: int = service.PORT) -> ThreadingHTTPServer:
 
 
 def main() -> None:
-    # Reuse the existing boot sequence, scheduler, maintenance and health logic.
     service.build_server = build_server
     service.main()
 
