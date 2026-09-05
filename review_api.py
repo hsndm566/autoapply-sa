@@ -26,13 +26,25 @@ class ReviewService:
         self.profile_loader = profile_loader
 
     def queue(self) -> list[dict[str, Any]]:
-        """Return everything requiring human attention, including draftable jobs."""
+        """Return records requiring a human action.
+
+        ``audit_approved`` stays visible until the person explicitly presses
+        submit. An email that has already been queued for provider delivery is
+        removed from this action queue through ``_submission_intent``.
+        """
         records = [
             rec for rec in self.store.list_records()
-            if rec.get("_state") in {"path_verified", "drafted", "needs_review"}
+            if (
+                rec.get("_state") in {"path_verified", "drafted", "needs_review"}
+                or (
+                    rec.get("_state") == "audit_approved"
+                    and not rec.get("_submission_intent")
+                )
+            )
         ]
         records.sort(
             key=lambda r: (r.get("_review") or {}).get("at")
+            or (r.get("_draft") or {}).get("approved_at")
             or (r.get("_draft") or {}).get("drafted_at")
             or "",
             reverse=True,
@@ -41,6 +53,7 @@ class ReviewService:
         for rec in records:
             draft = rec.get("_draft") or {}
             review = rec.get("_review") or {}
+            blocker = refusal_reason(rec)
             items.append(
                 {
                     "source": rec.get("source"),
@@ -58,9 +71,12 @@ class ReviewService:
                     "gaps": draft.get("gaps", []),
                     "cv_highlights": draft.get("cv_highlights", []),
                     "flagged_claims": draft.get("flagged_claims", []),
+                    "approved_by": draft.get("approved_by"),
+                    "approved_at": draft.get("approved_at"),
                     "hold_reason": review.get("reason"),
                     "hold_detail": review.get("detail"),
-                    "blocker": refusal_reason(rec),
+                    "blocker": blocker,
+                    "ready_to_submit": rec.get("_state") == "audit_approved" and blocker is None,
                 }
             )
         return items
