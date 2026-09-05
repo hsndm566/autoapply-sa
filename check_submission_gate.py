@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Static CI check for known employer-facing approval bypasses.
+"""Static CI check for employer-facing approval bypasses.
 
-This is intentionally narrow. It protects the current submission boundaries and
-forces reviewers to update the allowlist when a new live sender is introduced.
+The check is intentionally fail-closed. Adding a new live sender, portal adapter,
+or scheduled delivery path requires an explicit code-review change here.
 """
 from __future__ import annotations
 
@@ -46,13 +46,38 @@ def main() -> None:
     if "mark_submitted(" not in email:
         fail("email dispatcher does not validate provider evidence through mark_submitted")
 
+    runtime = text("submission_runtime.py")
+    if "guard(rec)" not in runtime:
+        fail("submission runtime does not reload and guard the persisted record")
+    if "store.save_record(submitted)" not in runtime:
+        fail("submission runtime does not persist submitted_verified back to the review ledger")
+
     loop = text("autonomous_loop.py")
-    forbidden = ("submit_greenhouse(", "submit_lever(", "submit_ashby(")
+    forbidden = ("submit_greenhouse(", "submit_lever(", "submit_ashby(", "submit_application(")
     for token in forbidden:
         if token in loop:
             fail(f"autonomous_loop.py still contains direct legacy submission call {token}")
     if "approve_draft(" in loop:
         fail("autonomous_loop.py is not allowed to approve its own drafts")
+
+    scheduled = text(".github/workflows/send-applications.yml")
+    if "scheduled_review_preflight.py" not in scheduled:
+        fail("scheduled workflow is not routed to review-only preflight")
+    for token in (
+        'EMAIL_OUTREACH_ENABLED: "true"',
+        'AUTOAPPLY_SCHEDULED_DELIVERY: "true"',
+        "python run_scheduled_delivery.py",
+        "BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}",
+    ):
+        if token in scheduled:
+            fail(f"scheduled workflow contains live-delivery capability: {token}")
+
+    # Legacy code may still import protected adapters, but the adapters themselves
+    # must be impossible to call with URL-only arguments. This blocks old scripts
+    # from becoming an alternate employer-facing route.
+    for filename in ("greenhouse_submit.py", "lever_submit.py", "ashby_submit.py"):
+        if "rec: dict[str, Any]" not in text(filename):
+            fail(f"{filename} does not require a canonical approval record")
 
     for path in ROOT.glob("*submit*.py"):
         if path.name == "check_submission_gate.py":
