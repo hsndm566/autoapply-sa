@@ -110,6 +110,27 @@ def _assert_pdf_attachment(message: EmailMessage) -> None:
         raise PermissionError("EMAIL_CV_ATTACHMENT_FILENAME_INVALID")
 
 
+def _assert_review_matches_package(review_record: Mapping[str, Any], package: Mapping[str, Any]) -> None:
+    """Bind a human approval to the exact content about to be transmitted."""
+    if str(review_record.get("_path") or "") != "direct_email":
+        raise PermissionError("HUMAN_APPROVAL_NOT_FOR_EMAIL")
+    draft = dict(review_record.get("_draft") or {})
+    destination = dict(package.get("destination") or {})
+    job = dict(package.get("job") or {})
+    if str(draft.get("cover_letter") or "").strip() != str(package.get("draft") or "").strip():
+        raise PermissionError("HUMAN_APPROVAL_DRAFT_MISMATCH")
+    if str(draft.get("subject") or "").strip() != str(destination.get("subject") or "").strip():
+        raise PermissionError("HUMAN_APPROVAL_SUBJECT_MISMATCH")
+    approved_company = str(review_record.get("company") or "").strip()
+    approved_title = str(review_record.get("title") or "").strip()
+    package_company = str(job.get("company") or "").strip()
+    package_title = str(job.get("role") or job.get("title") or "").strip()
+    if approved_company and package_company and approved_company != package_company:
+        raise PermissionError("HUMAN_APPROVAL_COMPANY_MISMATCH")
+    if approved_title and package_title and approved_title != package_title:
+        raise PermissionError("HUMAN_APPROVAL_ROLE_MISMATCH")
+
+
 def _smtp_send(message: EmailMessage, sender: str, app_password: str) -> str:
     context = ssl.create_default_context()
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as client:
@@ -158,13 +179,7 @@ def queue_audited_email_application(
     campaign_job_id: str | None = None,
     human_approval_record: Mapping[str, Any] | None = None,
 ) -> tuple[str, bool]:
-    """Queue an email intent.
-
-    Human approval may be attached at queue time. Legacy callers can still build
-    an outbox intent, but ``dispatch_one`` will fail closed until a valid human
-    approval record is present. This avoids silently converting old automation
-    into permission to send.
-    """
+    """Queue an email intent; transport remains impossible without human approval."""
     application_id = str(application_package.get("application_id") or "").strip()
     if not application_id:
         raise ValueError("application_package.application_id is required")
@@ -180,6 +195,7 @@ def queue_audited_email_application(
         bound_campaign = str(approval.get("_campaign_id") or "")
         if bound_campaign and bound_campaign != campaign_id:
             raise PermissionError("human approval belongs to a different campaign")
+        _assert_review_matches_package(approval, application_package)
 
     payload = {
         "application_package": application_package,
@@ -226,8 +242,10 @@ def dispatch_one(
         return _block(action, "HUMAN_APPROVAL_CAMPAIGN_MISMATCH")
     try:
         guard(review_record)
-    except SubmissionRefused as exc:
-        return _block(action, f"HUMAN_APPROVAL_INVALID: {exc.reason}")
+        _assert_review_matches_package(review_record, package)
+    except (SubmissionRefused, PermissionError) as exc:
+        reason = exc.reason if isinstance(exc, SubmissionRefused) else str(exc)
+        return _block(action, f"HUMAN_APPROVAL_INVALID: {reason}")
 
     if not _enabled():
         return _block(action, "EMAIL_OUTREACH_DISABLED")
