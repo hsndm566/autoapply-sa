@@ -107,14 +107,12 @@ class SenderPreflightTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "complete approved PDF"):
             sender.read_valid_pdf(self.cvs, "empty.pdf")
 
-    def test_repository_supplied_client_cvs_are_valid_while_client_one_remains_blocked(self) -> None:
-        repository_root = Path(__file__).resolve().parent
-        repository_clients = sender.load_clients(repository_root / "clients.csv")
-        self.assertGreaterEqual(len(repository_clients), 1)
-        self.assertTrue(sender.read_valid_pdf(repository_root / "cvs", repository_clients[2]["cv_file"]))
-        self.assertTrue(sender.read_valid_pdf(repository_root / "cvs", repository_clients[3]["cv_file"]))
+    def test_client_cv_validation_uses_synthetic_fixtures_not_repository_customer_files(self) -> None:
+        self.assertTrue(sender.read_valid_pdf(self.cvs, self.clients[2]["cv_file"]))
+        self.assertTrue(sender.read_valid_pdf(self.cvs, self.clients[3]["cv_file"]))
+        (self.cvs / self.clients[1]["cv_file"]).write_bytes(b"")
         with self.assertRaisesRegex(ValueError, "complete approved PDF"):
-            sender.read_valid_pdf(repository_root / "cvs", repository_clients[1]["cv_file"])
+            sender.read_valid_pdf(self.cvs, self.clients[1]["cv_file"])
 
 
 if __name__ == "__main__":

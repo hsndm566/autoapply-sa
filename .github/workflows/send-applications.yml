@@ -1,19 +1,13 @@
-name: Audited AutoApply SA scheduled delivery
+name: Legacy application delivery guard
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
-    - cron: "0 18 * * *"
+  workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: autoapply-audited-scheduled-delivery
-  cancel-in-progress: false
+  contents: read
 
 jobs:
-  deliver:
+  verify-retired-path:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -24,59 +18,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Verify approval chokepoints
+        run: python check_submission_gate.py
 
-      - name: Confirm scheduled Brevo credential is available
-        env:
-          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-        run: test -n "$BREVO_API_KEY"
-
-      - name: Deliver bounded audited application batch for active clients only
-        env:
-          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
-          EMAIL_OUTREACH_ENABLED: "true"
-          AUTOAPPLY_SCHEDULED_DELIVERY: "true"
-          ENABLE_EMAIL_PERSONALIZATION: ${{ vars.ENABLE_EMAIL_PERSONALIZATION || 'false' }}
-          GLITCHTIP_DSN: ${{ secrets.GLITCHTIP_DSN }}
-          SUPABASE_DEV_URL: ${{ secrets.SUPABASE_DEV_URL }}
-          SUPABASE_DEV_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
-        run: python run_scheduled_delivery.py
-
-      - name: Persist tracked delivery outcomes
+      - name: Confirm legacy delivery remains disabled
         run: |
-          if git diff --quiet -- tracking.csv; then
-            echo "No tracking update to persist."
-            exit 0
-          fi
-          git config user.name "AutoApply SA scheduler"
-          git config user.email "apply@hsndm.tech"
-          git add tracking.csv
-          git commit -m "Record scheduled application delivery outcomes"
-          git push
-
-  monitor-success:
-    name: Signal scheduled-delivery success
-    needs: [deliver]
-    if: ${{ needs.deliver.result == 'success' }}
-    runs-on: ubuntu-latest
-    env:
-      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
-    steps:
-      - name: Ping Healthchecks.io when configured
-        if: ${{ env.HEALTHCHECKS_URL != '' }}
-        continue-on-error: true
-        run: curl --fail --silent --show-error --max-time 10 --retry 3 "$HEALTHCHECKS_URL"
-
-  monitor-failure:
-    name: Signal scheduled-delivery failure
-    needs: [deliver]
-    if: ${{ always() && needs.deliver.result == 'failure' }}
-    runs-on: ubuntu-latest
-    env:
-      HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
-    steps:
-      - name: Ping Healthchecks.io failure endpoint when configured
-        if: ${{ env.HEALTHCHECKS_URL != '' }}
-        continue-on-error: true
-        run: curl --fail --silent --show-error --max-time 10 --retry 3 "${HEALTHCHECKS_URL%/}/fail"
+          test ! -f clients.csv
+          test ! -d cvs
+          echo "Legacy file-backed sender is retired. Production campaign discovery/review runs through the service datastore."

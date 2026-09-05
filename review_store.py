@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""Campaign-scoped durable storage for approval records."""
+from __future__ import annotations
+
+import json
+import time
+from typing import Any
+
+import db
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS application_reviews (
+    campaign_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    posting_id TEXT NOT NULL,
+    record_json TEXT NOT NULL,
+    state TEXT NOT NULL,
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (campaign_id, source, posting_id),
+    FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_application_reviews_campaign_state
+ON application_reviews(campaign_id, state, updated_at DESC);
+"""
+
+
+def _ensure_schema() -> None:
+    db.initialize()
+    with db.connection() as c:
+        c.executescript(SCHEMA)
+        c.commit()
+
+
+def seed_from_campaign_job(campaign_id: str, campaign_job: dict[str, Any]) -> dict[str, Any]:
+    source = str(campaign_job.get("source") or "unknown")
+    # campaign_jobs.id is a generated row id. job_hash is deterministic for the
+    # campaign opportunity and therefore gives review URLs a stable identity.
+    posting_id = str(campaign_job.get("job_hash") or campaign_job.get("id") or "")
+    path_state = str(campaign_job.get("path_state") or "portal_complex")
+    draftable = path_state in {"direct_email", "portal_upload_verified"}
+    return {
+        "source": source,
+        "employer_key": str(campaign_job.get("company") or "").casefold().replace(" ", "-")[:120],
+        "posting_id": posting_id,
+        "company": str(campaign_job.get("company") or ""),
+        "title": str(campaign_job.get("title") or ""),
+        "location": str(campaign_job.get("location") or ""),
+        "employment_type": "Unknown",
+        "job_url": str(campaign_job.get("job_url") or ""),
+        "apply_url": str(campaign_job.get("job_url") or ""),
+        "description": "",
+        "application_mode": "email" if path_state == "direct_email" else "portal",
+        "required_fields": [],
+        "_state": "path_verified" if draftable else "needs_review",
+        "_path": path_state,
+        "_review": None if draftable else {"reason": "path_not_draftable", "detail": path_state, "at": ""},
+        "_raw": {"campaign_job_id": campaign_job.get("id"), "job_hash": campaign_job.get("job_hash")},
+        "_campaign_id": campaign_id,
+    }
+
+
+class CampaignReviewStore:
+    def __init__(self, campaign_id: str) -> None:
+        if not campaign_id:
+            raise ValueError("campaign_id is required")
+        self.campaign_id = campaign_id
+        _ensure_schema()
+
+    def sync_campaign_jobs(self) -> int:
+        """Seed review records for discovered campaign jobs without overwriting review work."""
+        with db.connection() as c:
+            rows = c.execute(
+                "SELECT id,job_hash,source,company,title,location,job_url,path_state,status FROM campaign_jobs WHERE campaign_id=?",
+                (self.campaign_id,),
+            ).fetchall()
+        created = 0
+        for row in rows:
+            job = dict(row)
+            rec = seed_from_campaign_job(self.campaign_id, job)
+            if self.get_record(rec["source"], rec["posting_id"]) is not None:
+                continue
+            self.save_record(rec)
+            created += 1
+        return created
+
+    def list_records(self) -> list[dict[str, Any]]:
+        with db.connection() as c:
+            rows = c.execute(
+                "SELECT record_json FROM application_reviews WHERE campaign_id=? ORDER BY updated_at DESC",
+                (self.campaign_id,),
+            ).fetchall()
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                rec = json.loads(row["record_json"])
+                if isinstance(rec, dict):
+                    out.append(rec)
+            except (TypeError, json.JSONDecodeError):
+                continue
+        return out
+
+    def get_record(self, source: str, posting_id: str) -> dict[str, Any] | None:
+        """Resolve by canonical posting id, with campaign-job-id compatibility.
+
+        Review URLs expose the stable deterministic ``posting_id``. Existing
+        internal callers may still hold the generated ``campaign_jobs.id`` UUID,
+        so we accept that UUID as an alias without changing the canonical record.
+        """
+        clean_source = str(source)
+        clean_posting_id = str(posting_id)
+        with db.connection() as c:
+            row = c.execute(
+                "SELECT record_json FROM application_reviews WHERE campaign_id=? AND source=? AND posting_id=?",
+                (self.campaign_id, clean_source, clean_posting_id),
+            ).fetchone()
+            if row is None:
+                rows = c.execute(
+                    "SELECT record_json FROM application_reviews WHERE campaign_id=? AND source=?",
+                    (self.campaign_id, clean_source),
+                ).fetchall()
+            else:
+                rows = [row]
+
+        for candidate in rows:
+            try:
+                rec = json.loads(candidate["record_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(rec, dict):
+                continue
+            if str(rec.get("posting_id") or "") == clean_posting_id:
+                return rec
+            raw = rec.get("_raw") or {}
+            if str(raw.get("campaign_job_id") or "") == clean_posting_id:
+                return rec
+        return None
+
+    def save_record(self, rec: dict[str, Any]) -> None:
+        source = str(rec.get("source") or "").strip()
+        posting_id = str(rec.get("posting_id") or "").strip()
+        state = str(rec.get("_state") or "").strip()
+        if not source or not posting_id or not state:
+            raise ValueError("review record requires source, posting_id and _state")
+        stored = dict(rec)
+        stored["_campaign_id"] = self.campaign_id
+        with db.connection() as c:
+            previous = c.execute(
+                "SELECT state FROM application_reviews WHERE campaign_id=? AND source=? AND posting_id=?",
+                (self.campaign_id, source, posting_id),
+            ).fetchone()
+            c.execute(
+                """
+                INSERT INTO application_reviews(campaign_id, source, posting_id, record_json, state, updated_at)
+                VALUES(?,?,?,?,?,?)
+                ON CONFLICT(campaign_id, source, posting_id) DO UPDATE SET
+                    record_json=excluded.record_json,
+                    state=excluded.state,
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    self.campaign_id,
+                    source,
+                    posting_id,
+                    json.dumps(stored, ensure_ascii=False, separators=(",", ":")),
+                    state,
+                    time.time(),
+                ),
+            )
+            c.commit()
+        old_state = previous["state"] if previous else None
+        if old_state != state:
+            db.add_campaign_event(
+                self.campaign_id,
+                "approval_state_changed",
+                "info",
+                f"Application review state changed from {old_state or 'new'} to {state}.",
+                {
+                    "source": source,
+                    "posting_id": posting_id,
+                    "state_before": old_state,
+                    "state_after": state,
+                    "approved_by": (stored.get("_draft") or {}).get("approved_by"),
+                    "approval_digest": (stored.get("_draft") or {}).get("approval_digest"),
+                },
+            )
+
+
+__all__ = ["CampaignReviewStore", "seed_from_campaign_job"]

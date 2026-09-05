@@ -1,88 +1,97 @@
 #!/usr/bin/env python3
-"""
-local_submit.py — REAL portal submission using local/cloud headless Chromium (Playwright).
-$0 cost. Breezy method (no CAPTCHA). verify-before + verify-after.
+"""Human-approved local Playwright portal adapter."""
+from __future__ import annotations
 
-ROBUST field matching: Breezy has multiple form templates. Some use
-name="cName", others use placeholder="Full Name". This matches by BOTH
-so it works across all Breezy boards.
-"""
-import os, time
+from typing import Any
+
 from playwright.sync_api import sync_playwright
 
-# map our CV keys -> (name attr, placeholder text)
+from submit_gate import mark_submitted, requires_approval
+
 FIELD_MAP = {
-    "cName":        ("cName", "full name"),
-    "cEmail":       ("cEmail", "email"),
+    "cName": ("cName", "full name"),
+    "cEmail": ("cEmail", "email"),
     "cPhoneNumber": ("cPhoneNumber", "phone"),
-    "cCoverLetter":  ("cCoverLetter", "cover"),
+    "cCoverLetter": ("cCoverLetter", "cover"),
 }
 
-def _find_selector(page, name_attr, placeholder):
-    """Return a working selector for a field, or None."""
-    # try by name
-    el = page.query_selector(f'input[name="{name_attr}"],textarea[name="{name_attr}"]')
-    if el:
-        return f'input[name="{name_attr}"],textarea[name="{name_attr}"]'
-    # try by placeholder (case-insensitive contains)
+
+def _find_selector(page, name_attr: str, placeholder: str):
+    selector = f'input[name="{name_attr}"],textarea[name="{name_attr}"]'
+    if page.query_selector(selector):
+        return selector
+    selector = f'input[placeholder*="{placeholder}" i],textarea[placeholder*="{placeholder}" i]'
     try:
-        el = page.query_selector(f'input[placeholder*="{placeholder}" i],textarea[placeholder*="{placeholder}" i]')
-        if el:
-            return f'input[placeholder*="{placeholder}" i],textarea[placeholder*="{placeholder}" i]'
+        if page.query_selector(selector):
+            return selector
     except Exception:
         pass
     return None
 
-def submit_application(url, cv_data=None):
-    if cv_data is None:
-        cv_data = {"cName": "Hasan Adam", "cEmail": "hasanadam506@gmail.com",
-                   "cPhoneNumber": "+966571448656", "cCoverLetter": "Applying via AutoApply SA."}
+
+@requires_approval
+def submit_application(rec: dict[str, Any], cv_data: dict[str, Any], *, session=None) -> dict[str, Any]:
+    if rec.get("_path") != "portal_upload_verified":
+        raise PermissionError("local portal submission requires portal_upload_verified")
+    url = str(rec.get("apply_url") or rec.get("job_url") or "").strip()
+    if not url:
+        raise ValueError("approved record has no apply URL")
+
     try:
         with sync_playwright() as p:
-            b = p.chromium.launch(headless=True)
-            page = b.new_page()
-            page.goto(url, timeout=30000); page.wait_for_timeout(5000)
-            # Breezy chat widget (bzIframe) can intercept the Apply click -> force it
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, timeout=30000)
+            page.wait_for_timeout(4000)
+
+            html = page.content().lower()
+            if any(marker in html for marker in ("recaptcha", "hcaptcha", "captcha", "verify you are human", "sign in to apply", "log in to apply")):
+                browser.close()
+                return {"ok": False, "submitted": False, "status": "manual_handoff", "reason": "login_or_captcha"}
+
             try:
-                page.click('a:has-text("Apply")', force=True)
+                apply_link = page.query_selector('a:has-text("Apply"), button:has-text("Apply")')
+                if apply_link:
+                    apply_link.click()
+                    page.wait_for_timeout(2500)
             except Exception:
-                page.evaluate("""() => { const a=[...document.querySelectorAll('a')].find(x=>/apply/i.test(x.textContent)); if(a) a.click(); }""")
-            page.wait_for_timeout(7000)
-            html = page.content()
-            if 'recaptcha' in html.lower() or 'captcha' in html.lower() or 'hcaptcha' in html.lower():
-                b.close()
-                return {"ok": True, "submitted": False, "pre_verified": False,
-                        "post_verified": False, "note": "CAPTCHA wall - degrade to email"}
+                pass
+
             pre_ok = True
-            for key, val in cv_data.items():
+            for key, value in cv_data.items():
                 name_attr, placeholder = FIELD_MAP.get(key, (key, key))
-                sel = _find_selector(page, name_attr, placeholder)
-                if not sel:
+                selector = _find_selector(page, name_attr, placeholder)
+                if selector and value not in (None, ""):
+                    page.query_selector(selector).fill(str(value))
+                elif key not in {"cCoverLetter"}:
                     pre_ok = False
-                    continue
-                try:
-                    el = page.query_selector(sel)
-                    el.fill(val)
-                    if val not in page.input_value(sel):
-                        pre_ok = False
-                except Exception:
-                    pre_ok = False
-            clicked = page.evaluate("""() => {
-                const btns=[...document.querySelectorAll('button')];
-                const sub=btns.find(b=>/submit|apply|send|next/i.test(b.textContent)||b.type==='submit');
-                if(sub){sub.click(); return sub.textContent.trim();}
-                return 'NO_BTN';
-            }""")
-            page.wait_for_timeout(9000)
-            post = page.content()
-            post_ok = 'apply/submitted' in page.url or any(
-                w in post.lower() for w in ['thank','received','submitted','confirmation','success'])
-            b.close()
-            return {"ok": True, "submitted": post_ok, "pre_verified": pre_ok,
-                    "post_verified": post_ok, "note": f"local_chromium submit_clicked={clicked}"}
-    except Exception as e:
-        return {"ok": False, "submitted": False, "note": f"err: {e}"}
+            if not pre_ok:
+                browser.close()
+                return {"ok": False, "submitted": False, "status": "blocked", "reason": "required_fields_missing"}
+
+            submit = page.query_selector('button[type="submit"], input[type="submit"], button:has-text("Submit Application")')
+            if not submit:
+                browser.close()
+                return {"ok": False, "submitted": False, "status": "blocked", "reason": "submit_control_not_found"}
+            submit.click()
+            page.wait_for_timeout(7000)
+
+            final_url = page.url
+            post = page.content().lower()
+            success_marker = next(
+                (m for m in ("thank you", "application received", "application submitted", "confirmation", "success") if m in post),
+                "",
+            )
+            browser.close()
+            if not success_marker:
+                return {"ok": False, "submitted": False, "status": "uncertain", "reason": "no_confirmation_observed", "url": final_url}
+
+            evidence = {"confirmation_url": final_url, "success_marker": success_marker}
+            submitted_rec = mark_submitted(rec, evidence=evidence, channel="local")
+            return {"ok": True, "submitted": True, "record": submitted_rec, "evidence": evidence}
+    except Exception as exc:
+        return {"ok": False, "submitted": False, "status": "failed", "reason": type(exc).__name__}
+
 
 if __name__ == "__main__":
-    r = submit_application("https://nysonian.breezy.hr/p/5634cdbfdf7b-supply-chain-coordinator")
-    print(r)
+    raise SystemExit("Direct CLI submission is disabled. Use the human-approved application pipeline.")

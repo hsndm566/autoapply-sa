@@ -1,8 +1,8 @@
 """Authenticated Hermes-to-backend draft gateway.
 
-Hermes may research and draft, but it must submit packages here for validation.
-This gateway deliberately has no send operation. It only persists verified contacts,
-runs the Auditor, and returns draft-only review results.
+Hermes may research and propose draft email opportunities, but it has no send or
+approval operation. Every verified opportunity is persisted into the campaign's
+human review ledger and requires the grounded drafting stage before approval.
 """
 from __future__ import annotations
 
@@ -10,11 +10,13 @@ import hashlib
 import hmac
 import os
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
 import auditor
 import db
+from review_store import CampaignReviewStore
 
 GATEWAY_HEADER = "X-Hermes-Gateway-Token"
 MAX_BATCH = 10
@@ -28,6 +30,10 @@ def authorized(token: str) -> bool:
 
 def _text(value: Any, limit: int = 3000) -> str:
     return str(value or "").strip()[:limit]
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _https_url(value: Any, field: str) -> str:
@@ -93,6 +99,68 @@ def _package(campaign: Mapping[str, Any], item: Mapping[str, Any]) -> tuple[dict
     return package, source_url
 
 
+def _persist_review_opportunity(
+    campaign_id: str,
+    package: Mapping[str, Any],
+    *,
+    contact_id: str,
+    source_url: str,
+    auditor_approved: bool,
+    findings: list[str],
+) -> None:
+    """Place the external draft in review, never directly in an approvable state.
+
+    Hermes copy has not passed ``draft_review.build_draft`` grounding. Keeping it
+    in ``needs_review`` means a human can see the proposal but must run the
+    campaign's grounded draft endpoint before ``approve_draft`` can succeed.
+    """
+    job = dict(package.get("job") or {})
+    destination = dict(package.get("destination") or {})
+    submission = dict(package.get("submission") or {})
+    rec = {
+        "source": "email",
+        "employer_key": str(job.get("company") or "").casefold().replace(" ", "-")[:120],
+        "posting_id": str(package.get("application_id") or ""),
+        "company": str(job.get("company") or ""),
+        "title": str(job.get("role") or ""),
+        "location": "",
+        "employment_type": "Unknown",
+        "job_url": str(job.get("url") or ""),
+        "apply_url": str(job.get("url") or ""),
+        "description": "",
+        "application_mode": "email",
+        "required_fields": [],
+        "_state": "needs_review",
+        "_path": "direct_email",
+        "_campaign_id": campaign_id,
+        "_draft": {
+            "lang": str(submission.get("language") or "en"),
+            "match_score": None,
+            "subject": str(destination.get("subject") or ""),
+            "cover_letter": str(package.get("draft") or ""),
+            "evidence": [],
+            "gaps": [],
+            "cv_highlights": [],
+            "flagged_claims": ["external_draft_not_grounded"],
+            "drafted_at": _now(),
+            "approved_by": None,
+            "approved_at": None,
+        },
+        "_review": {
+            "reason": "external_draft_requires_grounded_redraft" if auditor_approved else "auditor_rejected_external_draft",
+            "detail": findings,
+            "at": _now(),
+        },
+        "_raw": {
+            "contact_id": contact_id,
+            "recipient": str(destination.get("recipient") or ""),
+            "source_url": source_url,
+            "application_id": str(package.get("application_id") or ""),
+        },
+    }
+    CampaignReviewStore(campaign_id).save_record(rec)
+
+
 def prepare_batch(campaign_id: str, items: Any) -> dict[str, Any]:
     if not isinstance(campaign_id, str) or not campaign_id.strip():
         raise ValueError("campaign_id is required")
@@ -119,6 +187,15 @@ def prepare_batch(campaign_id: str, items: Any) -> dict[str, Any]:
                 verification_source=source_url,
             )
             decision = auditor.audit_application(package["application_id"], package)
+            findings = [finding.code for finding in decision.findings]
+            _persist_review_opportunity(
+                campaign_id,
+                package,
+                contact_id=contact_id,
+                source_url=source_url,
+                auditor_approved=decision.approved,
+                findings=findings,
+            )
             result = {
                 "index": index,
                 "application_id": package["application_id"],
@@ -131,8 +208,9 @@ def prepare_batch(campaign_id: str, items: Any) -> dict[str, Any]:
                 "source_url": source_url,
                 "contact_id": contact_id,
                 "status": "draft_ready" if decision.approved else "blocked",
+                "review_state": "needs_review",
                 "audit_status": decision.status,
-                "findings": [finding.code for finding in decision.findings],
+                "findings": findings,
                 "queued": False,
                 "sent": False,
             }

@@ -1,9 +1,7 @@
-"""Audited Gmail outreach dispatcher for durable campaign outbox actions.
+"""Audited employer-email dispatcher with explicit human approval.
 
-This module has no contact scraping or drafting logic.  It accepts only an already
-queued, immutable application package and an Auditor approval token.  It validates
-the approval immediately before building the MIME message, then delivers through
-Gmail SMTP only when explicitly enabled by deployment configuration.
+The existing Auditor checks, PDF validation, idempotent outbox and SMTP/Brevo
+proof remain in place. Human approval is an additional mandatory boundary.
 """
 from __future__ import annotations
 
@@ -19,6 +17,8 @@ from typing import Any, Mapping
 
 import auditor
 import db
+from review_store import CampaignReviewStore
+from submit_gate import SubmissionRefused, guard, mark_submitted
 from warmup_config import (
     SCHEDULED_DELIVERY_ENVIRONMENT_FLAG,
     SCHEDULED_DELIVERY_SCOPE,
@@ -60,7 +60,6 @@ def _scheduled_delivery_enabled() -> bool:
 
 
 def _authorized_brevo_sender(package: Mapping[str, Any]) -> str:
-    """Return the only allowed Brevo sender for an explicitly enabled verified-contact scope."""
     submission = dict(package.get("submission") or {})
     job = dict(package.get("job") or {})
     candidate = dict(package.get("candidate") or {})
@@ -88,16 +87,16 @@ def _authorized_brevo_sender(package: Mapping[str, Any]) -> str:
 
 
 def _message_evidence(message: EmailMessage) -> str:
-    """Return a digest for durable evidence; never persist message content or CV bytes."""
     material = "\n".join([
-        str(message.get("From", "")), str(message.get("To", "")), str(message.get("Subject", "")),
+        str(message.get("From", "")),
+        str(message.get("To", "")),
+        str(message.get("Subject", "")),
         ",".join(str(part.get_filename() or "") for part in message.iter_attachments()),
     ])
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
 def _assert_pdf_attachment(message: EmailMessage) -> None:
-    """Fail closed unless the outgoing MIME message contains exactly one valid PDF CV."""
     attachments = list(message.iter_attachments())
     if len(attachments) != 1:
         raise PermissionError("EMAIL_CV_ATTACHMENT_MISSING_OR_DUPLICATE")
@@ -111,8 +110,28 @@ def _assert_pdf_attachment(message: EmailMessage) -> None:
         raise PermissionError("EMAIL_CV_ATTACHMENT_FILENAME_INVALID")
 
 
+def _assert_review_matches_package(review_record: Mapping[str, Any], package: Mapping[str, Any]) -> None:
+    """Bind a human approval to the exact content about to be transmitted."""
+    if str(review_record.get("_path") or "") != "direct_email":
+        raise PermissionError("HUMAN_APPROVAL_NOT_FOR_EMAIL")
+    draft = dict(review_record.get("_draft") or {})
+    destination = dict(package.get("destination") or {})
+    job = dict(package.get("job") or {})
+    if str(draft.get("cover_letter") or "").strip() != str(package.get("draft") or "").strip():
+        raise PermissionError("HUMAN_APPROVAL_DRAFT_MISMATCH")
+    if str(draft.get("subject") or "").strip() != str(destination.get("subject") or "").strip():
+        raise PermissionError("HUMAN_APPROVAL_SUBJECT_MISMATCH")
+    approved_company = str(review_record.get("company") or "").strip()
+    approved_title = str(review_record.get("title") or "").strip()
+    package_company = str(job.get("company") or "").strip()
+    package_title = str(job.get("role") or job.get("title") or "").strip()
+    if approved_company and package_company and approved_company != package_company:
+        raise PermissionError("HUMAN_APPROVAL_COMPANY_MISMATCH")
+    if approved_title and package_title and approved_title != package_title:
+        raise PermissionError("HUMAN_APPROVAL_ROLE_MISMATCH")
+
+
 def _smtp_send(message: EmailMessage, sender: str, app_password: str) -> str:
-    """Send via authenticated TLS and return the SMTP Message-ID evidence value."""
     context = ssl.create_default_context()
     with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as client:
         client.ehlo()
@@ -124,7 +143,6 @@ def _smtp_send(message: EmailMessage, sender: str, app_password: str) -> str:
 
 
 def _brevo_send(message: EmailMessage, sender: str, api_key: str) -> str:
-    """Deliver one already-audited MIME-equivalent message through Brevo's transactional API."""
     import requests
 
     attachment = list(message.iter_attachments())[0]
@@ -159,12 +177,9 @@ def queue_audited_email_application(
     auditor_approval_token: str,
     *,
     campaign_job_id: str | None = None,
+    human_approval_record: Mapping[str, Any] | None = None,
 ) -> tuple[str, bool]:
-    """Queue one immutable email intent after proving an Audit approval exists.
-
-    The dispatcher will repeat this check immediately before delivery. This first
-    check prevents a caller from accumulating obviously unauthorised send intents.
-    """
+    """Queue an email intent; transport remains impossible without human approval."""
     application_id = str(application_package.get("application_id") or "").strip()
     if not application_id:
         raise ValueError("application_package.application_id is required")
@@ -172,9 +187,20 @@ def queue_audited_email_application(
     if submission.get("channel") != "email" or submission.get("cv_transport") != "email_attachment":
         raise ValueError("email outbox accepts only email_attachment application packages")
     auditor.assert_execution_allowed(application_id, application_package, auditor_approval_token)
+
+    approval: dict[str, Any] | None = None
+    if human_approval_record is not None:
+        approval = dict(human_approval_record)
+        guard(approval)
+        bound_campaign = str(approval.get("_campaign_id") or "")
+        if bound_campaign and bound_campaign != campaign_id:
+            raise PermissionError("human approval belongs to a different campaign")
+        _assert_review_matches_package(approval, application_package)
+
     payload = {
         "application_package": application_package,
         "auditor_approval_token": auditor_approval_token,
+        "human_approval_record": approval,
     }
     return db.queue_action(
         campaign_id,
@@ -191,7 +217,7 @@ def _block(action: Mapping[str, Any], reason: str) -> dict[str, Any]:
         str(action["campaign_id"]),
         "email_delivery_blocked",
         "warning",
-        "Audited email delivery was blocked before send.",
+        "Employer email delivery was blocked before send.",
         {"outbox_id": action["id"], "reason": reason[:300]},
     )
     return {"outbox_id": action["id"], "status": "blocked", "reason": reason}
@@ -202,17 +228,25 @@ def dispatch_one(
     send_fn: Callable[[EmailMessage, str, str], str] = _smtp_send,
     brevo_send_fn: Callable[[EmailMessage, str, str], str] = _brevo_send,
 ) -> dict[str, Any]:
-    """Perform one email delivery only after a boundary audit recheck.
-
-    Errors before calling ``send_fn`` are terminally blocked. Errors from the
-    transport return the lease to the safe recovery flow rather than asserting a
-    false delivery outcome.
-    """
     payload = dict(action.get("payload") or {})
     package = payload.get("application_package")
     approval_token = str(payload.get("auditor_approval_token") or "")
+    review_record = payload.get("human_approval_record")
     if not isinstance(package, Mapping):
         return _block(action, "OUTBOX_PACKAGE_INVALID")
+    if not isinstance(review_record, Mapping):
+        return _block(action, "HUMAN_APPROVAL_REQUIRED")
+
+    review_record = dict(review_record)
+    if str(review_record.get("_campaign_id") or action.get("campaign_id") or "") != str(action.get("campaign_id") or ""):
+        return _block(action, "HUMAN_APPROVAL_CAMPAIGN_MISMATCH")
+    try:
+        guard(review_record)
+        _assert_review_matches_package(review_record, package)
+    except (SubmissionRefused, PermissionError) as exc:
+        reason = exc.reason if isinstance(exc, SubmissionRefused) else str(exc)
+        return _block(action, f"HUMAN_APPROVAL_INVALID: {reason}")
+
     if not _enabled():
         return _block(action, "EMAIL_OUTREACH_DISABLED")
     warmup_sender = _authorized_brevo_sender(package)
@@ -222,18 +256,19 @@ def dispatch_one(
         return _block(action, "BREVO_CREDENTIALS_UNAVAILABLE" if transport == "brevo" else "GMAIL_CREDENTIALS_UNAVAILABLE")
     if transport == "smtp" and sender.casefold() != REQUIRED_APPLICATION_SENDER:
         return _block(action, "SENDER_NOT_ALLOWED")
+
     try:
         application_id = str(package.get("application_id") or "")
         message = auditor.build_approved_email(package, sender, approval_token)
-        # `build_approved_email` rechecks a current, matching Auditor decision.
-        # Re-assert the final MIME payload immediately before transport as a second fail-closed boundary.
         _assert_pdf_attachment(message)
-        transport_evidence = brevo_send_fn(message, sender, credential) if transport == "brevo" else send_fn(message, sender, credential)
+        transport_evidence = (
+            brevo_send_fn(message, sender, credential)
+            if transport == "brevo"
+            else send_fn(message, sender, credential)
+        )
     except PermissionError as exc:
         return _block(action, f"AUDITOR_RECHECK_FAILED: {exc}")
     except Exception as exc:
-        # This state is terminal until human review: SMTP may have failed before or
-        # after accepting the message, so automatic retry could create a duplicate.
         db.mark_action_uncertain(str(action["id"]), f"transport_failed:{type(exc).__name__}")
         db.add_campaign_event(
             str(action["campaign_id"]),
@@ -245,6 +280,14 @@ def dispatch_one(
         return {"outbox_id": action["id"], "status": "uncertain", "reason": type(exc).__name__}
 
     evidence = _message_evidence(message)
+    proof = {"transport_evidence": transport_evidence, "message_digest": evidence}
+    try:
+        submitted_record = mark_submitted(review_record, evidence=proof, channel="email")
+        CampaignReviewStore(str(action["campaign_id"])).save_record(submitted_record)
+    except Exception as exc:
+        db.mark_action_uncertain(str(action["id"]), f"proof_persist_failed:{type(exc).__name__}")
+        return {"outbox_id": action["id"], "status": "uncertain", "reason": "submission_proof_persist_failed"}
+
     db.complete_action(str(action["id"]))
     db.record_evidence(
         str(action["campaign_id"]),
@@ -257,10 +300,16 @@ def dispatch_one(
         str(action["campaign_id"]),
         "email_delivery_accepted",
         "info",
-        "Brevo accepted an Auditor-approved CV-attached application email." if transport == "brevo" else "Gmail SMTP accepted an Auditor-approved CV-attached application email.",
+        "Provider accepted a human-approved, Auditor-approved CV-attached application email.",
         {"outbox_id": action["id"], "message_digest": evidence, "transport": transport},
     )
-    return {"outbox_id": action["id"], "status": "accepted", "evidence": evidence, "transport": transport, "transport_evidence": transport_evidence}
+    return {
+        "outbox_id": action["id"],
+        "status": "accepted",
+        "evidence": evidence,
+        "transport": transport,
+        "transport_evidence": transport_evidence,
+    }
 
 
 def dispatch_pending(
@@ -268,7 +317,6 @@ def dispatch_pending(
     send_fn: Callable[[EmailMessage, str, str], str] = _smtp_send,
     brevo_send_fn: Callable[[EmailMessage, str, str], str] = _brevo_send,
 ) -> dict[str, Any]:
-    """Claim and dispatch a bounded batch only when delivery is explicitly configured."""
     if not _enabled():
         return {"enabled": False, "claimed": 0, "results": []}
     if not ((_sender() and _password()) or _brevo_api_key()):
@@ -278,4 +326,7 @@ def dispatch_pending(
     return {"enabled": True, "claimed": len(actions), "results": results}
 
 
-__all__ = ["ACTION_TYPE", "REQUIRED_APPLICATION_SENDER", "dispatch_pending", "dispatch_one", "queue_audited_email_application"]
+__all__ = [
+    "ACTION_TYPE", "REQUIRED_APPLICATION_SENDER", "dispatch_pending", "dispatch_one",
+    "queue_audited_email_application",
+]

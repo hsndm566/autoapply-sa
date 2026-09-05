@@ -1,4 +1,4 @@
-"""Offline tests for Auditor-gated durable Gmail application dispatch."""
+"""Offline tests for human + Auditor gated durable application dispatch."""
 from __future__ import annotations
 
 import os
@@ -10,7 +10,15 @@ from unittest.mock import patch
 import auditor
 import db
 import email_dispatcher
-from warmup_config import SCHEDULED_DELIVERY_ENVIRONMENT_FLAG, SCHEDULED_DELIVERY_SCOPE, WARMUP_ENVIRONMENT_FLAG, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
+from draft_review import approve_draft
+from warmup_config import (
+    SCHEDULED_DELIVERY_ENVIRONMENT_FLAG,
+    SCHEDULED_DELIVERY_SCOPE,
+    WARMUP_CLIENTS,
+    WARMUP_ENVIRONMENT_FLAG,
+    WARMUP_EVIDENCE_TYPE,
+    WARMUP_SCOPE,
+)
 
 
 class EmailDispatcherTests(unittest.TestCase):
@@ -25,11 +33,11 @@ class EmailDispatcherTests(unittest.TestCase):
         self.addCleanup(self._restore_env)
         for key in self.env_keys:
             os.environ.pop(key, None)
-        self.cv = Path(self.temp_dir.name) / "hasan-cv.pdf"
+        self.cv = Path(self.temp_dir.name) / "candidate-cv.pdf"
         self.cv.write_bytes(b"%PDF-1.4\nEmail dispatcher test CV\n%%EOF\n")
         campaign, _token = db.create_campaign(
-            candidate_name="Hasan Adam",
-            candidate_email="hasan@example.com",
+            candidate_name="Sample Candidate",
+            candidate_email="candidate@example.test",
             target_role="Operations Analyst",
             cv_path=str(self.cv),
             cv_original_name=self.cv.name,
@@ -53,7 +61,7 @@ class EmailDispatcherTests(unittest.TestCase):
             "application_id": "email-app-001",
             "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "https://careers.brighttech.example/jobs/1"},
             "candidate": {
-                "full_name": "Hasan Adam", "email": "hasan@example.com", "cv_path": str(self.cv),
+                "full_name": "Sample Candidate", "email": "candidate@example.test", "cv_path": str(self.cv),
                 "cv_text": "Operations analyst with process-improvement experience.",
             },
             "draft": (
@@ -64,11 +72,39 @@ class EmailDispatcherTests(unittest.TestCase):
             "submission": {"channel": "email", "mode": "live", "cv_transport": "email_attachment"},
         }
 
+    def human_approval(self, package: dict) -> dict:
+        job = dict(package.get("job") or {})
+        destination = dict(package.get("destination") or {})
+        rec = {
+            "source": "email",
+            "posting_id": str(package.get("application_id") or "test-email"),
+            "company": str(job.get("company") or ""),
+            "title": str(job.get("role") or job.get("title") or ""),
+            "job_url": str(job.get("url") or ""),
+            "_campaign_id": self.campaign_id,
+            "_path": "direct_email",
+            "_state": "drafted",
+            "_draft": {
+                "cover_letter": str(package.get("draft") or ""),
+                "subject": str(destination.get("subject") or ""),
+                "flagged_claims": [],
+                "approved_by": None,
+                "approved_at": None,
+                "approval_digest": None,
+            },
+        }
+        return approve_draft(rec, approved_by="test-human")
+
     def queue_valid_action(self) -> str:
         package = self.package()
         decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
         self.assertTrue(decision.approved, decision.summary)
-        action_id, added = email_dispatcher.queue_audited_email_application(self.campaign_id, package, decision.approval_token)
+        action_id, added = email_dispatcher.queue_audited_email_application(
+            self.campaign_id,
+            package,
+            decision.approval_token,
+            human_approval_record=self.human_approval(package),
+        )
         self.assertTrue(added)
         return action_id
 
@@ -111,20 +147,26 @@ class EmailDispatcherTests(unittest.TestCase):
         self.assertIn("email_delivery_accepted", {item["event_type"] for item in db.list_campaign_events(self.campaign_id)})
 
     def test_explicitly_gated_verified_contact_warmup_uses_brevo_with_exact_pdf(self) -> None:
+        fixture = WARMUP_CLIENTS[2]
         package = self.package()
         package.update({
             "application_id": "warmup-brevo-001",
             "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
-            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "candidate": {"full_name": fixture["client_name"], "email": fixture["sender_email"], "cv_path": str(self.cv)},
             "submission": {
                 "channel": "email", "mode": "live", "cv_transport": "email_attachment",
-                "client_id": 2, "sender_email": "apply1@hsndm.tech",
+                "client_id": 2, "sender_email": fixture["sender_email"],
                 "evidence_type": WARMUP_EVIDENCE_TYPE, "warmup_scope": WARMUP_SCOPE,
             },
         })
         decision = auditor.audit_application(package["application_id"], package, require_ai_review=False)
         self.assertTrue(decision.approved, decision.summary)
-        action_id, added = email_dispatcher.queue_audited_email_application(self.campaign_id, package, decision.approval_token)
+        action_id, added = email_dispatcher.queue_audited_email_application(
+            self.campaign_id,
+            package,
+            decision.approval_token,
+            human_approval_record=self.human_approval(package),
+        )
         self.assertTrue(added)
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
         os.environ[WARMUP_ENVIRONMENT_FLAG] = "true"
@@ -133,7 +175,7 @@ class EmailDispatcherTests(unittest.TestCase):
 
         def fake_brevo(message, sender, key):
             sent.append((message, sender, key))
-            self.assertEqual("apply1@hsndm.tech", sender)
+            self.assertEqual(fixture["sender_email"], sender)
             self.assertEqual("test-brevo-key", key)
             attachments = list(message.iter_attachments())
             self.assertEqual(1, len(attachments))
@@ -149,25 +191,26 @@ class EmailDispatcherTests(unittest.TestCase):
         self.assertEqual("completed", self.action_status(action_id))
 
     def test_scheduled_scope_requires_the_scheduled_environment_gate(self) -> None:
+        fixture = WARMUP_CLIENTS[2]
         package = self.package()
         package.update({
             "application_id": "scheduled-brevo-001",
             "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
-            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "candidate": {"full_name": fixture["client_name"], "email": fixture["sender_email"], "cv_path": str(self.cv)},
             "submission": {
                 "channel": "email", "mode": "live", "cv_transport": "email_attachment",
-                "client_id": 2, "sender_email": "apply1@hsndm.tech",
+                "client_id": 2, "sender_email": fixture["sender_email"],
                 "evidence_type": WARMUP_EVIDENCE_TYPE, "warmup_scope": SCHEDULED_DELIVERY_SCOPE,
             },
         })
         self.assertEqual("", email_dispatcher._authorized_brevo_sender(package))
         os.environ[SCHEDULED_DELIVERY_ENVIRONMENT_FLAG] = "true"
-        self.assertEqual("apply1@hsndm.tech", email_dispatcher._authorized_brevo_sender(package))
+        self.assertEqual(fixture["sender_email"], email_dispatcher._authorized_brevo_sender(package))
 
     def test_personal_sender_is_blocked_before_transport(self) -> None:
         action_id = self.queue_valid_action()
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
-        os.environ["GMAIL_USER"] = "hasanadam506@gmail.com"
+        os.environ["GMAIL_USER"] = "unauthorized@example.test"
         os.environ["GMAIL_APP_PASSWORD"] = "app-password"
         sent: list[object] = []
 
@@ -213,7 +256,7 @@ class EmailDispatcherTests(unittest.TestCase):
             auditor.build_approved_email(package, "sender@example.com", decision.approval_token)
 
     def test_non_pdf_cv_is_rejected_before_queue(self) -> None:
-        non_pdf = Path(self.temp_dir.name) / "hasan-cv.docx"
+        non_pdf = Path(self.temp_dir.name) / "candidate-cv.docx"
         non_pdf.write_bytes(b"PK\\x03\\x04not-a-real-docx")
         package = self.package()
         package["candidate"] = dict(package["candidate"], cv_path=str(non_pdf))
@@ -226,6 +269,7 @@ class EmailDispatcherTests(unittest.TestCase):
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
         os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
         os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+
         def failing_send(_message, _sender, _password):
             raise TimeoutError("SMTP timed out")
 
@@ -237,7 +281,25 @@ class EmailDispatcherTests(unittest.TestCase):
 
     def test_queue_rejects_a_package_without_current_auditor_approval(self) -> None:
         with self.assertRaises(PermissionError):
-            email_dispatcher.queue_audited_email_application(self.campaign_id, self.package(), "not-an-approval")
+            email_dispatcher.queue_audited_email_application(
+                self.campaign_id,
+                self.package(),
+                "not-an-approval",
+                human_approval_record=self.human_approval(self.package()),
+            )
+
+    def test_queue_rejects_human_approval_for_different_content(self) -> None:
+        package = self.package()
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        approval = self.human_approval(package)
+        changed = dict(package, draft="Different letter after human approval")
+        with self.assertRaises(PermissionError):
+            email_dispatcher.queue_audited_email_application(
+                self.campaign_id,
+                changed,
+                decision.approval_token,
+                human_approval_record=approval,
+            )
 
 
 if __name__ == "__main__":
