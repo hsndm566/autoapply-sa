@@ -8,15 +8,25 @@ import monitor_dashboard_auth as monitor
 
 
 class MonitorDashboardAuthTests(unittest.TestCase):
-    def test_evaluate_marks_403_bootstrap_as_degraded(self):
-        with patch.object(monitor, "request_status", side_effect=[200, 403]):
+    def test_evaluate_uses_dashboard_host_and_marks_403_bootstrap_as_degraded(self):
+        with patch.object(monitor, "request_status", side_effect=[200, 403]) as request_status:
             result = monitor.evaluate()
         self.assertEqual(result.status, "degraded")
         self.assertEqual(result.readiness_status, 200)
         self.assertEqual(result.clerk_bootstrap_status, 403)
+        self.assertEqual(request_status.call_args_list[0].args[0], "https://dashboard.hsndm.tech/")
+        clerk_headers = request_status.call_args_list[1].args[1]
+        self.assertEqual(clerk_headers["Origin"], "https://dashboard.hsndm.tech")
+        self.assertEqual(clerk_headers["Referer"], "https://dashboard.hsndm.tech/")
+
+    def test_evaluate_marks_healthy_when_dashboard_and_clerk_are_healthy(self):
+        with patch.object(monitor, "request_status", side_effect=[200, 200]):
+            result = monitor.evaluate()
+        self.assertEqual(result.status, "healthy")
 
     def test_alert_text_has_technical_status_only(self):
         text = monitor.technical_text(monitor.MonitorResult("degraded", 200, 403), False)
+        self.assertIn("Dashboard route: http-200", text)
         self.assertIn("http-403", text)
         self.assertNotIn("CV", text)
         self.assertNotIn("candidate@", text)
