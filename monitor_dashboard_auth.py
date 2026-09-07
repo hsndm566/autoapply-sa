@@ -2,9 +2,10 @@
 """Technical-only synthetic check for AutoApply SA dashboard authentication.
 
 This monitor never reads candidate records, sends application emails, accesses a
-CV, or invokes the application dispatcher. It checks two public dependency
-endpoints, emits a redacted Sentry event on a status transition, and sends a
-minimal owner alert through the repository's existing Brevo Actions secret.
+CV, or invokes the application dispatcher. It checks the public dashboard route
+and Clerk bootstrap endpoint, emits a redacted Sentry event on a status
+transition, and sends a minimal owner alert through the repository's existing
+Brevo Actions secret.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from urllib.parse import urlparse
 
 import requests
 
-AUTH_READINESS_URL = "https://www.hsndm.tech/healthz/auth"
+DASHBOARD_URL = "https://dashboard.hsndm.tech/"
 CLERK_BOOTSTRAP_URL = "https://clerk.hsndm.tech/v1/environment?__clerk_api_version=2025-11-10&__clerk_js_version=5.127.2"
 SENTRY_CONFIG_URL = "https://www.hsndm.tech/api/client-config/sentry"
 STATE_PATH = Path("monitor-state/dashboard-auth.json")
@@ -43,13 +44,20 @@ def request_status(url: str, headers: dict[str, str] | None = None) -> int | Non
 
 
 def evaluate() -> MonitorResult:
-    readiness = request_status(AUTH_READINESS_URL)
+    # The dashboard is a browser route. The old monitor incorrectly probed
+    # /healthz/auth on www.hsndm.tech, which is the static marketing host and
+    # therefore returned 404 even when the dashboard application was healthy.
+    dashboard = request_status(DASHBOARD_URL)
     clerk = request_status(
         CLERK_BOOTSTRAP_URL,
-        {"Accept": "application/json", "Origin": "https://www.hsndm.tech", "Referer": "https://www.hsndm.tech/dashboard"},
+        {
+            "Accept": "application/json",
+            "Origin": "https://dashboard.hsndm.tech",
+            "Referer": "https://dashboard.hsndm.tech/",
+        },
     )
-    status = "healthy" if readiness == 200 and clerk is not None and 200 <= clerk < 300 else "degraded"
-    return MonitorResult(status=status, readiness_status=readiness, clerk_bootstrap_status=clerk)
+    status = "healthy" if dashboard == 200 and clerk is not None and 200 <= clerk < 300 else "degraded"
+    return MonitorResult(status=status, readiness_status=dashboard, clerk_bootstrap_status=clerk)
 
 
 def load_previous_status(path: Path = STATE_PATH) -> str | None:
@@ -68,13 +76,13 @@ def persist(result: MonitorResult, path: Path = STATE_PATH) -> None:
 
 def technical_text(result: MonitorResult, recovered: bool) -> str:
     state = "recovered" if recovered else "requires attention"
-    readiness = "network-error" if result.readiness_status is None else f"http-{result.readiness_status}"
+    dashboard = "network-error" if result.readiness_status is None else f"http-{result.readiness_status}"
     clerk = "network-error" if result.clerk_bootstrap_status is None else f"http-{result.clerk_bootstrap_status}"
     return "\n".join(
         [
             f"AutoApply SA dashboard authentication {state}.",
             "Monitor: dashboard-auth",
-            f"Auth readiness: {readiness}",
+            f"Dashboard route: {dashboard}",
             f"Clerk bootstrap: {clerk}",
             "This operational alert contains technical status only.",
         ]
@@ -96,7 +104,7 @@ def report_sentry(result: MonitorResult, recovered: bool) -> bool:
         endpoint = sentry_envelope_url(dsn) if isinstance(dsn, str) else None
         if not endpoint:
             return False
-        readiness = "network-error" if result.readiness_status is None else f"http-{result.readiness_status}"
+        dashboard = "network-error" if result.readiness_status is None else f"http-{result.readiness_status}"
         clerk = "network-error" if result.clerk_bootstrap_status is None else f"http-{result.clerk_bootstrap_status}"
         event = {
             "event_id": uuid.uuid4().hex,
@@ -105,7 +113,7 @@ def report_sentry(result: MonitorResult, recovered: bool) -> bool:
             "logger": "autoapply.auth-monitor",
             "message": "Dashboard authentication dependency recovered" if recovered else "Dashboard authentication dependency degraded",
             "platform": "python",
-            "tags": {"monitor": "dashboard-auth", "privacy": "technical-only", "auth_readiness": readiness, "clerk_bootstrap": clerk},
+            "tags": {"monitor": "dashboard-auth", "privacy": "technical-only", "dashboard_route": dashboard, "clerk_bootstrap": clerk},
         }
         envelope = f"{json.dumps({'dsn': dsn})}\n{json.dumps({'type': 'event'})}\n{json.dumps(event)}\n"
         return requests.post(endpoint, data=envelope, headers={"Content-Type": "application/x-sentry-envelope"}, timeout=TIMEOUT_SECONDS).ok
