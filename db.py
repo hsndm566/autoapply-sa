@@ -16,6 +16,7 @@ import sqlite3
 import time
 import uuid
 from contextlib import contextmanager
+from email.utils import getaddresses
 from typing import Any, Iterable
 from urllib.parse import urlparse
 
@@ -789,9 +790,10 @@ def reserve_campaign_contact(campaign_id: str, contact_id: str, *, status: str =
 
 def assert_outreach_contact_dispatchable(*, outbox_id: str, campaign_id: str, recipient: str) -> None:
     """Fail closed when a known recipient is no longer eligible for delivery."""
-    normalized_recipient = recipient.strip().casefold()
-    if not normalized_recipient:
+    addresses = getaddresses([recipient])
+    if len(addresses) != 1 or "@" not in addresses[0][1]:
         raise PermissionError("CONTACT_RECIPIENT_INVALID")
+    normalized_recipient = addresses[0][1].strip().casefold()
     with connection() as c:
         c.execute("BEGIN IMMEDIATE")
         reservations = c.execute(

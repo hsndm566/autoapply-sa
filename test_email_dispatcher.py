@@ -352,6 +352,27 @@ class EmailDispatcherTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             email_dispatcher.queue_audited_email_application(self.campaign_id, self.package(), "not-an-approval")
 
+    def test_formatted_blocked_address_cannot_bypass_suppression(self) -> None:
+        db.upsert_outreach_contact(email="blocked@example.com", status="opted_out")
+        with self.assertRaisesRegex(PermissionError, "CONTACT_NOT_CURRENTLY_VERIFIED"):
+            db.assert_outreach_contact_dispatchable(outbox_id="test", campaign_id=self.campaign_id,
+                recipient="Recruiter <BLOCKED@example.com>")
+
+    def test_multiple_recipients_are_rejected(self) -> None:
+        with self.assertRaisesRegex(PermissionError, "CONTACT_RECIPIENT_INVALID"):
+            db.assert_outreach_contact_dispatchable(outbox_id="test", campaign_id=self.campaign_id,
+                recipient="one@example.com, two@example.com")
+
+    def test_preparation_failure_is_blocked_not_transport_uncertain(self) -> None:
+        self.queue_valid_action()
+        os.environ.update({"EMAIL_OUTREACH_ENABLED": "true", "GMAIL_USER": email_dispatcher.REQUIRED_APPLICATION_SENDER,
+                           "GMAIL_APP_PASSWORD": "unit-test-only"})
+        with patch.object(email_dispatcher.auditor, "build_approved_email", side_effect=RuntimeError("unavailable")), patch.object(email_dispatcher, "_smtp_send") as send:
+            result = email_dispatcher.dispatch_pending(send_fn=send)
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual("EMAIL_PREPARATION_FAILED", result["results"][0]["reason"])
+        send.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
