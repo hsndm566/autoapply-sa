@@ -279,6 +279,12 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 LOG.exception("diversified queue unavailable: %s", exc)
                 self._send({"ok": False, "error": "diversified_queue_unavailable", "detail": type(exc).__name__}, HTTPStatus.SERVICE_UNAVAILABLE)
             return
+        if path == "/v1/admin/apify/usage":
+            if not _is_admin(self):
+                self._forbidden()
+                return
+            self._send({"ok": True, "usage": db.apify_usage_telemetry()})
+            return
         parts = [segment for segment in path.split("/") if segment]
         if len(parts) == 3 and parts[:2] == ["v1", "campaigns"]:
             campaign_id = parts[2]

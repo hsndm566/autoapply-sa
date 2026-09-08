@@ -201,6 +201,31 @@ CREATE TABLE IF NOT EXISTS service_health (
     checked_at REAL DEFAULT (strftime('%s','now'))
 );
 
+-- Apify is an optional paid discovery fallback.  These records intentionally
+-- retain uncertain reservations so a transport timeout cannot be retried.
+CREATE TABLE IF NOT EXISTS apify_query_cache (
+    query_key TEXT PRIMARY KEY,
+    normalized_query TEXT NOT NULL,
+    country TEXT NOT NULL,
+    result_limit INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    jobs_json TEXT NOT NULL,
+    fetched_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS apify_reservations (
+    query_key TEXT PRIMARY KEY,
+    normalized_query TEXT NOT NULL,
+    country TEXT NOT NULL,
+    result_limit INTEGER NOT NULL,
+    reserved_cost_usd REAL NOT NULL,
+    day_utc TEXT NOT NULL,
+    status TEXT NOT NULL,
+    provider_run_id TEXT,
+    detail TEXT,
+    created_at REAL NOT NULL,
+    updated_at REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_browser_handoff_updated ON browser_handoff_attempts(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_client ON applications(client_id);
@@ -213,6 +238,7 @@ CREATE INDEX IF NOT EXISTS idx_outreach_contacts_status ON outreach_contacts(sta
 CREATE INDEX IF NOT EXISTS idx_evidence_campaign ON application_evidence(campaign_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_campaign_discovery_events ON campaign_events(campaign_id, event_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_portal_probe_source_observed ON portal_probe_runs(source, observed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_apify_reservations_day ON apify_reservations(day_utc, status);
 """
 
 
@@ -993,6 +1019,92 @@ def metrics() -> dict[str, Any]:
         "last_submit_ts": last,
         "campaigns": {row["status"]: row["count"] for row in campaign_rows},
         "outbox": {row["status"]: row["count"] for row in outbox_rows},
+    }
+
+
+# ---- Optional Apify discovery cost guard ------------------------------------------------
+
+def get_apify_cache(query_key: str, max_age_seconds: int) -> dict[str, Any] | None:
+    """Return a fresh normalized-query result; stale data is never presented as current."""
+    with connection() as c:
+        row = c.execute(
+            "SELECT source,jobs_json,fetched_at FROM apify_query_cache WHERE query_key=?",
+            (query_key,),
+        ).fetchone()
+    if row is None or _now() - float(row["fetched_at"]) >= max(0, max_age_seconds):
+        return None
+    try:
+        jobs = json.loads(row["jobs_json"])
+    except (TypeError, ValueError):
+        return None
+    return {"source": row["source"], "jobs": jobs, "fetched_at": row["fetched_at"]} if isinstance(jobs, list) else None
+
+
+def put_apify_cache(
+    query_key: str, normalized_query: str, country: str, result_limit: int, source: str, jobs: list[dict[str, Any]]
+) -> None:
+    with connection() as c:
+        c.execute(
+            """INSERT INTO apify_query_cache(query_key,normalized_query,country,result_limit,source,jobs_json,fetched_at)
+               VALUES(?,?,?,?,?,?,?)
+               ON CONFLICT(query_key) DO UPDATE SET source=excluded.source,jobs_json=excluded.jobs_json,fetched_at=excluded.fetched_at""",
+            (query_key, normalized_query, country, result_limit, source, _json(jobs), _now()),
+        )
+
+
+def reserve_apify_run(
+    query_key: str, normalized_query: str, country: str, result_limit: int, reserve_usd: float,
+    daily_limit_usd: float, total_limit_usd: float,
+) -> tuple[bool, str]:
+    """Atomically reserve worst-case spend; any extant reservation blocks duplicates."""
+    day_utc = time.strftime("%Y-%m-%d", time.gmtime())
+    now = _now()
+    with connection() as c:
+        c.execute("BEGIN IMMEDIATE")
+        existing = c.execute("SELECT status FROM apify_reservations WHERE query_key=?", (query_key,)).fetchone()
+        if existing is not None:
+            return False, f"reservation_{existing['status']}"
+        daily_used = c.execute(
+            "SELECT COALESCE(SUM(reserved_cost_usd),0) AS total FROM apify_reservations WHERE day_utc=?", (day_utc,)
+        ).fetchone()["total"]
+        total_used = c.execute("SELECT COALESCE(SUM(reserved_cost_usd),0) AS total FROM apify_reservations").fetchone()["total"]
+        if float(daily_used) + reserve_usd > daily_limit_usd:
+            return False, "daily_budget_exhausted"
+        if float(total_used) + reserve_usd > total_limit_usd:
+            return False, "total_budget_exhausted"
+        c.execute(
+            """INSERT INTO apify_reservations(query_key,normalized_query,country,result_limit,reserved_cost_usd,day_utc,status,created_at,updated_at)
+               VALUES(?,?,?,?,?,?,?, ?,?)""",
+            (query_key, normalized_query, country, result_limit, reserve_usd, day_utc, "reserved", now, now),
+        )
+    return True, "reserved"
+
+
+def update_apify_reservation(query_key: str, status: str, provider_run_id: str = "", detail: str = "") -> None:
+    if status not in {"reserved", "started", "succeeded", "failed", "uncertain"}:
+        raise ValueError("invalid Apify reservation status")
+    with connection() as c:
+        c.execute(
+            """UPDATE apify_reservations SET status=?,provider_run_id=COALESCE(NULLIF(?,''),provider_run_id),
+               detail=?,updated_at=? WHERE query_key=?""",
+            (status, provider_run_id[:200], detail[:500], _now(), query_key),
+        )
+
+
+def apify_usage_telemetry() -> dict[str, Any]:
+    """Secret-free, aggregate-only telemetry suitable for the existing admin boundary."""
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    with connection() as c:
+        rows = c.execute("SELECT status,COUNT(*) AS runs,COALESCE(SUM(reserved_cost_usd),0) AS reserved FROM apify_reservations GROUP BY status").fetchall()
+        daily = c.execute("SELECT COALESCE(SUM(reserved_cost_usd),0) AS reserved FROM apify_reservations WHERE day_utc=?", (today,)).fetchone()["reserved"]
+        total = c.execute("SELECT COALESCE(SUM(reserved_cost_usd),0) AS reserved FROM apify_reservations").fetchone()["reserved"]
+        cached = c.execute("SELECT COUNT(*) AS count FROM apify_query_cache").fetchone()["count"]
+    return {
+        "day_utc": today,
+        "reserved_today_usd": round(float(daily), 2),
+        "reserved_total_usd": round(float(total), 2),
+        "cache_entries": int(cached),
+        "by_status": {row["status"]: {"runs": row["runs"], "reserved_usd": round(float(row["reserved"]), 2)} for row in rows},
     }
 
 
