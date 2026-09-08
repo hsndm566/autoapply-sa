@@ -44,7 +44,17 @@ def import_contact_rows(
     source = verification_source.strip()
     if not source:
         raise ValueError("verification_source is required")
-    counts = {"rows": 0, "inserted": 0, "updated": 0, "invalid": 0, "verified": 0, "unverified": 0}
+    counts = {
+        "rows": 0,
+        "inserted": 0,
+        "updated": 0,
+        "invalid": 0,
+        "verified": 0,
+        "unverified": 0,
+        "bounced": 0,
+        "suppressed": 0,
+        "opted_out": 0,
+    }
     for row in rows:
         counts["rows"] += 1
         if not isinstance(row, Mapping):
@@ -60,7 +70,7 @@ def import_contact_rows(
         else:
             status = "verified" if mark_verified else "unverified"
         try:
-            _id, created = db.upsert_outreach_contact(
+            contact_id, created = db.upsert_outreach_contact(
                 email=email,
                 full_name=_value(row, _NAME_FIELDS),
                 company=_value(row, _COMPANY_FIELDS),
@@ -72,10 +82,8 @@ def import_contact_rows(
             counts["invalid"] += 1
             continue
         counts["inserted" if created else "updated"] += 1
-        if status == "verified":
-            counts["verified"] += 1
-        else:
-            counts["unverified"] += 1
+        effective_status = db.get_outreach_contact(contact_id)["status"]
+        counts[effective_status] += 1
     return counts
 
 

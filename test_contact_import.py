@@ -48,6 +48,46 @@ class ContactImportTests(unittest.TestCase):
         self.assertEqual(0, result["verified"])
         self.assertEqual([], db.get_verified_outreach_contacts(campaign_id=self.campaign_id))
 
+    def test_blocked_statuses_are_monotonic_across_verified_imports(self) -> None:
+        for status in ("bounced", "suppressed", "opted_out"):
+            email = f"{status}@example.com"
+            db.upsert_outreach_contact(email=email, status=status, verification_source=f"seed-{status}")
+            result = contact_import.import_contact_rows(
+                [{"Email": email.upper(), "Status": ""}],
+                verification_source="verified-cross-source",
+                mark_verified=True,
+            )
+            contact = db.get_outreach_contact(db.upsert_outreach_contact(email=email)[0])
+            self.assertEqual(status, contact["status"])
+            self.assertEqual(0, result["verified"])
+            self.assertEqual(1, result[status])
+
+    def test_cross_source_duplicate_and_evidence_are_idempotent(self) -> None:
+        rows = [{"Email": "Recruiter@Example.com", "Name": "First"}]
+        contact_import.import_contact_rows(rows, verification_source="source-a", mark_verified=True)
+        contact_import.import_contact_rows(rows, verification_source="source-a", mark_verified=True)
+        contact_import.import_contact_rows(rows, verification_source="source-b", mark_verified=True)
+        with db.connection() as connection:
+            contacts = connection.execute("SELECT COUNT(*) AS count FROM outreach_contacts").fetchone()["count"]
+            evidence = connection.execute("SELECT COUNT(*) AS count FROM outreach_contact_source_evidence").fetchone()["count"]
+            attempts = connection.execute("SELECT COUNT(*) AS count FROM campaign_contact_attempts").fetchone()["count"]
+            outbox = connection.execute("SELECT COUNT(*) AS count FROM action_outbox").fetchone()["count"]
+        self.assertEqual(1, contacts)
+        self.assertEqual(2, evidence)
+        self.assertEqual(0, attempts)
+        self.assertEqual(0, outbox)
+
+    def test_legacy_source_is_preserved_and_opt_out_cannot_be_downgraded(self) -> None:
+        contact_id, _ = db.upsert_outreach_contact(email="legacy@example.com", status="opted_out", verification_source="legacy-evidence")
+        with db.connection() as connection:
+            connection.execute("DELETE FROM outreach_contact_source_evidence WHERE contact_id=?", (contact_id,))
+        for status in ("bounced", "suppressed", "verified", "unverified"):
+            db.upsert_outreach_contact(email="legacy@example.com", status=status, verification_source="new-import")
+            self.assertEqual("opted_out", db.get_outreach_contact(contact_id)["status"])
+        with db.connection() as connection:
+            original = connection.execute("SELECT COUNT(*) FROM outreach_contact_source_evidence WHERE contact_id=? AND source='legacy-evidence' AND status='opted_out'", (contact_id,)).fetchone()[0]
+        self.assertEqual(1, original)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
