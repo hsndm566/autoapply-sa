@@ -712,9 +712,17 @@ def upsert_outreach_contact(
         raise ValueError("contact status is invalid")
     with connection() as c:
         c.execute("BEGIN IMMEDIATE")
-        existing = c.execute("SELECT id,status FROM outreach_contacts WHERE email=?", (normalized,)).fetchone()
+        existing = c.execute("SELECT id,status,verification_source,updated_at FROM outreach_contacts WHERE email=?", (normalized,)).fetchone()
         effective_status = status
         if existing:
+            # Preserve the provenance of legacy rows before their first new import.
+            c.execute(
+                """INSERT OR IGNORE INTO outreach_contact_source_evidence
+                   (contact_id,source,status,observed_at) SELECT ?,?,?,?
+                   WHERE NOT EXISTS (SELECT 1 FROM outreach_contact_source_evidence WHERE contact_id=?)""",
+                (existing["id"], existing["verification_source"] or "legacy-unspecified",
+                 existing["status"], existing["updated_at"] or _now(), existing["id"]),
+            )
             blocked_strength = {"bounced": 1, "suppressed": 2, "opted_out": 3}
             if blocked_strength.get(existing["status"], 0) > blocked_strength.get(status, 0):
                 effective_status = existing["status"]

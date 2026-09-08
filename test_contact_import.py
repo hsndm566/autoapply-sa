@@ -77,6 +77,17 @@ class ContactImportTests(unittest.TestCase):
         self.assertEqual(0, attempts)
         self.assertEqual(0, outbox)
 
+    def test_legacy_source_is_preserved_and_opt_out_cannot_be_downgraded(self) -> None:
+        contact_id, _ = db.upsert_outreach_contact(email="legacy@example.com", status="opted_out", verification_source="legacy-evidence")
+        with db.connection() as connection:
+            connection.execute("DELETE FROM outreach_contact_source_evidence WHERE contact_id=?", (contact_id,))
+        for status in ("bounced", "suppressed", "verified", "unverified"):
+            db.upsert_outreach_contact(email="legacy@example.com", status=status, verification_source="new-import")
+            self.assertEqual("opted_out", db.get_outreach_contact(contact_id)["status"])
+        with db.connection() as connection:
+            original = connection.execute("SELECT COUNT(*) FROM outreach_contact_source_evidence WHERE contact_id=? AND source='legacy-evidence' AND status='opted_out'", (contact_id,)).fetchone()[0]
+        self.assertEqual(1, original)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
