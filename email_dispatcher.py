@@ -228,9 +228,34 @@ def dispatch_one(
         # `build_approved_email` rechecks a current, matching Auditor decision.
         # Re-assert the final MIME payload immediately before transport as a second fail-closed boundary.
         _assert_pdf_attachment(message)
-        transport_evidence = brevo_send_fn(message, sender, credential) if transport == "brevo" else send_fn(message, sender, credential)
     except PermissionError as exc:
         return _block(action, f"AUDITOR_RECHECK_FAILED: {exc}")
+    except Exception as exc:
+        # This state is terminal until human review: SMTP may have failed before or
+        # after accepting the message, so automatic retry could create a duplicate.
+        db.mark_action_uncertain(str(action["id"]), f"transport_failed:{type(exc).__name__}")
+        db.add_campaign_event(
+            str(action["campaign_id"]),
+            "email_delivery_uncertain",
+            "warning",
+            "Email transport failed; delivery was not recorded as successful.",
+            {"outbox_id": action["id"], "error_type": type(exc).__name__},
+        )
+        return {"outbox_id": action["id"], "status": "uncertain", "reason": type(exc).__name__}
+
+    try:
+        db.assert_outreach_contact_dispatchable(
+            outbox_id=str(action["id"]),
+            campaign_id=str(action["campaign_id"]),
+            recipient=str(message["To"] or ""),
+        )
+    except PermissionError as exc:
+        return _block(action, str(exc))
+    except Exception:
+        return _block(action, "CONTACT_RECHECK_FAILED")
+
+    try:
+        transport_evidence = brevo_send_fn(message, sender, credential) if transport == "brevo" else send_fn(message, sender, credential)
     except Exception as exc:
         # This state is terminal until human review: SMTP may have failed before or
         # after accepting the message, so automatic retry could create a duplicate.

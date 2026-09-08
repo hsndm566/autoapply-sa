@@ -787,6 +787,37 @@ def reserve_campaign_contact(campaign_id: str, contact_id: str, *, status: str =
             return False
 
 
+def assert_outreach_contact_dispatchable(*, outbox_id: str, campaign_id: str, recipient: str) -> None:
+    """Fail closed when a known recipient is no longer eligible for delivery."""
+    normalized_recipient = recipient.strip().casefold()
+    if not normalized_recipient:
+        raise PermissionError("CONTACT_RECIPIENT_INVALID")
+    with connection() as c:
+        c.execute("BEGIN IMMEDIATE")
+        reservations = c.execute(
+            """SELECT a.campaign_id,c.email,c.status
+               FROM campaign_contact_attempts a
+               LEFT JOIN outreach_contacts c ON c.id=a.contact_id
+               WHERE a.outbox_id=?""",
+            (outbox_id,),
+        ).fetchall()
+        if reservations:
+            if any(str(row["campaign_id"]) != campaign_id for row in reservations) or len(reservations) != 1:
+                raise PermissionError("CONTACT_RESERVATION_MISMATCH")
+            reservation = reservations[0]
+            if not reservation["email"] or str(reservation["email"]).casefold() != normalized_recipient:
+                raise PermissionError("CONTACT_RECIPIENT_MISMATCH")
+            if reservation["status"] != "verified":
+                raise PermissionError("CONTACT_NOT_CURRENTLY_VERIFIED")
+            return
+        contact = c.execute(
+            "SELECT status FROM outreach_contacts WHERE lower(email)=? LIMIT 1",
+            (normalized_recipient,),
+        ).fetchone()
+        if contact is not None and contact["status"] != "verified":
+            raise PermissionError("CONTACT_NOT_CURRENTLY_VERIFIED")
+
+
 def queue_action(
     campaign_id: str,
     action_type: str,
