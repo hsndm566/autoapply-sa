@@ -72,6 +72,21 @@ class EmailDispatcherTests(unittest.TestCase):
         self.assertTrue(added)
         return action_id
 
+    def queue_reserved_action(self, *, package: dict | None = None, contact_email: str | None = None) -> str:
+        package = package or self.package()
+        email = contact_email or str(package["destination"]["recipient"])
+        contact_id, _ = db.upsert_outreach_contact(
+            email=email, status="verified", verification_source="dispatch-test"
+        )
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        self.assertTrue(decision.approved, decision.summary)
+        action_id, added = email_dispatcher.queue_audited_email_application(
+            self.campaign_id, package, decision.approval_token
+        )
+        self.assertTrue(added)
+        self.assertTrue(db.reserve_campaign_contact(self.campaign_id, contact_id, outbox_id=action_id))
+        return action_id
+
     def action_status(self, action_id: str) -> str:
         with db.connection() as c:
             return str(c.execute("SELECT status FROM action_outbox WHERE id=?", (action_id,)).fetchone()["status"])
@@ -109,6 +124,104 @@ class EmailDispatcherTests(unittest.TestCase):
         summary = db.campaign_summary(self.campaign_id)
         self.assertEqual(1, summary["evidence_count"])
         self.assertIn("email_delivery_accepted", {item["event_type"] for item in db.list_campaign_events(self.campaign_id)})
+
+    def test_known_verified_reserved_contact_sends(self) -> None:
+        action_id = self.queue_reserved_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        sent: list[object] = []
+        result = email_dispatcher.dispatch_pending(send_fn=lambda message, _sender, _password: (sent.append(message) or "accepted"))
+        self.assertEqual("accepted", result["results"][0]["status"])
+        self.assertEqual(1, len(sent))
+        self.assertEqual("completed", self.action_status(action_id))
+
+    def test_queued_then_blocked_statuses_never_reach_smtp(self) -> None:
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        for status in ("bounced", "suppressed", "opted_out", "unverified"):
+            email = f"{status}@brighttech.example"
+            package = self.package()
+            package["application_id"] = f"blocked-{status}"
+            package["destination"] = dict(package["destination"], recipient=email)
+            action_id = self.queue_reserved_action(package=package)
+            db.upsert_outreach_contact(email=email, status=status, verification_source="dispatch-test-status")
+            sent: list[object] = []
+            result = email_dispatcher.dispatch_pending(send_fn=lambda *args: (sent.append(args) or "should-not-send"))
+            self.assertEqual("blocked", result["results"][0]["status"])
+            self.assertEqual("CONTACT_NOT_CURRENTLY_VERIFIED", result["results"][0]["reason"])
+            self.assertEqual([], sent)
+            self.assertEqual("blocked", self.action_status(action_id))
+
+    def test_status_change_during_message_build_blocks_before_smtp(self) -> None:
+        email = str(self.package()["destination"]["recipient"])
+        action_id = self.queue_reserved_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        original = auditor.build_approved_email
+
+        def build_then_block(package, sender, token):
+            db.upsert_outreach_contact(email=email, status="bounced", verification_source="dispatch-race")
+            return original(package, sender, token)
+
+        sent: list[object] = []
+        with patch.object(email_dispatcher.auditor, "build_approved_email", side_effect=build_then_block):
+            result = email_dispatcher.dispatch_pending(send_fn=lambda *args: (sent.append(args) or "should-not-send"))
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual("CONTACT_NOT_CURRENTLY_VERIFIED", result["results"][0]["reason"])
+        self.assertEqual([], sent)
+        self.assertEqual("blocked", self.action_status(action_id))
+
+    def test_queued_then_blocked_warmup_never_reaches_brevo(self) -> None:
+        package = self.package()
+        package.update({
+            "application_id": "warmup-blocked-001",
+            "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
+            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "submission": {"channel": "email", "mode": "live", "cv_transport": "email_attachment", "client_id": 2,
+                            "sender_email": "apply1@hsndm.tech", "evidence_type": WARMUP_EVIDENCE_TYPE, "warmup_scope": WARMUP_SCOPE},
+        })
+        action_id = self.queue_reserved_action(package=package)
+        db.upsert_outreach_contact(email=package["destination"]["recipient"], status="suppressed", verification_source="dispatch-brevo")
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ[WARMUP_ENVIRONMENT_FLAG] = "true"
+        os.environ["BREVO_API_KEY"] = "test-brevo-key"
+        sent: list[object] = []
+        result = email_dispatcher.dispatch_pending(brevo_send_fn=lambda *args: (sent.append(args) or "should-not-send"))
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual("CONTACT_NOT_CURRENTLY_VERIFIED", result["results"][0]["reason"])
+        self.assertEqual([], sent)
+        self.assertEqual("blocked", self.action_status(action_id))
+
+    def test_contact_recheck_failure_blocks_without_transport(self) -> None:
+        action_id = self.queue_valid_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        sent: list[object] = []
+        with patch.object(email_dispatcher.db, "assert_outreach_contact_dispatchable", side_effect=RuntimeError("db unavailable")):
+            result = email_dispatcher.dispatch_pending(send_fn=lambda *args: (sent.append(args) or "should-not-send"))
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual("CONTACT_RECHECK_FAILED", result["results"][0]["reason"])
+        self.assertEqual([], sent)
+        self.assertEqual("blocked", self.action_status(action_id))
+
+    def test_contact_reservation_recipient_mismatch_blocks(self) -> None:
+        package = self.package()
+        contact_email = "reserved@brighttech.example"
+        package["application_id"] = "recipient-mismatch-001"
+        action_id = self.queue_reserved_action(package=package, contact_email=contact_email)
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        sent: list[object] = []
+        result = email_dispatcher.dispatch_pending(send_fn=lambda *args: (sent.append(args) or "should-not-send"))
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual("CONTACT_RECIPIENT_MISMATCH", result["results"][0]["reason"])
+        self.assertEqual([], sent)
+        self.assertEqual("blocked", self.action_status(action_id))
 
     def test_explicitly_gated_verified_contact_warmup_uses_brevo_with_exact_pdf(self) -> None:
         package = self.package()
@@ -238,6 +351,27 @@ class EmailDispatcherTests(unittest.TestCase):
     def test_queue_rejects_a_package_without_current_auditor_approval(self) -> None:
         with self.assertRaises(PermissionError):
             email_dispatcher.queue_audited_email_application(self.campaign_id, self.package(), "not-an-approval")
+
+    def test_formatted_blocked_address_cannot_bypass_suppression(self) -> None:
+        db.upsert_outreach_contact(email="blocked@example.com", status="opted_out")
+        with self.assertRaisesRegex(PermissionError, "CONTACT_NOT_CURRENTLY_VERIFIED"):
+            db.assert_outreach_contact_dispatchable(outbox_id="test", campaign_id=self.campaign_id,
+                recipient="Recruiter <BLOCKED@example.com>")
+
+    def test_multiple_recipients_are_rejected(self) -> None:
+        with self.assertRaisesRegex(PermissionError, "CONTACT_RECIPIENT_INVALID"):
+            db.assert_outreach_contact_dispatchable(outbox_id="test", campaign_id=self.campaign_id,
+                recipient="one@example.com, two@example.com")
+
+    def test_preparation_failure_is_blocked_not_transport_uncertain(self) -> None:
+        self.queue_valid_action()
+        os.environ.update({"EMAIL_OUTREACH_ENABLED": "true", "GMAIL_USER": email_dispatcher.REQUIRED_APPLICATION_SENDER,
+                           "GMAIL_APP_PASSWORD": "unit-test-only"})
+        with patch.object(email_dispatcher.auditor, "build_approved_email", side_effect=RuntimeError("unavailable")), patch.object(email_dispatcher, "_smtp_send") as send:
+            result = email_dispatcher.dispatch_pending(send_fn=send)
+        self.assertEqual("blocked", result["results"][0]["status"])
+        self.assertEqual("EMAIL_PREPARATION_FAILED", result["results"][0]["reason"])
+        send.assert_not_called()
 
 
 if __name__ == "__main__":
