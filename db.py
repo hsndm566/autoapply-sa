@@ -150,6 +150,15 @@ CREATE TABLE IF NOT EXISTS outreach_contacts (
     created_at REAL DEFAULT (strftime('%s','now')),
     updated_at REAL DEFAULT (strftime('%s','now'))
 );
+CREATE TABLE IF NOT EXISTS outreach_contact_source_evidence (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    contact_id TEXT NOT NULL,
+    source TEXT NOT NULL,
+    status TEXT NOT NULL,
+    observed_at REAL NOT NULL,
+    UNIQUE(contact_id, source, status),
+    FOREIGN KEY (contact_id) REFERENCES outreach_contacts(id) ON DELETE CASCADE
+);
 CREATE TABLE IF NOT EXISTS campaign_contact_attempts (
     campaign_id TEXT NOT NULL,
     contact_id TEXT NOT NULL,
@@ -235,6 +244,7 @@ CREATE INDEX IF NOT EXISTS idx_campaign_jobs ON campaign_jobs(campaign_id, statu
 CREATE INDEX IF NOT EXISTS idx_outbox_ready ON action_outbox(status, available_at);
 CREATE INDEX IF NOT EXISTS idx_outbox_type_status ON action_outbox(action_type, status, available_at);
 CREATE INDEX IF NOT EXISTS idx_outreach_contacts_status ON outreach_contacts(status, company);
+CREATE INDEX IF NOT EXISTS idx_contact_source_evidence_contact ON outreach_contact_source_evidence(contact_id, observed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_evidence_campaign ON application_evidence(campaign_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_campaign_discovery_events ON campaign_events(campaign_id, event_type, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_portal_probe_source_observed ON portal_probe_runs(source, observed_at DESC);
@@ -693,7 +703,7 @@ def upsert_outreach_contact(
     status: str = "unverified",
     verification_source: str = "",
 ) -> tuple[str, bool]:
-    """Persist one contact. Only `verified` contacts may later be selected for a campaign."""
+    """Persist one contact while preserving existing suppression decisions."""
     normalized = email.strip().lower()
     if "@" not in normalized or len(normalized) > 320:
         raise ValueError("contact email is invalid")
@@ -701,19 +711,34 @@ def upsert_outreach_contact(
     if status not in allowed:
         raise ValueError("contact status is invalid")
     with connection() as c:
-        existing = c.execute("SELECT id FROM outreach_contacts WHERE email=?", (normalized,)).fetchone()
+        c.execute("BEGIN IMMEDIATE")
+        existing = c.execute("SELECT id,status FROM outreach_contacts WHERE email=?", (normalized,)).fetchone()
+        effective_status = status
         if existing:
+            blocked_strength = {"bounced": 1, "suppressed": 2, "opted_out": 3}
+            if blocked_strength.get(existing["status"], 0) > blocked_strength.get(status, 0):
+                effective_status = existing["status"]
             c.execute(
                 """UPDATE outreach_contacts SET full_name=?,company=?,role=?,status=?,verification_source=?,updated_at=?
                    WHERE id=?""",
-                (full_name[:200], company[:200], role[:200], status, verification_source[:200], _now(), existing["id"]),
+                (full_name[:200], company[:200], role[:200], effective_status, verification_source[:200], _now(), existing["id"]),
+            )
+            c.execute(
+                """INSERT OR IGNORE INTO outreach_contact_source_evidence
+                   (contact_id,source,status,observed_at) VALUES(?,?,?,?)""",
+                (existing["id"], verification_source[:200], status, _now()),
             )
             return str(existing["id"]), False
         contact_id = str(uuid.uuid4())
         c.execute(
             """INSERT INTO outreach_contacts(id,email,full_name,company,role,status,verification_source,created_at,updated_at)
                VALUES(?,?,?,?,?,?,?,?,?)""",
-            (contact_id, normalized, full_name[:200], company[:200], role[:200], status, verification_source[:200], _now(), _now()),
+            (contact_id, normalized, full_name[:200], company[:200], role[:200], effective_status, verification_source[:200], _now(), _now()),
+        )
+        c.execute(
+            """INSERT OR IGNORE INTO outreach_contact_source_evidence
+               (contact_id,source,status,observed_at) VALUES(?,?,?,?)""",
+            (contact_id, verification_source[:200], status, _now()),
         )
         return contact_id, True
 
