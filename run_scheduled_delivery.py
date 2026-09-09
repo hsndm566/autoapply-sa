@@ -213,6 +213,18 @@ def apply_optional_personalization(package: dict[str, Any], job: dict[str, Any],
     return "fallback"
 
 
+def audit_scheduled_package(package: dict[str, Any], personalization_status: str) -> auditor.AuditDecision:
+    """Use independent review only when the optional personalized body was used."""
+
+    personalized = personalization_status == "used"
+    return auditor.audit_application(
+        package["application_id"],
+        package,
+        ai_reviewer=auditor.configured_ai_reviewer if personalized else None,
+        require_ai_review=personalized,
+    )
+
+
 def preflight(jobs: list[dict[str, Any]], clients: dict[int, dict[str, str]], cvs_dir: Path) -> tuple[list[tuple[dict[str, Any], dict[str, str], dict[str, Any], auditor.AuditDecision]], list[str]]:
     blocked = shared.assert_runtime_ready(jobs, clients, cvs_dir)
     ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], auditor.AuditDecision]] = []
@@ -221,7 +233,7 @@ def preflight(jobs: list[dict[str, Any]], clients: dict[int, dict[str, str]], cv
         package = build_package(job, client, cvs_dir)
         personalization_status = apply_optional_personalization(package, job, client)
         print(json.dumps({"email_personalization": {"application_id": package["application_id"], "status": personalization_status}}, sort_keys=True))
-        decision = auditor.audit_application(package["application_id"], package, require_ai_review=False)
+        decision = audit_scheduled_package(package, personalization_status)
         if decision.approved:
             ready.append((job, client, package, decision))
         else:
