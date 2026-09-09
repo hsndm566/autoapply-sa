@@ -89,6 +89,47 @@ class ScheduledDeliveryTests(unittest.TestCase):
         package = scheduled.build_package(next(job for job in selected if job["client_id"] == 2), client, self.root)
         self.assertEqual([], auditor.deterministic_review(package))
 
+    def _audited_package(self) -> dict[str, object]:
+        cv = self.root / "client2.pdf"
+        cv.write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
+        job = {
+            "recipient_email": "recipient@example.test",
+            "company": "Example Company",
+            "role": "Industrial Engineer",
+            "city": "Jeddah",
+            "client_id": 2,
+        }
+        client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
+        return scheduled.build_package(job, client, self.root)
+
+    def test_personalized_body_requires_approved_independent_review(self) -> None:
+        package = self._audited_package()
+        approved = {"decision": "approve", "confidence": 0.95, "reasons": ["Factual."], "required_fixes": []}
+        with patch.object(auditor, "configured_ai_reviewer", return_value=approved) as reviewer:
+            decision = scheduled.audit_scheduled_package(package, "used")
+
+        self.assertTrue(decision.approved, decision.summary)
+        reviewer.assert_called_once()
+
+    def test_personalized_body_rejects_or_blocks_reviewer_failure(self) -> None:
+        package = self._audited_package()
+        rejected = {"decision": "reject", "confidence": 0.95, "reasons": ["Unsupported claim."], "required_fixes": []}
+        with patch.object(auditor, "configured_ai_reviewer", return_value=rejected):
+            rejected_decision = scheduled.audit_scheduled_package(package, "used")
+        self.assertFalse(rejected_decision.approved)
+
+        with patch.object(auditor, "configured_ai_reviewer", side_effect=RuntimeError("unavailable")):
+            unavailable_decision = scheduled.audit_scheduled_package(package, "used")
+        self.assertFalse(unavailable_decision.approved)
+        self.assertIn("AI_REVIEW_UNAVAILABLE", {finding.code for finding in unavailable_decision.findings})
+
+    def test_generic_fallback_keeps_deterministic_only_audit(self) -> None:
+        package = self._audited_package()
+        with patch.object(auditor, "configured_ai_reviewer", side_effect=AssertionError("must not call reviewer")):
+            decision = scheduled.audit_scheduled_package(package, "fallback")
+
+        self.assertTrue(decision.approved, decision.summary)
+
     def test_accepted_delivery_retains_tracking_when_supabase_sync_is_unavailable(self) -> None:
         tracking = self.root / "tracking.csv"
         cv = self.root / "client2.pdf"
