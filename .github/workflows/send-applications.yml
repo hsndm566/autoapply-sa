@@ -53,7 +53,8 @@ jobs:
           git config user.email "apply@hsndm.tech"
           git add tracking.csv
           git commit -m "Record scheduled application delivery outcomes"
-          git push
+          git pull --rebase origin main
+          git push origin HEAD:main
 
   monitor-success:
     name: Signal scheduled-delivery success
