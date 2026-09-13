@@ -203,51 +203,6 @@ def _application_id_from_response(client: Any, external_application_id: str, res
     return None
 
 
-def _record_delivery_audit_event(
-    database: Any,
-    *,
-    candidate_id: str,
-    application_id: str,
-    provider_message_id: str | None,
-    sender_email: str,
-    recipient_email_hash: str,
-    company: str,
-    role: str,
-    city: str | None,
-    external_application_id: str,
-    package_hash: str | None,
-) -> None:
-    """Append delivery evidence without allowing audit availability to block sender sync."""
-    message_id = (provider_message_id or "").strip() or None
-    try:
-        database.schema(SCHEMA).table("audit_events").insert(
-            {
-                "candidate_id": candidate_id,
-                "application_id": application_id,
-                "stage": 4,
-                "event_type": "delivery_confirmed",
-                "actor_type": "system",
-                "payload": {
-                    "provider_message_id": message_id,
-                    "sender_email": sender_email,
-                    "recipient_email_hash": recipient_email_hash,
-                    "company": company,
-                    "role": role,
-                    "city": city,
-                    "external_application_id": external_application_id,
-                },
-                "idempotency_key": message_id or f"accepted:{external_application_id}",
-                **({"package_hash": package_hash} if package_hash else {}),
-            }
-        ).execute()
-    except Exception as error:
-        LOGGER.warning(
-            "Supabase delivery audit insert failed for external application %s (%s)",
-            external_application_id,
-            type(error).__name__,
-        )
-
-
 def sync_accepted_delivery(
     *,
     candidate_id: str | None,
@@ -345,24 +300,12 @@ def sync_accepted_delivery(
                     "metadata": {
                         "external_application_id": external_application_id,
                         "delivery_channel": delivery_channel.strip() or "email",
+                        **({"package_hash": package_hash.strip()} if package_hash else {}),
                     },
                 },
                 on_conflict="provider,provider_event_id",
             )
             .execute()
-        )
-        _record_delivery_audit_event(
-            database,
-            candidate_id=mapped_candidate_id,
-            application_id=application_id,
-            provider_message_id=message_id,
-            sender_email=sender_email,
-            recipient_email_hash=recipient_email_hash,
-            company=company.strip(),
-            role=role.strip(),
-            city=city.strip() if city else None,
-            external_application_id=external_application_id,
-            package_hash=package_hash.strip() if package_hash else None,
         )
         return DeliverySyncResult("synced", application_id=application_id)
     except requests.HTTPError as error:
