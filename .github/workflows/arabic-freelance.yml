@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: autoapply-log-writers
+  cancel-in-progress: false
+
 jobs:
   arabic:
     runs-on: ubuntu-latest
@@ -27,4 +31,8 @@ jobs:
           git config user.email "agent@hsndm.tech"
           git config user.name "Hermes Agent"
           git add business/arabic-freelance-pipeline.md
-          git diff --cached --quiet || git commit -m "arabic: daily freelance scan + proposals" && git push
+          if ! git diff --cached --quiet; then
+            git commit -m "arabic: daily freelance scan + proposals"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
