@@ -139,39 +139,8 @@ class SupabaseDeliverySyncTests(unittest.TestCase):
         self.assertEqual(database.application_id, event_payload["application_id"])
         self.assertEqual("brevo-message-1", event_payload["provider_event_id"])
         self.assertEqual("provider,provider_event_id", database.upserts[1][2])
-        self.assertEqual(1, len(database.inserts))
-        audit_payload = database.inserts[0][1]
-        self.assertEqual("delivery_confirmed", audit_payload["event_type"])
-        self.assertEqual(4, audit_payload["stage"])
-        self.assertEqual("system", audit_payload["actor_type"])
-        self.assertEqual(database.application_id, audit_payload["application_id"])
-        self.assertEqual("brevo-message-1", audit_payload["idempotency_key"])
-        self.assertEqual("b" * 64, audit_payload["package_hash"])
-        self.assertEqual(sync.hash_recipient_email("recipient@example.test"), audit_payload["payload"]["recipient_email_hash"])
-        self.assertNotIn("recipient_email", audit_payload["payload"])
-
-    def test_sync_logs_audit_insert_failure_and_keeps_delivery_sync_successful(self) -> None:
-        database = FakeSupabase(audit_insert_error=True)
-        with self.assertLogs(sync.LOGGER, "WARNING") as captured:
-            result = sync.sync_accepted_delivery(
-                candidate_id=None,
-                external_application_id="scheduled-application-audit-failure",
-                external_client_id=2,
-                sender_email="apply1@hsndm.tech",
-                recipient_email="recipient@example.test",
-                company="Example Company",
-                role="Industrial Engineer",
-                city="Jeddah",
-                delivery_channel="email",
-                provider_message_id=None,
-                send_status="accepted",
-                sent_at="2026-08-26T00:00:00+00:00",
-                client=database,
-            )
-
-        self.assertTrue(result.synced)
-        self.assertEqual(["email_applications", "email_delivery_events"], [entry[0] for entry in database.upserts])
-        self.assertTrue(any("delivery audit insert failed" in entry for entry in captured.output))
+        self.assertEqual("b" * 64, event_payload["metadata"]["package_hash"])
+        self.assertEqual([], database.inserts)
 
     def test_sync_skips_when_no_active_mapping_exists(self) -> None:
         database = FakeSupabase(mapping_exists=False)
