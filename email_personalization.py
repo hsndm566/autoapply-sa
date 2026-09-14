@@ -15,7 +15,9 @@ from typing import Any
 
 import httpx
 
-TAILOR_ENDPOINT = "https://saudi-whatsapp-chatbot-production.up.railway.app/tailor"
+DEFAULT_API_BASE_URL = "https://api.hsndm.tech"
+TAILOR_ENDPOINT = f"{DEFAULT_API_BASE_URL}/tailor"
+API_BASE_URL_ENV = "AUTOAPPLY_API_BASE_URL"
 FEATURE_FLAG = "ENABLE_EMAIL_PERSONALIZATION"
 REQUEST_TIMEOUT_SECONDS = 20.0
 MAX_EMAIL_BODY_CHARACTERS = 2_500
@@ -26,6 +28,13 @@ def personalization_enabled() -> bool:
     """Return true only for the exact opt-in value required by scheduled delivery."""
 
     return os.environ.get(FEATURE_FLAG) == "true"
+
+
+def tailor_endpoint() -> str:
+    """Return the canonical gateway endpoint, with a controlled test override."""
+
+    base_url = os.environ.get(API_BASE_URL_ENV, DEFAULT_API_BASE_URL).rstrip("/")
+    return f"{base_url}/tailor"
 
 
 def _text(value: Any) -> str:
@@ -87,9 +96,9 @@ async def personalize_email_body(
     try:
         if client is None:
             async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as request_client:
-                response = await request_client.post(TAILOR_ENDPOINT, json=payload)
+                response = await request_client.post(tailor_endpoint(), json=payload)
         else:
-            response = await client.post(TAILOR_ENDPOINT, json=payload)
+            response = await client.post(tailor_endpoint(), json=payload)
         response.raise_for_status()
         result = response.json()
         if not isinstance(result, Mapping) or result.get("status") != "ok":
@@ -101,4 +110,12 @@ async def personalize_email_body(
         return None
 
 
-__all__ = ["FEATURE_FLAG", "TAILOR_ENDPOINT", "personalization_enabled", "personalize_email_body"]
+__all__ = [
+    "API_BASE_URL_ENV",
+    "DEFAULT_API_BASE_URL",
+    "FEATURE_FLAG",
+    "TAILOR_ENDPOINT",
+    "personalization_enabled",
+    "personalize_email_body",
+    "tailor_endpoint",
+]

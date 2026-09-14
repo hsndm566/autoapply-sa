@@ -50,6 +50,10 @@ class EmailPersonalizationTests(unittest.TestCase):
         self.assertEqual(email_personalization.TAILOR_ENDPOINT, client.post.call_args.args[0])
         self.assertEqual("Test Candidate", kwargs["json"]["structured_profile_json"]["full_name"])
 
+    def test_tailor_endpoint_allows_controlled_base_url_override(self) -> None:
+        with patch.dict(os.environ, {email_personalization.API_BASE_URL_ENV: "https://gateway.example.test/"}, clear=False):
+            self.assertEqual("https://gateway.example.test/tailor", email_personalization.tailor_endpoint())
+
     def test_gateway_error_returns_none_for_generic_fallback(self) -> None:
         client = FakeAsyncClient(FakeResponse({}, error=RuntimeError("gateway unavailable")))
 
