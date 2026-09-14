@@ -27,6 +27,8 @@ SENTRY_CONFIG_URL = "https://www.hsndm.tech/api/client-config/sentry"
 STATE_PATH = Path("monitor-state/dashboard-auth.json")
 OWNER_EMAIL = "hasanadam506@gmail.com"
 TIMEOUT_SECONDS = 15
+REQUEST_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -37,10 +39,13 @@ class MonitorResult:
 
 
 def request_status(url: str, headers: dict[str, str] | None = None) -> int | None:
-    try:
-        return requests.get(url, timeout=TIMEOUT_SECONDS, headers=headers or {}).status_code
-    except requests.RequestException:
-        return None
+    for attempt in range(REQUEST_ATTEMPTS):
+        try:
+            return requests.get(url, timeout=TIMEOUT_SECONDS, headers=headers or {}).status_code
+        except requests.RequestException:
+            if attempt + 1 < REQUEST_ATTEMPTS:
+                time.sleep(RETRY_DELAY_SECONDS)
+    return None
 
 
 def evaluate() -> MonitorResult:

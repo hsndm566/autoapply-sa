@@ -8,6 +8,14 @@ import monitor_dashboard_auth as monitor
 
 
 class MonitorDashboardAuthTests(unittest.TestCase):
+    def test_request_status_retries_transient_network_failure(self):
+        response = Mock(status_code=200)
+        with patch.object(monitor.requests, "get", side_effect=[monitor.requests.RequestException("timeout"), response]) as get:
+            with patch.object(monitor.time, "sleep") as sleep:
+                self.assertEqual(monitor.request_status("https://example.test"), 200)
+        self.assertEqual(get.call_count, 2)
+        sleep.assert_called_once_with(monitor.RETRY_DELAY_SECONDS)
+
     def test_evaluate_uses_dashboard_host_and_marks_403_bootstrap_as_degraded(self):
         with patch.object(monitor, "request_status", side_effect=[200, 403]) as request_status:
             result = monitor.evaluate()
