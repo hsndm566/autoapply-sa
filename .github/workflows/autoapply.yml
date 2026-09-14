@@ -2,9 +2,8 @@ name: AutoApply Pipeline — Self-Healing Backend
 
 on:
   schedule:
-    - cron: '0 23 * * *'    # nightly 11pm UTC — run applications
-    - cron: '*/30 * * * *'  # every 30 min — self-diagnostics
-  workflow_dispatch:       # manual trigger anytime
+    - cron: '*/30 * * * *'  # every 30 min — self-diagnostics only
+  workflow_dispatch:       # manual diagnostics only
 
 jobs:
   # ---- 1. Self-Diagnostic Daemon (every 30 min) ----
@@ -23,30 +22,3 @@ jobs:
           python -c "import urllib.request,json;urllib.request.urlopen(urllib.request.Request('https://boards-api.greenhouse.io/v1/boards/airbnb/jobs?content=false',headers={'User-Agent':'Mozilla/5'}),timeout=30);print('GH OK')" 2>&1
       - name: Rotate stale run
         run: echo "diagnostics complete"
-
-  # ---- 2. Nightly Application Pipeline ----
-  autossh:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install deps
-        run: pip install requests
-      - name: Run AutoApply pipeline
-        env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALLOWED_USERS: ${{ secrets.TELEGRAM_HOME_CHANNEL }}
-          CV_PATH: "cv-sample"
-        run: python orchestrator.py
-      - name: Shutdown (done)
-        if: always()
-        run: echo "pipeline run complete"
