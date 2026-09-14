@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: "0 6 * * *"
     - cron: "0 18 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,6 +15,7 @@ concurrency:
 
 jobs:
   deliver:
+    if: ${{ github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -71,7 +73,7 @@ jobs:
   monitor-success:
     name: Signal scheduled-delivery success
     needs: [deliver]
-    if: ${{ needs.deliver.result == 'success' }}
+    if: ${{ github.event_name == 'schedule' && needs.deliver.result == 'success' }}
     runs-on: ubuntu-latest
     env:
       HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
@@ -84,7 +86,7 @@ jobs:
   monitor-failure:
     name: Signal scheduled-delivery failure
     needs: [deliver]
-    if: ${{ always() && needs.deliver.result == 'failure' }}
+    if: ${{ always() && github.event_name == 'schedule' && needs.deliver.result == 'failure' }}
     runs-on: ubuntu-latest
     env:
       HEALTHCHECKS_URL: ${{ secrets.HEALTHCHECKS_URL }}
@@ -93,3 +95,23 @@ jobs:
         if: ${{ env.HEALTHCHECKS_URL != '' }}
         continue-on-error: true
         run: curl --fail --silent --show-error --max-time 10 --retry 3 "${HEALTHCHECKS_URL%/}/fail"
+
+  dry-run:
+    name: Validate scheduled batch without sending
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run no-send validation
+        env:
+          ENABLE_EMAIL_PERSONALIZATION: "false"
+        run: python run_scheduled_delivery.py --dry-run

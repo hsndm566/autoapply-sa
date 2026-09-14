@@ -75,6 +75,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--clients", default="clients.csv")
     parser.add_argument("--tracking", default="tracking.csv")
     parser.add_argument("--cvs-dir", default="cvs")
+    parser.add_argument("--dry-run", action="store_true", help="validate the scheduled batch without provider or persistence side effects")
     return parser.parse_args()
 
 
@@ -320,6 +321,13 @@ def main() -> None:
     }, sort_keys=True))
     if blocked:
         raise SystemExit(2)
+    if args.dry_run:
+        print(json.dumps({
+            "dry_run": True,
+            "ready": len(ready),
+            "message": "No outbox rows, provider calls, or tracking changes were made.",
+        }, sort_keys=True))
+        return
     if not ready:
         return
     outcomes = execute(ready, tracking_path, cvs_dir)
