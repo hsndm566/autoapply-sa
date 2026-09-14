@@ -7,6 +7,7 @@ import sqlite3
 import tempfile
 import time
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 import diversity_queue
@@ -35,12 +36,13 @@ class BrowserHandoffLedgerTests(unittest.TestCase):
     def test_recent_retry_is_cooled_down_then_available_once(self) -> None:
         self.db.record_browser_handoff_attempt(self.url, "transient_error", "temporary browser timeout")
         self.assertNotIn(self.url, self._selected_urls())
-        with sqlite3.connect(self.db_path) as connection:
-            connection.execute(
-                "UPDATE browser_handoff_attempts SET updated_at=? WHERE job_url=?",
-                (time.time() - diversity_queue.RETRY_COOLDOWN_SECONDS - 1, self.url),
-            )
-            connection.commit()
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE browser_handoff_attempts SET updated_at=? WHERE job_url=?",
+                    (time.time() - diversity_queue.RETRY_COOLDOWN_SECONDS - 1, self.url),
+                )
+                connection.commit()
         self.assertIn(self.url, self._selected_urls())
 
     def test_verified_eligibility_reopening_restores_queue_access(self) -> None:
@@ -53,12 +55,13 @@ class BrowserHandoffLedgerTests(unittest.TestCase):
     def test_second_retry_and_captcha_are_manual_exclusions(self) -> None:
         self.db.record_browser_handoff_attempt(self.url, "form_changed", "first retry")
         self.db.record_browser_handoff_attempt(self.url, "form_changed", "second retry")
-        with sqlite3.connect(self.db_path) as connection:
-            connection.execute(
-                "UPDATE browser_handoff_attempts SET updated_at=? WHERE job_url=?",
-                (time.time() - diversity_queue.RETRY_COOLDOWN_SECONDS - 1, self.url),
-            )
-            connection.commit()
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            with connection:
+                connection.execute(
+                    "UPDATE browser_handoff_attempts SET updated_at=? WHERE job_url=?",
+                    (time.time() - diversity_queue.RETRY_COOLDOWN_SECONDS - 1, self.url),
+                )
+                connection.commit()
         self.assertNotIn(self.url, self._selected_urls())
 
         other_url = "https://jobs.ashbyhq.com/example/jobs/ledger-captcha"
