@@ -43,6 +43,7 @@ jobs:
           EMAIL_OUTREACH_ENABLED: "true"
           AUTOAPPLY_SCHEDULED_DELIVERY: "true"
           ENABLE_EMAIL_PERSONALIZATION: ${{ vars.ENABLE_EMAIL_PERSONALIZATION || 'false' }}
+          AUTOAPPLY_API_BASE_URL: "https://api.hsndm.tech"
           GLITCHTIP_DSN: ${{ secrets.GLITCHTIP_DSN }}
           SUPABASE_DEV_URL: ${{ secrets.SUPABASE_DEV_URL }}
           SUPABASE_DEV_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
