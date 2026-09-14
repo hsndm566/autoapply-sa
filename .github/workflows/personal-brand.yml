@@ -5,6 +5,13 @@ on:
     - cron: '0 6 * * 1'   # every Monday 06:00 UTC (after other Monday scans)
   workflow_dispatch:
 
+permissions:
+  contents: write
+
+concurrency:
+  group: autoapply-log-writers
+  cancel-in-progress: false
+
 jobs:
   brand:
     runs-on: ubuntu-latest
@@ -24,4 +31,14 @@ jobs:
           git config user.email "agent@hsndm.tech"
           git config user.name "Hermes Agent"
           git add skills/personal-brand.md
-          git diff --cached --quiet || git commit -m "brand: weekly post queued for approval" && git push
+          if ! git diff --cached --quiet; then
+            git commit -m "brand: weekly post queued for approval"
+            for attempt in 1 2 3; do
+              if git pull --rebase --autostash origin main && git push origin HEAD:main; then
+                exit 0
+              fi
+              git rebase --abort || true
+              if [ "$attempt" -lt 3 ]; then sleep $((attempt * 10)); fi
+            done
+            exit 1
+          fi
