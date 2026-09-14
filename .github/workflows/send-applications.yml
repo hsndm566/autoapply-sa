@@ -17,6 +17,7 @@ jobs:
   deliver:
     if: ${{ github.event_name == 'schedule' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
