@@ -30,6 +30,7 @@ from warmup_config import (
 
 ACTION_TYPE = "audited_email_application"
 REQUIRED_APPLICATION_SENDER = "apply@hsndm.tech"
+MAX_DISPATCH_PER_RUN = 15
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
 BREVO_SMTP_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
@@ -285,9 +286,11 @@ def dispatch_pending(
         return {"enabled": False, "claimed": 0, "results": []}
     if not ((_sender() and _password()) or _brevo_api_key()):
         return {"enabled": True, "configuration": "incomplete", "claimed": 0, "results": []}
-    actions = db.claim_ready_actions(ACTION_TYPE, limit=limit)
+    if limit <= 0:
+        return {"enabled": True, "claimed": 0, "results": []}
+    actions = db.claim_ready_actions(ACTION_TYPE, limit=min(limit, MAX_DISPATCH_PER_RUN))
     results = [dispatch_one(action, send_fn=send_fn, brevo_send_fn=brevo_send_fn) for action in actions]
     return {"enabled": True, "claimed": len(actions), "results": results}
 
 
-__all__ = ["ACTION_TYPE", "REQUIRED_APPLICATION_SENDER", "dispatch_pending", "dispatch_one", "queue_audited_email_application"]
+__all__ = ["ACTION_TYPE", "MAX_DISPATCH_PER_RUN", "REQUIRED_APPLICATION_SENDER", "dispatch_pending", "dispatch_one", "queue_audited_email_application"]

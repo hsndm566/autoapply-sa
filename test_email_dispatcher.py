@@ -98,6 +98,16 @@ class EmailDispatcherTests(unittest.TestCase):
         self.assertEqual(0, result["claimed"])
         self.assertEqual("pending", self.action_status(action_id))
 
+    def test_zero_limit_is_a_no_op(self) -> None:
+        action_id = self.queue_valid_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
+        os.environ["GMAIL_APP_PASSWORD"] = "app-password"
+        result = email_dispatcher.dispatch_pending(limit=0, send_fn=lambda *_args: "should-not-send")
+        self.assertEqual(0, result["claimed"])
+        self.assertEqual([], result["results"])
+        self.assertEqual("pending", self.action_status(action_id))
+
     def test_enabled_dispatcher_sends_audited_cv_attachment_and_records_evidence(self) -> None:
         action_id = self.queue_valid_action()
         os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
