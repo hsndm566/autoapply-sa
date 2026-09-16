@@ -81,6 +81,13 @@ class FakeSupabase:
     def table(self, table_name: str) -> FakeQuery:
         return FakeQuery(self, table_name)
 
+    def rpc(self, name, payload):
+        self.inserts.append((name, payload))
+        class Rpc:
+            def execute(self):
+                return FakeResponse(True)
+        return Rpc()
+
 
 class SupabaseDeliverySyncTests(unittest.TestCase):
     def test_server_client_uses_api_key_header_for_modern_secret(self) -> None:
@@ -140,7 +147,7 @@ class SupabaseDeliverySyncTests(unittest.TestCase):
         self.assertEqual("brevo-message-1", event_payload["provider_event_id"])
         self.assertEqual("provider,provider_event_id", database.upserts[1][2])
         self.assertEqual("b" * 64, event_payload["metadata"]["package_hash"])
-        self.assertEqual([], database.inserts)
+        self.assertEqual([("account_trial_application", {"p_candidate_id": database.candidate_id, "p_external_application_id": "scheduled-application-1", "p_accepted": True})], database.inserts)
 
     def test_sync_skips_when_no_active_mapping_exists(self) -> None:
         database = FakeSupabase(mapping_exists=False)
