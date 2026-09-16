@@ -124,6 +124,9 @@ class _ServerPostgrestClient:
     def table(self, table_name: str) -> _ServerPostgrestQuery:
         return _ServerPostgrestQuery(self, table_name)
 
+    def rpc(self, function_name: str, payload: Mapping[str, Any]) -> _ServerPostgrestQuery:
+        return _ServerPostgrestQuery(self, f"rpc/{function_name}").insert(payload)
+
 
 def hash_recipient_email(recipient_email: str) -> str:
     """Normalize and hash an email address before it crosses the ledger boundary."""
@@ -201,6 +204,26 @@ def _application_id_from_response(client: Any, external_application_id: str, res
     if row and str(row.get("id") or "").strip():
         return str(row["id"])
     return None
+
+
+def reserve_trial_application(external_application_id: str, external_client_id: int, sender_email: str, client: Any | None = None) -> bool:
+    """Fail closed before transport; reserve a slot without incrementing accepted sends."""
+    database = client or _server_client()
+    if database is None:
+        return False
+    try:
+        candidate_id = _mapping_candidate_id(database, external_client_id, sender_email)
+        if not candidate_id:
+            return False
+        response = database.schema(SCHEMA).rpc("account_trial_application", {
+            "p_candidate_id": candidate_id,
+            "p_external_application_id": external_application_id,
+            "p_accepted": False,
+        }).execute()
+        return response.data is True
+    except Exception:
+        LOGGER.warning("Trial reservation failed; email transport was not attempted")
+        return False
 
 
 def sync_accepted_delivery(
@@ -283,6 +306,12 @@ def sync_accepted_delivery(
         application_id = _application_id_from_response(database, external_application_id, application_response)
         if application_id is None:
             raise RuntimeError("email application upsert returned no application ID")
+
+        database.schema(SCHEMA).rpc("account_trial_application", {
+            "p_candidate_id": mapped_candidate_id,
+            "p_external_application_id": external_application_id,
+            "p_accepted": True,
+        }).execute()
 
         provider_event_id = message_id or f"accepted:{external_application_id}"
         (

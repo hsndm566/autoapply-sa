@@ -19,6 +19,7 @@ from typing import Any, Mapping
 
 import auditor
 import db
+from supabase_delivery_sync import reserve_trial_application
 from warmup_config import (
     SCHEDULED_DELIVERY_ENVIRONMENT_FLAG,
     SCHEDULED_DELIVERY_SCOPE,
@@ -243,6 +244,14 @@ def dispatch_one(
         return _block(action, str(exc))
     except Exception:
         return _block(action, "CONTACT_RECHECK_FAILED")
+
+    submission = dict(package.get("submission") or {})
+    try:
+        external_client_id = int(submission.get("client_id", 0))
+    except (ValueError, TypeError):
+        return _block(action, "TRIAL_CANDIDATE_MAPPING_UNAVAILABLE")
+    if not reserve_trial_application(application_id, external_client_id, sender):
+        return _block(action, "TRIAL_LIMIT_OR_ACCOUNTING_UNAVAILABLE")
 
     try:
         transport_evidence = brevo_send_fn(message, sender, credential) if transport == "brevo" else send_fn(message, sender, credential)

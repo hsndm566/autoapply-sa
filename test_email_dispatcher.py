@@ -15,6 +15,9 @@ from warmup_config import SCHEDULED_DELIVERY_ENVIRONMENT_FLAG, SCHEDULED_DELIVER
 
 class EmailDispatcherTests(unittest.TestCase):
     def setUp(self) -> None:
+        self.trial_gate = patch.object(email_dispatcher, "reserve_trial_application", return_value=True)
+        self.trial_gate.start()
+        self.addCleanup(self.trial_gate.stop)
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
         self.old_db_path = db.DB_PATH
@@ -43,6 +46,16 @@ class EmailDispatcherTests(unittest.TestCase):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
+
+    def test_trial_cap_blocks_transport(self) -> None:
+        self.queue_valid_action()
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["GMAIL_USER"] = email_dispatcher.REQUIRED_APPLICATION_SENDER
+        os.environ["GMAIL_APP_PASSWORD"] = "test-password"
+        with patch.object(email_dispatcher, "reserve_trial_application", return_value=False), patch.object(email_dispatcher, "_smtp_send") as send:
+            result = email_dispatcher.dispatch_pending(send_fn=send)
+        self.assertEqual(result["results"][0]["status"], "blocked")
+        send.assert_not_called()
 
     @staticmethod
     def approved_ai(_prompt, _package):
