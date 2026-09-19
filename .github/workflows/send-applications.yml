@@ -38,6 +38,12 @@ jobs:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
         run: test -n "$BREVO_API_KEY"
 
+      - name: Sync Ready and verified Notion contacts into delivery queue
+        env:
+          NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+          NOTION_CONTACTS_DATABASE_ID: ${{ secrets.NOTION_CONTACTS_DATABASE_ID }}
+        run: python sync_notion_contacts.py
+
       - name: Deliver bounded audited application batch for active clients only
         env:
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
