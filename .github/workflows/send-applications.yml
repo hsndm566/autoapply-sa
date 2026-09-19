@@ -119,6 +119,11 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: Sync Ready and verified Notion contacts into delivery queue
+        env:
+          NOTION_API_TOKEN: ${{ secrets.NOTION_API_TOKEN }}
+          NOTION_CONTACTS_DATABASE_ID: ${{ secrets.NOTION_CONTACTS_DATABASE_ID }}
+        run: python sync_notion_contacts.py
       - name: Run no-send validation
         env:
           ENABLE_EMAIL_PERSONALIZATION: "false"
