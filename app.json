@@ -23,6 +23,35 @@
     },
     "EMAIL_OUTREACH_ENABLED": {
       "value": "false"
+    },
+    "AUTOAPPLY_REQUIRE_MIGRATED_DB": {
+      "value": "true"
+    },
+    "BUCKETEER_AWS_ACCESS_KEY_ID": {
+      "required": true
+    },
+    "BUCKETEER_AWS_SECRET_ACCESS_KEY": {
+      "required": true
+    },
+    "BUCKETEER_AWS_REGION": {
+      "required": true
+    },
+    "BUCKETEER_BUCKET_NAME": {
+      "required": true
+    }
+  },
+  "stack": "heroku-24",
+  "buildpacks": [
+    {
+      "url": "heroku-community/apt"
+    },
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "web": {
+      "quantity": 1
     }
   }
 }
