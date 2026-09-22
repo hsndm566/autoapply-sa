@@ -192,7 +192,7 @@ class EmailDispatcherTests(unittest.TestCase):
         package.update({
             "application_id": "warmup-blocked-001",
             "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
-            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "candidate": {"full_name": "Reusable Sender Candidate", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
             "submission": {"channel": "email", "mode": "live", "cv_transport": "email_attachment", "client_id": 2,
                             "sender_email": "apply1@hsndm.tech", "evidence_type": WARMUP_EVIDENCE_TYPE, "warmup_scope": WARMUP_SCOPE},
         })
@@ -241,7 +241,7 @@ class EmailDispatcherTests(unittest.TestCase):
         package.update({
             "application_id": "warmup-brevo-001",
             "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
-            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "candidate": {"full_name": "Reusable Sender Candidate", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
             "submission": {
                 "channel": "email", "mode": "live", "cv_transport": "email_attachment",
                 "client_id": 2, "sender_email": "apply1@hsndm.tech",
@@ -279,7 +279,7 @@ class EmailDispatcherTests(unittest.TestCase):
         package.update({
             "application_id": "scheduled-brevo-001",
             "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
-            "candidate": {"full_name": "Saif Ahmed Al Nimr", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "candidate": {"full_name": "Reusable Sender Candidate", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
             "submission": {
                 "channel": "email", "mode": "live", "cv_transport": "email_attachment",
                 "client_id": 2, "sender_email": "apply1@hsndm.tech",
