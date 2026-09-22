@@ -30,13 +30,11 @@ import supabase_delivery_sync
 from warmup_config import (
     SCHEDULED_DELIVERY_ENVIRONMENT_FLAG,
     SCHEDULED_DELIVERY_SCOPE,
-    WARMUP_CLIENTS,
     WARMUP_EVIDENCE_TYPE,
-    is_authorized_warmup_sender,
+    is_authorized_sender,
 )
 
 MAX_PER_IDENTITY_PER_RUN = 5
-ACTIVE_CLIENT_IDS = frozenset(WARMUP_CLIENTS)
 _glitchtip_sdk: Any | None = None
 
 
@@ -84,8 +82,8 @@ def select_jobs(
     tracked: set[str],
     deliverable_client_ids: frozenset[int] | set[int] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """Select in source order, up to the per-client cap, only client 2/3 contacts."""
-    deliverable_client_ids = set(ACTIVE_CLIENT_IDS if deliverable_client_ids is None else deliverable_client_ids)
+    """Select in source order for the currently configured, deliverable client IDs."""
+    deliverable_client_ids = set(deliverable_client_ids or ())
     selected: list[dict[str, Any]] = []
     skipped = Counter()
     per_client = Counter()
@@ -97,10 +95,11 @@ def select_jobs(
             raise ValueError(f"jobs file is missing scheduled-delivery columns: {', '.join(sorted(missing))}")
         for row_number, row in enumerate(reader, start=2):
             raw_client_id = str(row.get("client_id") or "").strip()
-            if raw_client_id not in {str(client_id) for client_id in ACTIVE_CLIENT_IDS}:
+            try:
+                client_id = int(raw_client_id)
+            except ValueError:
                 skipped["inactive_client"] += 1
                 continue
-            client_id = int(raw_client_id)
             if client_id not in deliverable_client_ids:
                 skipped["client_cv_invalid"] += 1
                 continue
@@ -147,9 +146,8 @@ def deliverable_active_clients(
     """Return active clients with one valid approved CV; exclude an invalid client as a whole."""
     deliverable: set[int] = set()
     blocked_clients: list[str] = []
-    for client_id in ACTIVE_CLIENT_IDS:
-        client = clients.get(client_id)
-        if not client or not is_authorized_warmup_sender(client_id, str(client.get("sender_email") or "")):
+    for client_id, client in clients.items():
+        if not is_authorized_sender(str(client.get("sender_email") or "")):
             blocked_clients.append(f"client {client_id}: sender identity is not authorized for scheduled delivery")
             continue
         try:
@@ -254,8 +252,8 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
     queued: list[tuple[dict[str, Any], dict[str, str], str, str, str]] = []
     for job, client, package, decision in ready:
         client_id = int(job["client_id"])
-        if client_id not in ACTIVE_CLIENT_IDS or not is_authorized_warmup_sender(client_id, client["sender_email"]):
-            raise RuntimeError(f"client {client_id} is not active for scheduled delivery")
+        if not is_authorized_sender(client["sender_email"]):
+            raise RuntimeError(f"client {client_id} uses a sender that is not authorized for scheduled delivery")
         campaign_id = campaign_ids.setdefault(client_id, shared.create_client_campaign(client, cvs_dir))
         action_id, added = email_dispatcher.queue_audited_email_application(campaign_id, package, decision.approval_token)
         if not added:
@@ -300,10 +298,6 @@ def main() -> None:
     initialize_glitchtip()
     args = parse_args()
     clients = sender.load_clients(Path(args.clients))
-    for client_id, expected in WARMUP_CLIENTS.items():
-        client = clients.get(client_id, {})
-        if client.get("sender_email") != expected["sender_email"] or client.get("client_name") != expected["client_name"]:
-            raise ValueError(f"clients.csv does not match the authorized identity for client {client_id}")
     tracking_path, cvs_dir = Path(args.tracking), Path(args.cvs_dir)
     deliverable_client_ids, blocked_clients = deliverable_active_clients(clients, cvs_dir)
     selected, skipped = select_jobs(
