@@ -1,0 +1,148 @@
+name: Secure tailored outbound batch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "secure-batch-trigger.txt"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: autoapply-secure-outbound-batch
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Validate protected credentials
+        run: |
+          test -n "$BREVO_API_KEY"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+
+      - name: Send queued tailored batch with pacing
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import random
+          import re
+          import time
+          import urllib.error
+          import urllib.parse
+          import urllib.request
+          from datetime import datetime, timezone
+
+          trigger = open("secure-batch-trigger.txt", encoding="utf-8").read().strip()
+          if not re.fullmatch(r"[0-9a-fA-F-]{36}", trigger):
+              raise SystemExit("Invalid secure batch trigger")
+
+          supabase = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+          brevo_key = os.environ["BREVO_API_KEY"]
+          headers = {
+              "apikey": service_key,
+              "Authorization": f"Bearer {service_key}",
+              "Content-Type": "application/json",
+          }
+
+          def db_request(method, path, payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              request = urllib.request.Request(supabase + path, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  raw = response.read()
+                  return json.loads(raw) if raw else None
+
+          encoded = urllib.parse.quote(trigger, safe="")
+          rows = db_request("GET", f"/rest/v1/secure_outbound_batches?id=eq.{encoded}&state=eq.queued&select=id,sender_email,candidate_name,cv_filename,cv_base64,messages,state")
+          if not isinstance(rows, list) or len(rows) != 1:
+              raise SystemExit("Secure batch is missing, already consumed, or not uniquely queued")
+
+          batch = rows[0]
+          messages = batch.get("messages") or []
+          if not isinstance(messages, list) or not 1 <= len(messages) <= 15:
+              raise SystemExit("Secure batch message count is outside the allowed 1-15 range")
+          if batch.get("sender_email") not in {"apply@hsndm.tech", "apply1@hsndm.tech", "apply2@hsndm.tech"}:
+              raise SystemExit("Sender is outside the approved sender pool")
+          if not batch.get("cv_base64") or not batch.get("cv_filename", "").lower().endswith(".pdf"):
+              raise SystemExit("A valid staged PDF attachment is required")
+
+          db_request("PATCH", f"/rest/v1/secure_outbound_batches?id=eq.{encoded}", {
+              "state": "sending",
+              "updated_at": datetime.now(timezone.utc).isoformat(),
+              "result": {"accepted": 0, "message_count": len(messages)},
+          })
+
+          accepted = []
+          try:
+              for index, message in enumerate(messages, start=1):
+                  recipient = str(message.get("to") or "").strip().lower()
+                  subject = str(message.get("subject") or "").strip()
+                  body = str(message.get("body") or "").strip()
+                  company = str(message.get("company") or "").strip()
+                  if not recipient or "@" not in recipient or not subject or len(body) < 120 or not company:
+                      raise RuntimeError(f"Invalid message package at index {index}")
+
+                  payload = {
+                      "sender": {"email": batch["sender_email"], "name": batch["candidate_name"]},
+                      "to": [{"email": recipient}],
+                      "replyTo": {"email": "yasminadam406@gmail.com", "name": "Yasmin Adam"},
+                      "subject": subject,
+                      "textContent": body,
+                      "attachment": [{"name": batch["cv_filename"], "content": batch["cv_base64"]}],
+                  }
+                  req = urllib.request.Request(
+                      "https://api.brevo.com/v3/smtp/email",
+                      data=json.dumps(payload).encode("utf-8"),
+                      headers={"api-key": brevo_key, "Content-Type": "application/json", "Accept": "application/json"},
+                      method="POST",
+                  )
+                  with urllib.request.urlopen(req, timeout=30) as response:
+                      provider = json.loads(response.read() or b"{}")
+                  message_id = str(provider.get("messageId") or "").strip()
+                  if not message_id:
+                      raise RuntimeError(f"Brevo returned no messageId at index {index}")
+                  accepted.append({"index": index, "to": recipient, "company": company, "messageId": message_id})
+                  print(json.dumps({"accepted": index, "to": recipient, "company": company, "messageId": message_id}, sort_keys=True))
+
+                  db_request("PATCH", f"/rest/v1/secure_outbound_batches?id=eq.{encoded}", {
+                      "result": {"accepted": len(accepted), "message_count": len(messages), "messages": accepted},
+                      "updated_at": datetime.now(timezone.utc).isoformat(),
+                  })
+                  if index < len(messages):
+                      delay = random.randint(15, 25)
+                      print(json.dumps({"pacing_seconds": delay, "next_index": index + 1}))
+                      time.sleep(delay)
+
+          except Exception as error:
+              db_request("PATCH", f"/rest/v1/secure_outbound_batches?id=eq.{encoded}", {
+                  "state": "failed",
+                  "result": {
+                      "accepted": len(accepted),
+                      "message_count": len(messages),
+                      "messages": accepted,
+                      "failure_type": type(error).__name__,
+                  },
+                  "updated_at": datetime.now(timezone.utc).isoformat(),
+              })
+              raise
+
+          db_request("PATCH", f"/rest/v1/secure_outbound_batches?id=eq.{encoded}", {
+              "state": "sent",
+              "result": {"accepted": len(accepted), "message_count": len(messages), "messages": accepted},
+              "updated_at": datetime.now(timezone.utc).isoformat(),
+          })
+          print(json.dumps({"batch_complete": True, "accepted": len(accepted)}))
+          PY
