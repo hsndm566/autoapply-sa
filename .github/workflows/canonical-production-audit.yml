@@ -1,0 +1,56 @@
+name: Canonical Production Regression Audit
+
+on:
+  push:
+    branches: [audit/northflank-regression-20260922]
+    paths:
+      - .github/workflows/canonical-production-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe canonical public endpoints
+        shell: bash
+        run: |
+          set -u
+          urls=(
+            "https://api.hsndm.tech/health"
+            "https://api.hsndm.tech/healthz/notifications"
+            "https://api.hsndm.tech/openapi.json"
+            "https://dashboard.hsndm.tech/health"
+            "https://dashboard.hsndm.tech/healthz/auth"
+            "https://dashboard.hsndm.tech/sign-in"
+            "https://dashboard.hsndm.tech/sign-up"
+            "https://dashboard.hsndm.tech/terms"
+            "https://dashboard.hsndm.tech/dashboard"
+            "https://app.hsndm.tech/health"
+            "https://app.hsndm.tech/healthz/auth"
+            "https://app.hsndm.tech/sign-in"
+          )
+          for url in "${urls[@]}"; do
+            echo "=== $url ==="
+            h="$(mktemp)"; b="$(mktemp)"
+            code="$(curl --max-time 20 -sS -D "$h" -o "$b" -w '%{http_code}' "$url" || echo CURL_ERROR)"
+            echo "STATUS=$code"
+            grep -Ei '^(location|content-type|server|x-powered-by|cf-ray):' "$h" || true
+            echo "BODY_SHA256=$(sha256sum "$b" | awk '{print $1}')"
+            if [[ "$url" == *"/health"* || "$url" == *"openapi.json"* ]]; then
+              head -c 1400 "$b" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g'
+              echo
+            fi
+            rm -f "$h" "$b"
+          done
+
+      - name: Check redirect behavior separately
+        shell: bash
+        run: |
+          set -u
+          for url in             "https://dashboard.hsndm.tech/dashboard"             "https://app.hsndm.tech/dashboard"; do
+            echo "=== REDIRECT $url ==="
+            curl --max-time 20 -sS -o /dev/null -D - "$url" | grep -Ei '^(HTTP/|location:|server:|x-powered-by:)' || true
+          done
