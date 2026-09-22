@@ -69,7 +69,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          code="$(curl --max-time 20 -sS -o /tmp/invoice.txt -w '%{http_code}'             https://api.hsndm.tech/invoices/regression-audit-invalid/pdf)"
+          code="$(curl --max-time 20 -sS -o /tmp/invoice.txt -w '%{http_code}'             https://api.hsndm.tech/invoices/00000000-0000-4000-8000-000000000001/pdf)"
           case "$code" in
             401|403|404) echo "invoice_auth_boundary=PASS ($code)" ;;
             *) echo "unexpected invoice response $code"; exit 1 ;;
