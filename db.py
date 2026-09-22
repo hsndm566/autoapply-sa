@@ -642,6 +642,7 @@ def campaign_summary(campaign_id: str) -> dict[str, Any] | None:
         ).fetchall()
     campaign.pop("access_token_hash", None)
     campaign.pop("cv_path", None)
+    campaign.pop("cv_blob", None)
     campaign["job_counts"] = {row["status"]: row["count"] for row in job_rows}
     campaign["outbox_counts"] = {row["status"]: row["count"] for row in outbox_rows}
     campaign["evidence_count"] = evidence_count
