@@ -1,0 +1,76 @@
+name: Canonical Gateway Functional Smoke
+
+on:
+  push:
+    branches: [audit/northflank-regression-20260922]
+    paths:
+      - .github/workflows/canonical-gateway-functional-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Parse synthetic CV text
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'SUMMARY\nSynthetic regression audit profile\nSKILLS\nExcel\nProcess improvement\n' > /tmp/audit.txt
+          code="$(curl --max-time 20 -sS -o /tmp/parse.json -w '%{http_code}' -F 'file=@/tmp/audit.txt;type=text/plain' https://api.hsndm.tech/parse)"
+          test "$code" = "200"
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/parse.json'))
+          assert d.get('parser') == 'lightweight_fallback'
+          assert 'Synthetic regression audit profile' in d.get('raw_text','')
+          assert isinstance(d.get('profile'), dict)
+          assert float(d.get('confidence',0)) > 0
+          print('parse=PASS')
+          PY
+
+      - name: Classify synthetic reply without external action
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl --max-time 20 -sS -o /tmp/classify.json -w '%{http_code}'             -H 'Content-Type: application/json'             --data '{"subject":"Interview invitation","email_text":"Please schedule a call for an interview.","sender":"example.invalid"}'             https://api.hsndm.tech/gmail-reply-tracker/classify)"
+          test "$code" = "200"
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/classify.json'))
+          assert d == {'classification':'interview_invite','mode':'keyword_rules_read_only'}
+          print('reply_classifier=PASS')
+          PY
+
+      - name: Render synthetic tailored PDF locally on gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat >/tmp/pdf.json <<'JSON'
+          {
+            "candidate_name":"Regression Audit",
+            "tailored_resume":{
+              "professional_summary":{"text":"Synthetic profile used only for regression testing.","citations":["fact-1"]},
+              "resume_sections":[
+                {"heading":"Skills","entries":[{"text":"Excel and process improvement","citations":["fact-2"]}]}
+              ]
+            }
+          }
+          JSON
+          code="$(curl --max-time 20 -sS -o /tmp/audit.pdf -w '%{http_code}'             -H 'Content-Type: application/json' --data-binary @/tmp/pdf.json             https://api.hsndm.tech/tailor/pdf)"
+          test "$code" = "200"
+          test "$(head -c 4 /tmp/audit.pdf)" = "%PDF"
+          test "$(stat -c%s /tmp/audit.pdf)" -gt 500
+          echo "pdf_renderer=PASS"
+
+      - name: Confirm private invoice route rejects unauthenticated access
+        shell: bash
+        run: |
+          set -euo pipefail
+          code="$(curl --max-time 20 -sS -o /tmp/invoice.txt -w '%{http_code}'             https://api.hsndm.tech/invoices/regression-audit-invalid/pdf)"
+          case "$code" in
+            401|403|404) echo "invoice_auth_boundary=PASS ($code)" ;;
+            *) echo "unexpected invoice response $code"; exit 1 ;;
+          esac
