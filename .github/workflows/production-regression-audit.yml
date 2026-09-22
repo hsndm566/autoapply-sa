@@ -1,0 +1,77 @@
+name: Northflank Production Regression Audit
+
+on:
+  push:
+    branches: [audit/northflank-regression-20260922]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve production hostnames
+        shell: bash
+        run: |
+          set -u
+          for host in api.hsndm.tech dashboard.hsndm.tech www.hsndm.tech clerk.hsndm.tech; do
+            echo "=== DNS $host ==="
+            echo "CNAME:"
+            dig +short CNAME "$host" || true
+            echo "A:"
+            dig +short A "$host" || true
+            echo "AAAA:"
+            dig +short AAAA "$host" || true
+          done
+
+      - name: Probe public routes
+        shell: bash
+        run: |
+          set -u
+          urls=(
+            "https://www.hsndm.tech/"
+            "https://dashboard.hsndm.tech/"
+            "https://api.hsndm.tech/healthz"
+            "https://api.hsndm.tech/status"
+            "https://dashboard.hsndm.tech/healthz"
+            "https://dashboard.hsndm.tech/healthz/db"
+            "https://dashboard.hsndm.tech/healthz/auth"
+            "https://dashboard.hsndm.tech/v1/campaigns/latest-activity"
+            "https://www.hsndm.tech/healthz"
+            "https://www.hsndm.tech/v1/campaigns/latest-activity"
+            "https://clerk.hsndm.tech/v1/environment?__clerk_api_version=2025-11-10&__clerk_js_version=5.127.2"
+          )
+          for url in "${urls[@]}"; do
+            echo "=== HTTP $url ==="
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            code="$(curl -L --max-time 20 -sS -D "$headers" -o "$body" -w '%{http_code}' "$url" || echo CURL_ERROR)"
+            echo "STATUS=$code"
+            grep -Ei '^(server|via|cf-ray|x-api-edge|location|content-type|x-powered-by|x-nf-|x-northflank|fly-request-id|x-render-origin-server):' "$headers" || true
+            echo "BODY_SHA256=$(sha256sum "$body" | awk '{print $1}')"
+            echo "BODY_PREFIX:"
+            head -c 700 "$body" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g'
+            echo
+            rm -f "$headers" "$body"
+          done
+
+      - name: Verify external read-only dependencies
+        shell: bash
+        run: |
+          set -e
+          python - <<'PY'
+          import urllib.request
+          checks = {
+              "greenhouse": "https://boards-api.greenhouse.io/v1/boards/airbnb/jobs?content=false",
+              "ashby": "https://api.ashbyhq.com/posting-api/job-board/ashby",
+          }
+          for name, url in checks.items():
+              req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0"})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as r:
+                      print(f"{name}=HTTP_{r.status}")
+              except Exception as exc:
+                  print(f"{name}=ERROR_{type(exc).__name__}")
+          PY
