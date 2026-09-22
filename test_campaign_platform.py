@@ -6,6 +6,7 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
@@ -170,6 +171,32 @@ class CampaignPlatformTests(unittest.TestCase):
         self.assertEqual(campaign["cv_original_name"], "candidate-cv.pdf")
         self.assertTrue(Path(campaign["cv_path"]).exists())
         self.assertEqual(len(campaign["cv_sha256"]), 64)
+
+    def test_migration_snapshot_requires_admin_and_explicit_enablement(self):
+        status, body = self.request("POST", "/v1/admin/migration/snapshot")
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "forbidden")
+
+        status, body = self.request(
+            "POST",
+            "/v1/admin/migration/snapshot",
+            headers={"X-Admin-Token": "test-admin-token"},
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "migration_snapshot_disabled")
+
+        with patch.dict(os.environ, {"ALLOW_MIGRATION_SNAPSHOT": "true"}, clear=False), patch(
+            "migration_seed.seed_snapshot",
+            return_value={"ok": True, "snapshot_uploaded": True, "embedded_cv_count": 1, "database_bytes": 1234},
+        ) as seed:
+            status, body = self.request(
+                "POST",
+                "/v1/admin/migration/snapshot",
+                headers={"X-Admin-Token": "test-admin-token"},
+            )
+        self.assertEqual(status, 200)
+        self.assertTrue(body["snapshot_uploaded"])
+        seed.assert_called_once_with(db.DB_PATH)
 
     def test_legacy_controls_require_admin_and_execution_stays_disabled(self):
         status, body = self.request("POST", "/run")

@@ -449,6 +449,25 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 self._send({"ok": True, "import": counts, "external_execution_enabled": False})
                 return
 
+            if path == "/v1/admin/migration/snapshot":
+                if not _is_admin(self):
+                    self._forbidden()
+                    return
+                if os.environ.get("ALLOW_MIGRATION_SNAPSHOT", "false").lower() != "true":
+                    self._send({"ok": False, "error": "migration_snapshot_disabled"}, HTTPStatus.FORBIDDEN)
+                    return
+                try:
+                    import migration_seed
+                    result = migration_seed.seed_snapshot(db.DB_PATH)
+                    self._send(result)
+                except Exception as exc:
+                    LOG.warning("Migration snapshot failed: %s", type(exc).__name__)
+                    self._send(
+                        {"ok": False, "error": "migration_snapshot_failed", "reason": type(exc).__name__},
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
+                return
+
             if path == "/v1/admin/contacts/import":
                 if not _is_admin(self):
                     self._forbidden()
