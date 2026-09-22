@@ -50,15 +50,15 @@ class ScheduledDeliveryTests(unittest.TestCase):
             self.assertTrue(scheduled.initialize_glitchtip())
         init.assert_called_once_with(dsn="https://public@example.test/1", traces_sample_rate=0.0, auto_session_tracking=False)
 
-    def test_only_clients_two_and_three_are_selected_at_five_each(self) -> None:
-        selected, skipped = scheduled.select_jobs(self.root / "jobs.csv", set())
+    def test_only_explicitly_deliverable_clients_are_selected_at_five_each(self) -> None:
+        selected, skipped = scheduled.select_jobs(self.root / "jobs.csv", set(), {2, 3})
         self.assertEqual(10, len(selected))
         self.assertEqual({2: 5, 3: 5}, {client_id: sum(1 for job in selected if job["client_id"] == client_id) for client_id in (2, 3)})
-        self.assertGreaterEqual(skipped["inactive_client"], 7)
+        self.assertGreaterEqual(skipped["client_cv_invalid"], 7)
         self.assertGreaterEqual(skipped["per_identity_cap"], 4)
 
     def test_tracked_rows_are_not_selected(self) -> None:
-        selected, skipped = scheduled.select_jobs(self.root / "jobs.csv", {"client2-0@example2.com", "client3-0@example3.com"})
+        selected, skipped = scheduled.select_jobs(self.root / "jobs.csv", {"client2-0@example2.com", "client3-0@example3.com"}, {2, 3})
         self.assertNotIn("client2-0@example2.com", {job["recipient_email"] for job in selected})
         self.assertNotIn("client3-0@example3.com", {job["recipient_email"] for job in selected})
         self.assertEqual(2, skipped["tracked"])
@@ -67,8 +67,8 @@ class ScheduledDeliveryTests(unittest.TestCase):
         (self.root / "client2.pdf").write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
         (self.root / "client3.pdf").write_bytes(b"not a pdf")
         clients = {
-            2: {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": "client2.pdf"},
-            3: {"client_name": "Amro Alkabeer", "sender_email": "apply2@hsndm.tech", "cv_file": "client3.pdf"},
+            2: {"client_name": "Candidate Alpha", "sender_email": "apply1@hsndm.tech", "cv_file": "client2.pdf"},
+            3: {"client_name": "Candidate Beta", "sender_email": "apply2@hsndm.tech", "cv_file": "client3.pdf"},
         }
 
         deliverable, blocked_clients = scheduled.deliverable_active_clients(clients, self.root)
@@ -84,8 +84,8 @@ class ScheduledDeliveryTests(unittest.TestCase):
     def test_scheduled_package_uses_authorized_scope_and_passes_deterministic_review(self) -> None:
         cv = self.root / "client2.pdf"
         cv.write_bytes(b"%PDF-1.4\nfixture\n%%EOF\n")
-        selected, _ = scheduled.select_jobs(self.root / "jobs.csv", set())
-        client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
+        selected, _ = scheduled.select_jobs(self.root / "jobs.csv", set(), {2, 3})
+        client = {"client_name": "Candidate Alpha", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
         package = scheduled.build_package(next(job for job in selected if job["client_id"] == 2), client, self.root)
         self.assertEqual([], auditor.deterministic_review(package))
 
@@ -99,7 +99,7 @@ class ScheduledDeliveryTests(unittest.TestCase):
             "city": "Jeddah",
             "client_id": 2,
         }
-        client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
+        client = {"client_name": "Candidate Alpha", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
         return scheduled.build_package(job, client, self.root)
 
     def test_personalized_body_requires_approved_independent_review(self) -> None:
@@ -141,7 +141,7 @@ class ScheduledDeliveryTests(unittest.TestCase):
             "city": "Jeddah",
             "client_id": 2,
         }
-        client = {"client_name": "Saif Ahmed Al Nimr", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
+        client = {"client_name": "Candidate Alpha", "sender_email": "apply1@hsndm.tech", "cv_file": cv.name}
         package = scheduled.build_package(job, client, self.root)
         ready = [(
             job,
