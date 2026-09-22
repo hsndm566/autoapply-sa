@@ -143,6 +143,14 @@ class CampaignPlatformTests(unittest.TestCase):
         self.assertTrue(created)
         db.record_evidence(campaign["id"], "email_smtp_accepted", "smtp-message-id", campaign_job_id=job_id)
         db.record_evidence(campaign["id"], "greenhouse_submit_confirmation", "confirmation-digest", campaign_job_id=job_id)
+        with db.connection() as connection:
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(campaigns)").fetchall()}
+            if "cv_blob" not in columns:
+                connection.execute("ALTER TABLE campaigns ADD COLUMN cv_blob BLOB")
+            connection.execute(
+                "UPDATE campaigns SET cv_blob=? WHERE id=?",
+                (b"private-cv-bytes-must-never-leave-db", campaign["id"]),
+            )
 
         status, response = self.request("GET", f"/v1/campaigns/{campaign['id']}", headers={"X-Campaign-Token": token})
 
@@ -154,6 +162,8 @@ class CampaignPlatformTests(unittest.TestCase):
         self.assertEqual(len(summary["verified_applications"]), 2)
         self.assertEqual(summary["verified_applications"][0]["company"], "Verified Company")
         self.assertNotIn("smtp-message-id", str(summary))
+        self.assertNotIn("cv_blob", summary)
+        self.assertNotIn("private-cv-bytes-must-never-leave-db", str(summary))
 
     def test_campaign_api_accepts_multipart_cv_and_stores_an_isolated_artifact(self):
         status, created = self.multipart_request(
