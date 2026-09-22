@@ -2,47 +2,19 @@ name: Northflank Source Inventory
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ops/northflank-inventory-request.json
 
 permissions:
   contents: read
 
-concurrency:
-  group: autoapply-northflank-inventory
-  cancel-in-progress: false
-
 jobs:
-  inventory:
+  inventory-hold:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Verify Northflank credential exists
-        env:
-          NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
+      - name: Stop stale topology inventory
         shell: bash
         run: |
-          test -n "$NORTHFLANK_API_TOKEN" || {
-            echo "NORTHFLANK_API_TOKEN repository secret is missing"
-            exit 2
-          }
-
-      - name: Inventory Northflank source without printing secret values
-        env:
-          NORTHFLANK_API_TOKEN: ${{ secrets.NORTHFLANK_API_TOKEN }}
-        run: python ops/northflank_inventory.py
-
-      - name: Upload sanitized inventory
-        uses: actions/upload-artifact@v4
-        with:
-          name: northflank-source-inventory
-          path: northflank-inventory.json
-          retention-days: 7
+          echo "::error::Migration inventory is paused because the canonical production topology changed."
+          echo "Canonical Northflank workloads are the autoapply-api service (hsndm566/saudi-whatsapp-ai-chatbot) and autoapply-discovery-refresh job (hsndm566/autoapply-labs)."
+          echo "The landing site and customer portal run on Cloudflare; the scheduled sender runs on GitHub Actions."
+          echo "Do not migrate from the historical autoapply-sa/hsndm.tech2 Northflank assumptions."
+          exit 2
