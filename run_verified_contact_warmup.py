@@ -22,7 +22,7 @@ import auditor
 import db
 import email_dispatcher
 import send_applications as sender
-from warmup_config import WARMUP_CLIENTS, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE, is_authorized_warmup_sender
+from warmup_config import WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE, is_authorized_sender
 
 MAX_PER_IDENTITY_PER_RUN = 5
 TOTAL_LIMIT = 10
@@ -38,7 +38,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_selected_jobs(path: Path, tracked: set[str]) -> list[dict[str, Any]]:
+def load_selected_jobs(path: Path, tracked: set[str], active_client_ids: set[int] | frozenset[int] | None = None) -> list[dict[str, Any]]:
+    active_client_ids = set(active_client_ids or ())
     with path.open(newline="", encoding="utf-8") as handle:
         reader = csv.DictReader(handle)
         required = {"recipient_email", "company", "role", "city", "client_id", "evidence_type", "public_job_url"}
@@ -48,9 +49,12 @@ def load_selected_jobs(path: Path, tracked: set[str]) -> list[dict[str, Any]]:
         selected: list[dict[str, Any]] = []
         for row_number, row in enumerate(reader, start=2):
             raw_client_id = str(row.get("client_id") or "").strip()
-            if raw_client_id not in {"2", "3"}:
+            try:
+                client_id = int(raw_client_id)
+            except ValueError:
                 continue
-            client_id = int(raw_client_id)
+            if client_id not in active_client_ids:
+                continue
             recipient = sender.normalize_email(str(row.get("recipient_email") or ""), "recipient_email")
             company = str(row.get("company") or "").strip()
             role = str(row.get("role") or "").strip()
@@ -71,8 +75,10 @@ def load_selected_jobs(path: Path, tracked: set[str]) -> list[dict[str, Any]]:
                 "client_id": client_id,
             })
     counts = Counter(job["client_id"] for job in selected)
-    if len(selected) != TOTAL_LIMIT or counts != Counter({2: MAX_PER_IDENTITY_PER_RUN, 3: MAX_PER_IDENTITY_PER_RUN}):
-        raise ValueError(f"warm-up scope must contain exactly five rows for each client, found {dict(counts)}")
+    if selected and any(count > MAX_PER_IDENTITY_PER_RUN for count in counts.values()):
+        raise ValueError(f"warm-up scope exceeds the five-per-identity cap: {dict(counts)}")
+    if len(selected) > TOTAL_LIMIT:
+        raise ValueError(f"warm-up scope exceeds the total limit of {TOTAL_LIMIT}: {len(selected)}")
     if len({job["recipient_email"] for job in selected}) != len(selected):
         raise ValueError("warm-up recipients must be unique")
     return selected
@@ -83,7 +89,7 @@ def assert_runtime_ready(jobs: list[dict[str, Any]], clients: dict[int, dict[str
     for job in jobs:
         client_id = int(job["client_id"])
         client = clients.get(client_id)
-        if not client or not is_authorized_warmup_sender(client_id, str(client.get("sender_email") or "")):
+        if not client or not is_authorized_sender(str(client.get("sender_email") or "")):
             blocked.append(f"{job['recipient_email']}: client sender is not authorized for the one-time scope")
             continue
         try:
@@ -224,12 +230,9 @@ def execute(ready: list[tuple[dict[str, Any], dict[str, str], dict[str, Any], au
 def main() -> None:
     args = parse_args()
     clients = sender.load_clients(Path(args.clients))
-    for client_id, expected in WARMUP_CLIENTS.items():
-        client = clients.get(client_id, {})
-        if client.get("sender_email") != expected["sender_email"] or client.get("client_name") != expected["client_name"]:
-            raise ValueError(f"clients.csv does not match the authorized identity for client {client_id}")
+    active_client_ids = {client_id for client_id, client in clients.items() if is_authorized_sender(client.get("sender_email", ""))}
     tracking_path, cvs_dir = Path(args.tracking), Path(args.cvs_dir)
-    jobs = load_selected_jobs(Path(args.jobs), sender.load_tracking(tracking_path))
+    jobs = load_selected_jobs(Path(args.jobs), sender.load_tracking(tracking_path), active_client_ids)
     ready, blocked = preflight(jobs, clients, cvs_dir)
     print(json.dumps({"selected": len(jobs), "ready": len(ready), "blocked": blocked, "execute": args.execute}, sort_keys=True))
     if blocked:
