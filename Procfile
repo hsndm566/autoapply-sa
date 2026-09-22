@@ -1,1 +1,1 @@
-web: python service.py
+web: python heroku_entrypoint.py
