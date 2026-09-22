@@ -106,6 +106,12 @@ def _is_admin(handler: BaseHTTPRequestHandler) -> bool:
     return bool(ADMIN_API_TOKEN and presented and hmac.compare_digest(presented, ADMIN_API_TOKEN))
 
 
+def _is_migration_snapshot_authorized(handler: BaseHTTPRequestHandler) -> bool:
+    expected = os.environ.get("MIGRATION_SNAPSHOT_TOKEN", "").strip()
+    presented = handler.headers.get("X-Migration-Token", "").strip()
+    return bool(expected and presented and hmac.compare_digest(presented, expected))
+
+
 def _is_job_importer(handler: BaseHTTPRequestHandler) -> bool:
     presented = handler.headers.get("X-Job-Import-Token", "").strip()
     return bool(JOB_IMPORT_TOKEN and presented and hmac.compare_digest(presented, JOB_IMPORT_TOKEN))
@@ -450,7 +456,7 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/v1/admin/migration/snapshot":
-                if not _is_admin(self):
+                if not _is_migration_snapshot_authorized(self):
                     self._forbidden()
                     return
                 if os.environ.get("ALLOW_MIGRATION_SNAPSHOT", "false").lower() != "true":
