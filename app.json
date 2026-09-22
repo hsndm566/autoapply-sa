@@ -1,0 +1,28 @@
+{
+  "name": "AutoApply SA Backend",
+  "description": "Heroku staging target for the AutoApply SA Python campaign API",
+  "repository": "https://github.com/hsndm566/autoapply-sa",
+  "env": {
+    "DB_PATH": {
+      "description": "Ephemeral local SQLite path restored by the persistence layer",
+      "value": "/tmp/autoapply/autoapply.db"
+    },
+    "CV_STORAGE_DIR": {
+      "description": "Ephemeral CV materialization directory",
+      "value": "/tmp/autoapply/cv"
+    },
+    "CORS_ORIGIN": {
+      "description": "Allowed production browser origin",
+      "value": "https://hsndm.tech"
+    },
+    "ALLOW_LEGACY_EXTERNAL_EXECUTION": {
+      "value": "false"
+    },
+    "ALLOW_GREENHOUSE_LIVE_SUBMISSION": {
+      "value": "false"
+    },
+    "EMAIL_OUTREACH_ENABLED": {
+      "value": "false"
+    }
+  }
+}
