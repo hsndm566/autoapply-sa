@@ -7,3 +7,4 @@ playwright==1.62.0
 PyYAML==6.0.2
 supabase>=2.6.0,<3.0.0
 sentry-sdk==2.19.2
+boto3==1.40.39
