@@ -26,7 +26,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 from urllib.parse import urlparse
 
 import db
-from warmup_config import SCHEDULED_DELIVERY_SCOPE, WARMUP_CLIENTS, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE
+from warmup_config import SCHEDULED_DELIVERY_SCOPE, WARMUP_EVIDENCE_TYPE, WARMUP_SCOPE, is_authorized_sender
 
 AUDITOR_VERSION = "1.0.0"
 MAX_CV_BYTES = 10 * 1024 * 1024
@@ -183,15 +183,17 @@ def _is_verified_contact_scope(package: Mapping[str, Any]) -> bool:
         client_id = int(submission.get("client_id"))
     except (TypeError, ValueError):
         return False
-    expected = WARMUP_CLIENTS.get(client_id, {})
+    sender_email = _text(submission.get("sender_email"))
+    candidate_email = _text(candidate.get("email"))
     return bool(
-        expected
+        client_id > 0
         and _text(submission.get("warmup_scope")) in {WARMUP_SCOPE, SCHEDULED_DELIVERY_SCOPE}
         and _text(submission.get("evidence_type")) == WARMUP_EVIDENCE_TYPE
         and _text(job.get("evidence_type")) == WARMUP_EVIDENCE_TYPE
         and not _text(job.get("url"))
-        and _text(submission.get("sender_email")).casefold() == str(expected["sender_email"]).casefold()
-        and _text(candidate.get("full_name")) == str(expected["client_name"])
+        and is_authorized_sender(sender_email)
+        and candidate_email.casefold() == sender_email.casefold()
+        and bool(_text(candidate.get("full_name")))
     )
 
 
