@@ -423,6 +423,8 @@ def _seed_python_snapshot(
     )
 
     cleanup_needed = False
+    cleanup_error: Exception | None = None
+    primary_error: Exception | None = None
     try:
         for key, value in temp_values.items():
             render.set_env(PYTHON_RENDER_SERVICE, key, value)
@@ -441,18 +443,24 @@ def _seed_python_snapshot(
             f"(embedded CVs: {int(result.get('embedded_cv_count') or 0)}, "
             f"database bytes: {int(result.get('database_bytes') or 0)})"
         )
+    except Exception as exc:
+        primary_error = exc
     finally:
         if cleanup_needed:
             try:
                 render.restore_temp_env(PYTHON_RENDER_SERVICE, original_render_env, RENDER_TEMP_KEYS)
                 render.deploy(PYTHON_RENDER_SERVICE, python_sha)
                 print("Temporary migration variables removed from Render fallback")
-            except Exception as cleanup_error:
-                print(
-                    "WARNING: Render migration-variable cleanup needs attention: "
-                    f"{type(cleanup_error).__name__}",
-                    file=sys.stderr,
-                )
+            except Exception as exc:
+                cleanup_error = exc
+
+    if cleanup_error is not None:
+        raise MigrationError(
+            "Render temporary migration credentials could not be fully removed; "
+            "migration stopped before Heroku traffic activation"
+        ) from cleanup_error
+    if primary_error is not None:
+        raise primary_error
 
 
 def migrate(request: dict[str, Any]) -> dict[str, Any]:
