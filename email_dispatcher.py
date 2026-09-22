@@ -23,10 +23,10 @@ from supabase_delivery_sync import reserve_trial_application
 from warmup_config import (
     SCHEDULED_DELIVERY_ENVIRONMENT_FLAG,
     SCHEDULED_DELIVERY_SCOPE,
-    WARMUP_CLIENTS,
     WARMUP_ENVIRONMENT_FLAG,
     WARMUP_EVIDENCE_TYPE,
     WARMUP_SCOPE,
+    is_authorized_sender,
 )
 
 ACTION_TYPE = "audited_email_application"
@@ -69,9 +69,8 @@ def _authorized_brevo_sender(package: Mapping[str, Any]) -> str:
         client_id = int(submission.get("client_id"))
     except (TypeError, ValueError):
         return ""
-    expected = WARMUP_CLIENTS.get(client_id, {})
     sender = str(submission.get("sender_email") or "").strip().lower()
-    if not expected:
+    if client_id <= 0 or not is_authorized_sender(sender):
         return ""
     scope = str(submission.get("warmup_scope") or "")
     allowed_scope = (scope == WARMUP_SCOPE and _warmup_enabled()) or (
@@ -83,7 +82,9 @@ def _authorized_brevo_sender(package: Mapping[str, Any]) -> str:
         return ""
     if str(job.get("evidence_type") or "") != WARMUP_EVIDENCE_TYPE or str(job.get("url") or "").strip():
         return ""
-    if sender != str(expected["sender_email"]).casefold() or str(candidate.get("full_name") or "") != str(expected["client_name"]):
+    if str(candidate.get("email") or "").strip().casefold() != sender.casefold():
+        return ""
+    if not str(candidate.get("full_name") or "").strip():
         return ""
     return sender
 
