@@ -1,19 +1,24 @@
 """Heroku portability wrapper for AutoApply SA.
 
 This file intentionally leaves the production service and db modules unchanged.
-It applies additive runtime upgrades only when Heroku starts this entrypoint.
+It restores the durable SQLite snapshot before boot, keeps campaign CVs inside
+SQLite, and snapshots writes to S3 Hero Dev.
 """
 from __future__ import annotations
 
 import os
 import re
-import sqlite3
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 import db
+import heroku_persistence
 import service
 
 MAX_CV_BYTES = int(os.environ.get("MAX_CV_UPLOAD_BYTES", str(5 * 1024 * 1024)))
+SNAPSHOT_INTERVAL_SECONDS = max(1, int(os.environ.get("AUTOAPPLY_SNAPSHOT_INTERVAL_SECONDS", "3")))
 
 
 def ensure_cv_blob_column() -> None:
@@ -74,6 +79,7 @@ def materialize_cvs() -> int:
 
 
 _original_create_campaign = db.create_campaign
+_original_connection = db.connection
 
 
 def _portable_create_campaign(*args, **kwargs):
@@ -91,18 +97,45 @@ def _portable_create_campaign(*args, **kwargs):
     return campaign, token
 
 
-def _safe_get_campaign(campaign_id: str):
-    campaign = db.get_campaign(campaign_id)
-    if campaign:
-        campaign.pop("cv_blob", None)
-    return campaign
+def _install_durable_connection_wrapper() -> None:
+    @contextmanager
+    def durable_connection():
+        changed = False
+        with _original_connection() as connection:
+            before = connection.total_changes
+            yield connection
+            changed = connection.total_changes > before
+        if changed and heroku_persistence.configured():
+            heroku_persistence.snapshot(db.DB_PATH)
+
+    db.connection = durable_connection
+
+
+def _snapshot_loop() -> None:
+    while True:
+        try:
+            if heroku_persistence.configured():
+                heroku_persistence.snapshot(db.DB_PATH)
+        except Exception as exc:
+            service.LOG.exception("durable snapshot failed: %s", exc)
+        time.sleep(SNAPSHOT_INTERVAL_SECONDS)
 
 
 def prepare() -> None:
+    db_path = Path(db.DB_PATH)
+    require_remote = os.environ.get("AUTOAPPLY_REQUIRE_REMOTE_SNAPSHOT", "").strip().lower() in {"1", "true", "yes", "on"}
+
+    restored = False
+    if heroku_persistence.configured():
+        restored = heroku_persistence.restore(db_path)
+    if require_remote and not restored and not db_path.exists():
+        raise RuntimeError("required remote AutoApply database snapshot was not found")
+
     db.initialize()
     ensure_cv_blob_column()
-    embed_existing_cvs()
+    embedded = embed_existing_cvs()
     materialize_cvs()
+
     db.create_campaign = _portable_create_campaign
 
     original_get_campaign = db.get_campaign
@@ -114,6 +147,11 @@ def prepare() -> None:
         return campaign
 
     db.get_campaign = get_campaign_without_blob
+    _install_durable_connection_wrapper()
+
+    if heroku_persistence.configured():
+        heroku_persistence.snapshot(db.DB_PATH, force=(embedded > 0 or not restored))
+        threading.Thread(target=_snapshot_loop, daemon=True, name="autoapply-s3-snapshot").start()
 
 
 if __name__ == "__main__":
