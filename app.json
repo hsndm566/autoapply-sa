@@ -1,18 +1,29 @@
 {
   "name": "AutoApply SA Backend",
-  "description": "Heroku staging target for the AutoApply SA Python campaign API",
+  "description": "Heroku staging target for the AutoApply SA Python campaign API.",
   "repository": "https://github.com/hsndm566/autoapply-sa",
+  "stack": "heroku-24",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "addons": [
+    {
+      "plan": "s3herodev"
+    }
+  ],
   "env": {
     "DB_PATH": {
-      "description": "Ephemeral local SQLite path restored by the persistence layer",
+      "description": "Ephemeral SQLite working path restored from S3 Hero.",
       "value": "/tmp/autoapply/autoapply.db"
     },
     "CV_STORAGE_DIR": {
-      "description": "Ephemeral CV materialization directory",
+      "description": "Ephemeral CV materialization directory.",
       "value": "/tmp/autoapply/cv"
     },
     "CORS_ORIGIN": {
-      "description": "Allowed production browser origin",
+      "description": "Allowed production browser origin.",
       "value": "https://hsndm.tech"
     },
     "ALLOW_LEGACY_EXTERNAL_EXECUTION": {
@@ -24,31 +35,14 @@
     "EMAIL_OUTREACH_ENABLED": {
       "value": "false"
     },
-    "AUTOAPPLY_REQUIRE_MIGRATED_DB": {
-      "value": "true"
+    "AUTOAPPLY_REQUIRE_REMOTE_SNAPSHOT": {
+      "description": "Set true only after the current production database has been seeded into S3 Hero.",
+      "value": "false"
     },
-    "BUCKETEER_AWS_ACCESS_KEY_ID": {
-      "required": true
-    },
-    "BUCKETEER_AWS_SECRET_ACCESS_KEY": {
-      "required": true
-    },
-    "BUCKETEER_AWS_REGION": {
-      "required": true
-    },
-    "BUCKETEER_BUCKET_NAME": {
-      "required": true
+    "AUTOAPPLY_SNAPSHOT_INTERVAL_SECONDS": {
+      "value": "3"
     }
   },
-  "stack": "heroku-24",
-  "buildpacks": [
-    {
-      "url": "heroku-community/apt"
-    },
-    {
-      "url": "heroku/python"
-    }
-  ],
   "formation": {
     "web": {
       "quantity": 1
