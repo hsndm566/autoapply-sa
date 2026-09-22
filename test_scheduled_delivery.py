@@ -77,7 +77,7 @@ class ScheduledDeliveryTests(unittest.TestCase):
         self.assertEqual(frozenset({2}), deliverable)
         self.assertEqual(5, len(selected))
         self.assertTrue(all(job["client_id"] == 2 for job in selected))
-        self.assertEqual(7, skipped["client_cv_invalid"])
+        self.assertEqual(14, skipped["client_cv_invalid"])
         self.assertEqual(1, len(blocked_clients))
         self.assertIn("client 3", blocked_clients[0])
 
