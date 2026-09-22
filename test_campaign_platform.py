@@ -172,27 +172,35 @@ class CampaignPlatformTests(unittest.TestCase):
         self.assertTrue(Path(campaign["cv_path"]).exists())
         self.assertEqual(len(campaign["cv_sha256"]), 64)
 
-    def test_migration_snapshot_requires_admin_and_explicit_enablement(self):
+    def test_migration_snapshot_requires_one_time_token_and_explicit_enablement(self):
         status, body = self.request("POST", "/v1/admin/migration/snapshot")
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "forbidden")
 
-        status, body = self.request(
-            "POST",
-            "/v1/admin/migration/snapshot",
-            headers={"X-Admin-Token": "test-admin-token"},
-        )
+        with patch.dict(os.environ, {"MIGRATION_SNAPSHOT_TOKEN": "migration-only-token"}, clear=False):
+            status, body = self.request(
+                "POST",
+                "/v1/admin/migration/snapshot",
+                headers={"X-Migration-Token": "migration-only-token"},
+            )
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "migration_snapshot_disabled")
 
-        with patch.dict(os.environ, {"ALLOW_MIGRATION_SNAPSHOT": "true"}, clear=False), patch(
+        with patch.dict(
+            os.environ,
+            {
+                "ALLOW_MIGRATION_SNAPSHOT": "true",
+                "MIGRATION_SNAPSHOT_TOKEN": "migration-only-token",
+            },
+            clear=False,
+        ), patch(
             "migration_seed.seed_snapshot",
             return_value={"ok": True, "snapshot_uploaded": True, "embedded_cv_count": 1, "database_bytes": 1234},
         ) as seed:
             status, body = self.request(
                 "POST",
                 "/v1/admin/migration/snapshot",
-                headers={"X-Admin-Token": "test-admin-token"},
+                headers={"X-Migration-Token": "migration-only-token"},
             )
         self.assertEqual(status, 200)
         self.assertTrue(body["snapshot_uploaded"])
