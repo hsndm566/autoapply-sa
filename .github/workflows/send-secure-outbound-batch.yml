@@ -98,7 +98,7 @@ jobs:
                   payload = {
                       "sender": {"email": batch["sender_email"], "name": batch["candidate_name"]},
                       "to": [{"email": recipient}],
-                      "replyTo": {"email": "yasminadam406@gmail.com", "name": "Yasmin Adam"},
+                      "replyTo": {"email": batch["sender_email"], "name": batch["candidate_name"]},
                       "subject": subject,
                       "textContent": body,
                       "attachment": [{"name": batch["cv_filename"], "content": batch["cv_base64"]}],
