@@ -1,0 +1,84 @@
+name: Brevo Read-Only Preflight
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/brevo-preflight.yml"
+      - "brevo-preflight-trigger.txt"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+    steps:
+      - name: Verify Brevo account, domain, and senders
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BREVO_API_KEY"
+
+          python - <<'PY'
+          import json, os, urllib.request, urllib.error
+
+          key = os.environ["BREVO_API_KEY"]
+
+          def get(path):
+              req = urllib.request.Request(
+                  "https://api.brevo.com/v3" + path,
+                  headers={"api-key": key, "accept": "application/json"},
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      return resp.status, json.loads(resp.read() or b"{}")
+              except urllib.error.HTTPError as exc:
+                  body = exc.read().decode("utf-8", "replace")
+                  print(f"BREVO_HTTP_ERROR={exc.code}")
+                  try:
+                      data = json.loads(body)
+                      print("BREVO_ERROR_CODE=" + str(data.get("code") or "unknown"))
+                  except Exception:
+                      print("BREVO_ERROR_CODE=unknown")
+                  raise
+
+          status, _ = get("/account")
+          print("BREVO_ACCOUNT_OK=" + str(status == 200).lower())
+
+          _, domains = get("/senders/domains")
+          found_domain = None
+          for d in domains.get("domains", []):
+              name = (d.get("domain_name") or d.get("domain") or d.get("name") or "").lower()
+              if name == "hsndm.tech":
+                  found_domain = d
+                  break
+
+          print("HSNDM_DOMAIN_PRESENT=" + str(bool(found_domain)).lower())
+          if found_domain:
+              print("HSNDM_DOMAIN_AUTHENTICATED=" + str(bool(found_domain.get("authenticated"))).lower())
+              print("HSNDM_DOMAIN_VERIFIED=" + str(bool(found_domain.get("verified"))).lower())
+
+          _, senders = get("/senders")
+          wanted = {"apply@hsndm.tech", "apply1@hsndm.tech", "apply2@hsndm.tech"}
+          seen = {}
+          for s in senders.get("senders", []):
+              email = str(s.get("email") or "").lower()
+              if email in wanted:
+                  seen[email] = s
+
+          for email in sorted(wanted):
+              s = seen.get(email)
+              print(email.upper().replace("@","_AT_").replace(".","_") + "_PRESENT=" + str(bool(s)).lower())
+              if s:
+                  active = s.get("active")
+                  if active is not None:
+                      print(email.upper().replace("@","_AT_").replace(".","_") + "_ACTIVE=" + str(bool(active)).lower())
+
+          missing = sorted(wanted - set(seen))
+          if missing:
+              print("MISSING_SENDERS=" + ",".join(missing))
+          PY
