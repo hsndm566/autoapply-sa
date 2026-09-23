@@ -1,0 +1,4 @@
+{
+  "requested_at": "2026-09-24T00:00:00Z",
+  "reason": "Refresh sanitized Northflank inventory before deploying updated AutoApply job-discovery sources."
+}
