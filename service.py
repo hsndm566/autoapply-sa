@@ -33,7 +33,9 @@ import campaign_worker
 import contact_import
 import db
 import diversity_queue
+import email_dispatcher
 import hermes_gateway
+import requests
 
 try:
     import orchestrator
@@ -50,7 +52,7 @@ PORT = int(os.environ.get("PORT", "8080"))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_CV_UPLOAD_BYTES", str(5 * 1024 * 1024)))
 CV_STORAGE_DIR = Path(os.environ.get("CV_STORAGE_DIR", os.path.join(os.path.dirname(__file__), "data", "cv")))
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt"}
-CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "https://hsndm.tech")
+CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "https://hsndm.tech,https://www.hsndm.tech")
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 JOB_IMPORT_TOKEN = os.environ.get("JOB_IMPORT_TOKEN", "")
 ALLOW_LEGACY_EXTERNAL_EXECUTION = os.environ.get("ALLOW_LEGACY_EXTERNAL_EXECUTION", "false").lower() == "true"
@@ -74,6 +76,112 @@ def _file_sha256(path: Path) -> str:
 
 def _sanitize_text(value: object, limit: int = 250) -> str:
     return str(value or "").strip()[:limit]
+
+
+def _allowed_cors_origins() -> set[str]:
+    return {origin.strip().rstrip("/") for origin in CORS_ORIGIN.split(",") if origin.strip()}
+
+
+def _bearer_token(handler: BaseHTTPRequestHandler) -> str:
+    authorization = handler.headers.get("Authorization", "").strip()
+    if not authorization.lower().startswith("bearer "):
+        return ""
+    return authorization.split(" ", 1)[1].strip()
+
+
+def _supabase_user(handler: BaseHTTPRequestHandler) -> tuple[dict[str, object] | None, str, int]:
+    token = _bearer_token(handler)
+    if not token:
+        return None, "sign-in-required", HTTPStatus.UNAUTHORIZED
+    supabase_url = os.environ.get("SUPABASE_URL", "").strip().rstrip("/")
+    supabase_key = (
+        os.environ.get("SUPABASE_ANON_KEY", "").strip()
+        or os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()
+    )
+    if not supabase_url or not supabase_key:
+        return None, "supabase-auth-not-configured", HTTPStatus.SERVICE_UNAVAILABLE
+    try:
+        response = requests.get(
+            f"{supabase_url}/auth/v1/user",
+            headers={"Authorization": f"Bearer {token}", "apikey": supabase_key},
+            timeout=10,
+        )
+    except requests.RequestException:
+        return None, "supabase-auth-unavailable", HTTPStatus.SERVICE_UNAVAILABLE
+    if response.status_code != 200:
+        return None, "supabase-token-invalid", HTTPStatus.UNAUTHORIZED
+    try:
+        user = response.json()
+    except ValueError:
+        return None, "supabase-auth-invalid-response", HTTPStatus.SERVICE_UNAVAILABLE
+    return user if isinstance(user, dict) else {}, "", HTTPStatus.OK
+
+
+def _recommended_jobs(city: str = "", role: str = "", limit: int = 12) -> list[dict[str, object]]:
+    city_filter = city.strip().casefold()
+    role_filter = role.strip().casefold()
+    jobs: list[dict[str, object]] = []
+    try:
+        with db.connection() as c:
+            rows = c.execute(
+                """
+                SELECT id,title,company,location,url,description,category,status
+                FROM discovered_jobs
+                WHERE COALESCE(status,'new') NOT IN ('archived','blocked')
+                ORDER BY id DESC
+                LIMIT 100
+                """
+            ).fetchall()
+    except Exception as exc:
+        LOG.warning("recommended jobs database read failed: %s", type(exc).__name__)
+        rows = []
+    for row in rows:
+        title = str(row["title"] or "")
+        company = str(row["company"] or "")
+        location = str(row["location"] or "")
+        if city_filter and city_filter not in location.casefold():
+            continue
+        if role_filter and role_filter not in title.casefold() and role_filter not in str(row["description"] or "").casefold():
+            continue
+        jobs.append({
+            "id": f"railway-{row['id']}",
+            "companyName": company,
+            "roleTitle": title,
+            "city": location or city or "Saudi Arabia",
+            "source": str(row["category"] or "discovered"),
+            "url": str(row["url"] or ""),
+            "summary": _sanitize_text(row["description"], 240) or "Freshly discovered role from the AutoApply SA job pipeline.",
+            "matchReason": "Matched from the live AutoApply SA discovered-jobs queue.",
+            "freshness": "live database",
+        })
+        if len(jobs) >= limit:
+            break
+    if jobs:
+        return jobs
+    return [
+        {
+            "id": "curated-sa-ops-1",
+            "companyName": "Saudi digital employers",
+            "roleTitle": role or "Operations / Customer Success Specialist",
+            "city": city or "Riyadh / Remote",
+            "source": "curated-fallback",
+            "url": "https://www.linkedin.com/jobs/search/?location=Saudi%20Arabia",
+            "summary": "Use this as a live search starting point while the scraper queue warms up.",
+            "matchReason": "Fallback shown only when the live discovered-jobs queue has no matching rows.",
+            "freshness": "search fallback",
+        },
+        {
+            "id": "curated-sa-growth-1",
+            "companyName": "Growth-stage Saudi teams",
+            "roleTitle": role or "Business Development Coordinator",
+            "city": city or "Jeddah / Riyadh",
+            "source": "curated-fallback",
+            "url": "https://www.bayt.com/en/saudi-arabia/jobs/",
+            "summary": "Saudi job-board search route for immediate manual review.",
+            "matchReason": "Fallback shown only when the live discovered-jobs queue has no matching rows.",
+            "freshness": "search fallback",
+        },
+    ]
 
 
 class _MultipartPart:
@@ -176,10 +284,10 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
 
     def _cors(self) -> None:
         origin = self.headers.get("Origin", "")
-        if origin and origin == CORS_ORIGIN:
+        if origin and origin.rstrip("/") in _allowed_cors_origins():
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Campaign-Token, X-Admin-Token, X-Job-Import-Token, X-Hermes-Gateway-Token")
+            self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Campaign-Token, X-Admin-Token, X-Job-Import-Token, X-Hermes-Gateway-Token")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
     def _send(self, payload: dict[str, object], code: int = 200) -> None:
@@ -245,6 +353,23 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        if path == "/api/v2/jobs/recommended":
+            user, auth_error, status_code = _supabase_user(self)
+            if auth_error:
+                self._send({"ok": False, "error": auth_error}, status_code)
+                return
+            query = parse_qs(parsed.query)
+            jobs = _recommended_jobs(
+                city=str(query.get("city", [""])[0] or ""),
+                role=str(query.get("role", [""])[0] or ""),
+            )
+            self._send({
+                "jobs": jobs,
+                "mode": "live" if jobs and str(jobs[0].get("source")) != "curated-fallback" else "curated",
+                "checkedAt": _utc_now(),
+                "userId": str((user or {}).get("id") or ""),
+            })
+            return
         if path in {"/healthz", "/status"}:
             try:
                 bayt_handoff = bayt_profile_adapter.queue_summary(db.DB_PATH)
@@ -313,6 +438,60 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = urlparse(self.path).path.rstrip("/") or "/"
         try:
+            if path == "/api/v2/applications/send-email":
+                user, auth_error, status_code = _supabase_user(self)
+                if auth_error:
+                    self._send({"ok": False, "error": auth_error}, status_code)
+                    return
+                data = self._read_json()
+                campaign_id = str(data.get("campaignId") or "").strip()
+                application_package = data.get("applicationPackage")
+                approval_token = str(data.get("auditorApprovalToken") or "").strip()
+                if not campaign_id or not isinstance(application_package, dict) or not approval_token:
+                    self._send(
+                        {
+                            "ok": False,
+                            "error": "audited-application-package-required",
+                            "detail": (
+                                "Email applications must include campaignId, an Auditor-approved "
+                                "applicationPackage, and auditorApprovalToken with an exact PDF CV attachment path."
+                            ),
+                            "queued": False,
+                            "sent": False,
+                        },
+                        HTTPStatus.UNPROCESSABLE_ENTITY,
+                    )
+                    return
+                application_package.setdefault("metadata", {})
+                if isinstance(application_package["metadata"], dict):
+                    application_package["metadata"]["supabase_user_id"] = str((user or {}).get("id") or "")
+                try:
+                    action_id, added = email_dispatcher.queue_audited_email_application(
+                        campaign_id,
+                        application_package,
+                        approval_token,
+                    )
+                except Exception as exc:
+                    self._send(
+                        {"ok": False, "error": "audited-queue-rejected", "reason": str(exc), "sent": False},
+                        HTTPStatus.BAD_REQUEST,
+                    )
+                    return
+                action = db.claim_action(action_id, email_dispatcher.ACTION_TYPE)
+                if not action:
+                    self._send({"ok": True, "queued": True, "sent": False, "outboxId": action_id, "added": added})
+                    return
+                result = email_dispatcher.dispatch_one(action)
+                self._send({
+                    "ok": result.get("status") == "accepted",
+                    "queued": True,
+                    "sent": result.get("status") == "accepted",
+                    "outboxId": action_id,
+                    "added": added,
+                    "dispatch": result,
+                }, HTTPStatus.OK if result.get("status") == "accepted" else HTTPStatus.ACCEPTED)
+                return
+
             if path == "/v1/hermes/draft-applications":
                 if not hermes_gateway.authorized(self.headers.get(hermes_gateway.GATEWAY_HEADER, "").strip()):
                     self._forbidden()
