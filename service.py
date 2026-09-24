@@ -52,7 +52,15 @@ PORT = int(os.environ.get("PORT", "8080"))
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_CV_UPLOAD_BYTES", str(5 * 1024 * 1024)))
 CV_STORAGE_DIR = Path(os.environ.get("CV_STORAGE_DIR", os.path.join(os.path.dirname(__file__), "data", "cv")))
 ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt"}
-CORS_ORIGIN = os.environ.get("CORS_ORIGIN", "https://hsndm.tech,https://www.hsndm.tech")
+DEFAULT_CORS_ORIGINS = ",".join(
+    [
+        "https://hsndm.tech",
+        "https://www.hsndm.tech",
+        "https://dashboard.hsndm.tech",
+        "https://app.hsndm.tech",
+    ]
+)
+CORS_ORIGIN = os.environ.get("CORS_ORIGIN", DEFAULT_CORS_ORIGINS)
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 JOB_IMPORT_TOKEN = os.environ.get("JOB_IMPORT_TOKEN", "")
 ALLOW_LEGACY_EXTERNAL_EXECUTION = os.environ.get("ALLOW_LEGACY_EXTERNAL_EXECUTION", "false").lower() == "true"
@@ -370,7 +378,7 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 "userId": str((user or {}).get("id") or ""),
             })
             return
-        if path in {"/healthz", "/status"}:
+        if path in {"/health", "/healthz", "/status"}:
             try:
                 bayt_handoff = bayt_profile_adapter.queue_summary(db.DB_PATH)
             except Exception as exc:
@@ -447,6 +455,21 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                 campaign_id = str(data.get("campaignId") or "").strip()
                 application_package = data.get("applicationPackage")
                 approval_token = str(data.get("auditorApprovalToken") or "").strip()
+                if not campaign_id and not application_package and not approval_token:
+                    self._send(
+                        {
+                            "ok": False,
+                            "error": "auditor-package-required",
+                            "detail": (
+                                "The website reached the API, but live email sending requires an "
+                                "Auditor-approved package before Brevo dispatch."
+                            ),
+                            "queued": False,
+                            "sent": False,
+                        },
+                        HTTPStatus.UNPROCESSABLE_ENTITY,
+                    )
+                    return
                 if not campaign_id or not isinstance(application_package, dict) or not approval_token:
                     self._send(
                         {
