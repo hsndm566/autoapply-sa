@@ -71,10 +71,11 @@ class V2SiteRoutesTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual("ready", payload["status"])
 
-    def test_dashboard_origin_gets_cors_headers(self) -> None:
-        status, _payload, headers = self.request("GET", "/api/v2/health", headers={"Origin": "https://dashboard.hsndm.tech"})
-        self.assertEqual(status, 200)
-        self.assertEqual("https://dashboard.hsndm.tech", headers.get("Access-Control-Allow-Origin"))
+    def test_canonical_v2_origins_get_cors_headers(self) -> None:
+        for origin in ("https://www.hsndm.tech", "https://dashboard.hsndm.tech", "https://app.hsndm.tech"):
+            status, _payload, headers = self.request("GET", "/api/v2/health", headers={"Origin": origin})
+            self.assertEqual(status, 200)
+            self.assertEqual(origin, headers.get("Access-Control-Allow-Origin"))
 
     def test_recommended_jobs_uses_verified_supabase_feed_for_signed_in_user(self) -> None:
         jobs = [{
