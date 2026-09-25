@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import threading
 import unittest
@@ -61,47 +60,104 @@ class V2SiteRoutesTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertIn("metrics", payload)
 
+    def test_v2_health_is_public_and_specific(self) -> None:
+        status, payload, _headers = self.request("GET", "/api/v2/health")
+        self.assertEqual(status, 200)
+        self.assertEqual("autoapply-v2", payload["service"])
+
+    def test_auth_health_reports_supabase_configuration(self) -> None:
+        with patch.object(service.v2_site, "_supabase_config", return_value=("https://example.supabase.co", "key")):
+            status, payload, _headers = self.request("GET", "/healthz/auth")
+        self.assertEqual(status, 200)
+        self.assertEqual("ready", payload["status"])
+
     def test_dashboard_origin_gets_cors_headers(self) -> None:
-        status, _payload, headers = self.request("GET", "/health", headers={"Origin": "https://dashboard.hsndm.tech"})
+        status, _payload, headers = self.request("GET", "/api/v2/health", headers={"Origin": "https://dashboard.hsndm.tech"})
         self.assertEqual(status, 200)
         self.assertEqual("https://dashboard.hsndm.tech", headers.get("Access-Control-Allow-Origin"))
 
-    def test_recommended_jobs_returns_live_rows_for_signed_in_user(self) -> None:
-        db.import_discovered_jobs(
-            [
-                {
-                    "title": "Operations Coordinator",
-                    "company": "Example Logistics",
-                    "location": "Jeddah",
-                    "url": "https://example.com/jobs/ops",
-                    "description": "Operations role in Jeddah",
-                    "category": "operations",
-                    "status": "new",
-                }
-            ]
-        )
-        with patch.object(service, "_supabase_user", return_value=({"id": "user-123"}, "", 200)):
-            status, payload, _headers = self.request("GET", "/api/v2/jobs/recommended?city=Jeddah&role=Operations")
+    def test_recommended_jobs_uses_verified_supabase_feed_for_signed_in_user(self) -> None:
+        jobs = [{
+            "id": "199945cc-4e96-451c-bb4f-e999f37c6873",
+            "companyName": "Example Logistics",
+            "roleTitle": "Operations Coordinator",
+            "city": "Jeddah",
+            "source": "public_ats",
+            "url": "https://example.com/jobs/ops",
+            "summary": "Operations role in Jeddah",
+            "matchReason": "title aligns with Operations",
+            "freshness": "2026-09-25T18:10:05Z",
+        }]
+        with (
+            patch.object(service, "_supabase_user", return_value=({"id": "user-123"}, "", 200)),
+            patch.object(service.v2_site, "recommended_jobs", return_value=jobs) as recommended,
+        ):
+            status, payload, _headers = self.request(
+                "GET",
+                "/api/v2/jobs/recommended?city=Jeddah&role=Operations",
+                headers={"Authorization": "Bearer test-token"},
+            )
         self.assertEqual(status, 200)
         self.assertEqual("live", payload["mode"])
         self.assertEqual("Example Logistics", payload["jobs"][0]["companyName"])
         self.assertEqual("user-123", payload["userId"])
+        recommended.assert_called_once_with("test-token", city="Jeddah", role="Operations")
 
-    def test_simple_site_email_form_gets_clear_audit_required_response(self) -> None:
-        body = {
-            "toEmail": "hr@example.com",
-            "companyName": "Example",
-            "roleTitle": "Operations Coordinator",
-            "city": "Jeddah",
-            "candidateName": "Candidate",
-            "candidateEmail": "candidate@example.com",
-            "message": "Hello",
+    def test_application_readiness_requires_auth_and_reports_provider_state(self) -> None:
+        with (
+            patch.object(service, "_supabase_user", return_value=({"id": "user-123"}, "", 200)),
+            patch.object(service.v2_site, "readiness", return_value={"ok": True, "status": 200}),
+        ):
+            status, payload, _headers = self.request(
+                "GET",
+                "/api/v2/applications/readiness",
+                headers={"Authorization": "Bearer test-token"},
+            )
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["ok"])
+
+    def test_v2_send_accepts_only_server_reconciled_result(self) -> None:
+        result = {
+            "ok": True,
+            "messageId": "<provider-message-1>",
+            "application": {
+                "id": "application-1",
+                "status": "applied",
+                "providerMessageId": "<provider-message-1>",
+            },
         }
+        with (
+            patch.object(service, "_supabase_user", return_value=({"id": "user-123", "email": "candidate@example.com"}, "", 200)),
+            patch.object(service.v2_site, "send_application", return_value=result) as send,
+        ):
+            status, payload, _headers = self.request(
+                "POST",
+                "/api/v2/applications/send-email",
+                {
+                    "toEmail": "hr@example.com",
+                    "jobId": "199945cc-4e96-451c-bb4f-e999f37c6873",
+                },
+                headers={"Authorization": "Bearer test-token"},
+            )
+        self.assertEqual(status, 200)
+        self.assertEqual("<provider-message-1>", payload["messageId"])
+        self.assertEqual("<provider-message-1>", payload["application"]["providerMessageId"])
+        send.assert_called_once_with(
+            "test-token",
+            {"id": "user-123", "email": "candidate@example.com"},
+            to_email="hr@example.com",
+            job_id="199945cc-4e96-451c-bb4f-e999f37c6873",
+        )
+
+    def test_v2_send_rejects_missing_verified_job_id(self) -> None:
         with patch.object(service, "_supabase_user", return_value=({"id": "user-123"}, "", 200)):
-            status, payload, _headers = self.request("POST", "/api/v2/applications/send-email", body)
-        self.assertEqual(status, 422)
-        self.assertEqual("auditor-package-required", payload["error"])
-        self.assertFalse(payload["sent"])
+            status, payload, _headers = self.request(
+                "POST",
+                "/api/v2/applications/send-email",
+                {"toEmail": "hr@example.com"},
+            )
+        self.assertEqual(status, 400)
+        self.assertEqual("invalid-application-email", payload["error"])
 
 
 if __name__ == "__main__":
