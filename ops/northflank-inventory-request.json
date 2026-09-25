@@ -1,4 +1,4 @@
 {
-  "requested_at": "2026-09-24T00:00:00Z",
-  "reason": "Refresh sanitized Northflank inventory before deploying updated AutoApply job-discovery sources."
+  "requested_at": "2026-09-26T00:00:00+03:00",
+  "reason": "Refresh sanitized Northflank inventory after merging the V2 acceptance-path backend so the live api.hsndm.tech service can be identified without guessing provider state."
 }
