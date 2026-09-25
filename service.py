@@ -88,7 +88,9 @@ def _sanitize_text(value: object, limit: int = 250) -> str:
 
 
 def _allowed_cors_origins() -> set[str]:
-    return {origin.strip().rstrip("/") for origin in CORS_ORIGIN.split(",") if origin.strip()}
+    configured = {origin.strip().rstrip("/") for origin in CORS_ORIGIN.split(",") if origin.strip()}
+    canonical = {origin.strip().rstrip("/") for origin in DEFAULT_CORS_ORIGINS.split(",") if origin.strip()}
+    return canonical | configured
 
 
 def _bearer_token(handler: BaseHTTPRequestHandler) -> str:
