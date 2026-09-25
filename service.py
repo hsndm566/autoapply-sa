@@ -35,6 +35,7 @@ import db
 import diversity_queue
 import email_dispatcher
 import hermes_gateway
+import v2_site
 import requests
 
 try:
@@ -361,19 +362,43 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
+        if path == "/api/v2/health":
+            self._send({"ok": True, "status": "ok", "service": "autoapply-v2"})
+            return
+        if path == "/healthz/auth":
+            try:
+                v2_site._supabase_config()
+                self._send({"ok": True, "status": "ready", "dependency": "supabase-auth"})
+            except v2_site.V2Error as exc:
+                self._send({"ok": False, "error": exc.reason}, exc.status)
+            return
+        if path == "/api/v2/applications/readiness":
+            user, auth_error, status_code = _supabase_user(self)
+            if auth_error:
+                self._send({"ok": False, "error": auth_error}, status_code)
+                return
+            result = v2_site.readiness()
+            self._send(result, int(result.get("status") or (200 if result.get("ok") else 503)))
+            return
         if path == "/api/v2/jobs/recommended":
             user, auth_error, status_code = _supabase_user(self)
             if auth_error:
                 self._send({"ok": False, "error": auth_error}, status_code)
                 return
             query = parse_qs(parsed.query)
-            jobs = _recommended_jobs(
-                city=str(query.get("city", [""])[0] or ""),
-                role=str(query.get("role", [""])[0] or ""),
-            )
+            token = _bearer_token(self)
+            try:
+                jobs = v2_site.recommended_jobs(
+                    token,
+                    city=str(query.get("city", [""])[0] or ""),
+                    role=str(query.get("role", [""])[0] or ""),
+                )
+            except v2_site.V2Error as exc:
+                self._send({"ok": False, "error": exc.reason}, exc.status)
+                return
             self._send({
                 "jobs": jobs,
-                "mode": "live" if jobs and str(jobs[0].get("source")) != "curated-fallback" else "curated",
+                "mode": "live",
                 "checkedAt": _utc_now(),
                 "userId": str((user or {}).get("id") or ""),
             })
@@ -452,67 +477,22 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                     self._send({"ok": False, "error": auth_error}, status_code)
                     return
                 data = self._read_json()
-                campaign_id = str(data.get("campaignId") or "").strip()
-                application_package = data.get("applicationPackage")
-                approval_token = str(data.get("auditorApprovalToken") or "").strip()
-                if not campaign_id and not application_package and not approval_token:
-                    self._send(
-                        {
-                            "ok": False,
-                            "error": "auditor-package-required",
-                            "detail": (
-                                "The website reached the API, but live email sending requires an "
-                                "Auditor-approved package before Brevo dispatch."
-                            ),
-                            "queued": False,
-                            "sent": False,
-                        },
-                        HTTPStatus.UNPROCESSABLE_ENTITY,
-                    )
+                to_email = str(data.get("toEmail") or "").strip()
+                job_id = str(data.get("jobId") or "").strip()
+                if not to_email or not job_id:
+                    self._send({"ok": False, "error": "invalid-application-email"}, HTTPStatus.BAD_REQUEST)
                     return
-                if not campaign_id or not isinstance(application_package, dict) or not approval_token:
-                    self._send(
-                        {
-                            "ok": False,
-                            "error": "audited-application-package-required",
-                            "detail": (
-                                "Email applications must include campaignId, an Auditor-approved "
-                                "applicationPackage, and auditorApprovalToken with an exact PDF CV attachment path."
-                            ),
-                            "queued": False,
-                            "sent": False,
-                        },
-                        HTTPStatus.UNPROCESSABLE_ENTITY,
-                    )
-                    return
-                application_package.setdefault("metadata", {})
-                if isinstance(application_package["metadata"], dict):
-                    application_package["metadata"]["supabase_user_id"] = str((user or {}).get("id") or "")
                 try:
-                    action_id, added = email_dispatcher.queue_audited_email_application(
-                        campaign_id,
-                        application_package,
-                        approval_token,
+                    result = v2_site.send_application(
+                        _bearer_token(self),
+                        user or {},
+                        to_email=to_email,
+                        job_id=job_id,
                     )
-                except Exception as exc:
-                    self._send(
-                        {"ok": False, "error": "audited-queue-rejected", "reason": str(exc), "sent": False},
-                        HTTPStatus.BAD_REQUEST,
-                    )
+                except v2_site.V2Error as exc:
+                    self._send({"ok": False, "error": exc.reason}, exc.status)
                     return
-                action = db.claim_action(action_id, email_dispatcher.ACTION_TYPE)
-                if not action:
-                    self._send({"ok": True, "queued": True, "sent": False, "outboxId": action_id, "added": added})
-                    return
-                result = email_dispatcher.dispatch_one(action)
-                self._send({
-                    "ok": result.get("status") == "accepted",
-                    "queued": True,
-                    "sent": result.get("status") == "accepted",
-                    "outboxId": action_id,
-                    "added": added,
-                    "dispatch": result,
-                }, HTTPStatus.OK if result.get("status") == "accepted" else HTTPStatus.ACCEPTED)
+                self._send(result, HTTPStatus.OK)
                 return
 
             if path == "/v1/hermes/draft-applications":
