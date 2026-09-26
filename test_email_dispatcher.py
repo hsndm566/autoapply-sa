@@ -23,7 +23,7 @@ class EmailDispatcherTests(unittest.TestCase):
         self.old_db_path = db.DB_PATH
         db.DB_PATH = os.path.join(self.temp_dir.name, "email-dispatch-test.db")
         self.addCleanup(setattr, db, "DB_PATH", self.old_db_path)
-        self.env_keys = ("EMAIL_OUTREACH_ENABLED", "GMAIL_USER", "GMAIL_APP_PASSWORD", "BREVO_API_KEY", WARMUP_ENVIRONMENT_FLAG, SCHEDULED_DELIVERY_ENVIRONMENT_FLAG)
+        self.env_keys = ("EMAIL_OUTREACH_ENABLED", "GMAIL_USER", "GMAIL_APP_PASSWORD", "BREVO_API_KEY", "BREVO_SENDER_EMAIL", WARMUP_ENVIRONMENT_FLAG, SCHEDULED_DELIVERY_ENVIRONMENT_FLAG)
         self.old_env = {key: os.environ.get(key) for key in self.env_keys}
         self.addCleanup(self._restore_env)
         for key in self.env_keys:
@@ -384,6 +384,89 @@ class EmailDispatcherTests(unittest.TestCase):
             result = email_dispatcher.dispatch_pending(send_fn=send)
         self.assertEqual("blocked", result["results"][0]["status"])
         self.assertEqual("EMAIL_PREPARATION_FAILED", result["results"][0]["reason"])
+        send.assert_not_called()
+
+    def test_v2_audited_email_uses_brevo_only_with_accounting_recheck(self) -> None:
+        package = self.package()
+        package["application_id"] = "v2-app-001"
+        package["submission"] = {
+            "channel": "email",
+            "mode": "live",
+            "cv_transport": "email_attachment",
+            "delivery_provider": "brevo",
+            "accounting_mode": "v2_supabase",
+            "v2_application_id": "app-row-1",
+        }
+        contact_id, _ = db.upsert_outreach_contact(
+            email=package["destination"]["recipient"],
+            company=package["job"]["company"],
+            status="verified",
+            verification_source="verified-public-listing",
+        )
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        self.assertTrue(decision.approved, decision.summary)
+        action_id, added = email_dispatcher.queue_audited_email_application(
+            self.campaign_id, package, decision.approval_token
+        )
+        self.assertTrue(added)
+        self.assertTrue(db.reserve_campaign_contact(self.campaign_id, contact_id, outbox_id=action_id))
+        action = db.claim_action(action_id, email_dispatcher.ACTION_TYPE)
+        self.assertIsNotNone(action)
+
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["BREVO_API_KEY"] = "test-brevo-key"
+        os.environ["BREVO_SENDER_EMAIL"] = "apply@hsndm.tech"
+        sent: list[object] = []
+
+        def fake_brevo(message, sender, key):
+            sent.append((message, sender, key))
+            self.assertEqual("apply@hsndm.tech", sender)
+            self.assertEqual("hasan@example.com", message["Reply-To"])
+            self.assertEqual("test-brevo-key", key)
+            return "brevo-v2-accepted-001"
+
+        result = email_dispatcher.dispatch_one(
+            action or {},
+            brevo_send_fn=fake_brevo,
+            accounting_reservation_fn=lambda candidate_package: (
+                candidate_package["submission"]["v2_application_id"] == "app-row-1"
+            ),
+        )
+        self.assertEqual("accepted", result["status"])
+        self.assertEqual("brevo", result["transport"])
+        self.assertEqual("brevo-v2-accepted-001", result["transport_evidence"])
+        self.assertEqual(1, len(sent))
+
+    def test_v2_audited_email_blocks_without_accounting_recheck(self) -> None:
+        package = self.package()
+        package["application_id"] = "v2-app-no-accounting"
+        package["submission"] = {
+            "channel": "email",
+            "mode": "live",
+            "cv_transport": "email_attachment",
+            "delivery_provider": "brevo",
+            "accounting_mode": "v2_supabase",
+            "v2_application_id": "app-row-2",
+        }
+        contact_id, _ = db.upsert_outreach_contact(
+            email=package["destination"]["recipient"],
+            company=package["job"]["company"],
+            status="verified",
+            verification_source="verified-public-listing",
+        )
+        decision = auditor.audit_application(package["application_id"], package, ai_reviewer=self.approved_ai)
+        action_id, _ = email_dispatcher.queue_audited_email_application(
+            self.campaign_id, package, decision.approval_token
+        )
+        self.assertTrue(db.reserve_campaign_contact(self.campaign_id, contact_id, outbox_id=action_id))
+        action = db.claim_action(action_id, email_dispatcher.ACTION_TYPE)
+        os.environ["EMAIL_OUTREACH_ENABLED"] = "true"
+        os.environ["BREVO_API_KEY"] = "test-brevo-key"
+        os.environ["BREVO_SENDER_EMAIL"] = "apply@hsndm.tech"
+        with patch.object(email_dispatcher, "_brevo_send") as send:
+            result = email_dispatcher.dispatch_one(action or {})
+        self.assertEqual("blocked", result["status"])
+        self.assertEqual("V2_ACCOUNTING_RECHECK_UNAVAILABLE", result["reason"])
         send.assert_not_called()
 
 
