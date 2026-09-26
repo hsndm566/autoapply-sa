@@ -64,6 +64,8 @@ class V2SiteRoutesTests(unittest.TestCase):
         status, payload, _headers = self.request("GET", "/api/v2/health")
         self.assertEqual(status, 200)
         self.assertEqual("autoapply-v2", payload["service"])
+        self.assertEqual("verified-contact-v2-20260926-1", payload["release"])
+        self.assertEqual("2e67aa444ea712b9ebb4a939397106f2912d4137", payload["featureRevision"])
 
     def test_auth_health_reports_supabase_configuration(self) -> None:
         with patch.object(service.v2_site, "_supabase_config", return_value=("https://example.supabase.co", "key")):
