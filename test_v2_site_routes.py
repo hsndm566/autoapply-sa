@@ -135,10 +135,7 @@ class V2SiteRoutesTests(unittest.TestCase):
             status, payload, _headers = self.request(
                 "POST",
                 "/api/v2/applications/send-email",
-                {
-                    "toEmail": "hr@example.com",
-                    "jobId": "199945cc-4e96-451c-bb4f-e999f37c6873",
-                },
+                {"jobId": "199945cc-4e96-451c-bb4f-e999f37c6873"},
                 headers={"Authorization": "Bearer test-token"},
             )
         self.assertEqual(status, 200)
@@ -147,7 +144,6 @@ class V2SiteRoutesTests(unittest.TestCase):
         send.assert_called_once_with(
             "test-token",
             {"id": "user-123", "email": "candidate@example.com"},
-            to_email="hr@example.com",
             job_id="199945cc-4e96-451c-bb4f-e999f37c6873",
         )
 
@@ -156,10 +152,10 @@ class V2SiteRoutesTests(unittest.TestCase):
             status, payload, _headers = self.request(
                 "POST",
                 "/api/v2/applications/send-email",
-                {"toEmail": "hr@example.com"},
+                {},
             )
         self.assertEqual(status, 400)
-        self.assertEqual("invalid-application-email", payload["error"])
+        self.assertEqual("verified-job-required", payload["error"])
 
 
 if __name__ == "__main__":

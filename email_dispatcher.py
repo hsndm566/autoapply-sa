@@ -60,8 +60,21 @@ def _scheduled_delivery_enabled() -> bool:
     return os.environ.get(SCHEDULED_DELIVERY_ENVIRONMENT_FLAG, "false").strip().lower() == "true"
 
 
+def _v2_brevo_sender(package: Mapping[str, Any]) -> str:
+    """Return the authorized Brevo sender for the explicit V2 audited-email path."""
+    submission = dict(package.get("submission") or {})
+    if str(submission.get("accounting_mode") or "") != "v2_supabase":
+        return ""
+    if str(submission.get("delivery_provider") or "") != "brevo":
+        return ""
+    if not str(submission.get("v2_application_id") or "").strip():
+        return ""
+    sender = os.environ.get("BREVO_SENDER_EMAIL", "").strip().casefold() or REQUIRED_APPLICATION_SENDER
+    return sender if is_authorized_sender(sender) else ""
+
+
 def _authorized_brevo_sender(package: Mapping[str, Any]) -> str:
-    """Return the only allowed Brevo sender for an explicitly enabled verified-contact scope."""
+    """Return the allowed Brevo sender for an explicitly gated verified-contact scope."""
     submission = dict(package.get("submission") or {})
     job = dict(package.get("job") or {})
     candidate = dict(package.get("candidate") or {})
@@ -136,6 +149,7 @@ def _brevo_send(message: EmailMessage, sender: str, api_key: str) -> str:
         "to": [{"email": str(message["To"])}],
         "subject": str(message["Subject"]),
         "textContent": message.get_body(preferencelist=("plain",)).get_content(),
+        **({"replyTo": {"email": str(message["Reply-To"])}} if message.get("Reply-To") else {}),
         "attachment": [{
             "name": str(attachment.get_filename()),
             "content": base64.b64encode(payload).decode("ascii"),
@@ -203,6 +217,7 @@ def dispatch_one(
     action: Mapping[str, Any], *,
     send_fn: Callable[[EmailMessage, str, str], str] = _smtp_send,
     brevo_send_fn: Callable[[EmailMessage, str, str], str] = _brevo_send,
+    accounting_reservation_fn: Callable[[Mapping[str, Any]], bool] | None = None,
 ) -> dict[str, Any]:
     """Perform one email delivery only after a boundary audit recheck.
 
@@ -217,9 +232,9 @@ def dispatch_one(
         return _block(action, "OUTBOX_PACKAGE_INVALID")
     if not _enabled():
         return _block(action, "EMAIL_OUTREACH_DISABLED")
-    warmup_sender = _authorized_brevo_sender(package)
-    transport = "brevo" if warmup_sender else "smtp"
-    sender, credential = (warmup_sender, _brevo_api_key()) if warmup_sender else (_sender(), _password())
+    brevo_sender = _v2_brevo_sender(package) or _authorized_brevo_sender(package)
+    transport = "brevo" if brevo_sender else "smtp"
+    sender, credential = (brevo_sender, _brevo_api_key()) if brevo_sender else (_sender(), _password())
     if not sender or not credential:
         return _block(action, "BREVO_CREDENTIALS_UNAVAILABLE" if transport == "brevo" else "GMAIL_CREDENTIALS_UNAVAILABLE")
     if transport == "smtp" and sender.casefold() != REQUIRED_APPLICATION_SENDER:
@@ -247,12 +262,21 @@ def dispatch_one(
         return _block(action, "CONTACT_RECHECK_FAILED")
 
     submission = dict(package.get("submission") or {})
-    try:
-        external_client_id = int(submission.get("client_id", 0))
-    except (ValueError, TypeError):
-        return _block(action, "TRIAL_CANDIDATE_MAPPING_UNAVAILABLE")
-    if not reserve_trial_application(application_id, external_client_id, sender):
-        return _block(action, "TRIAL_LIMIT_OR_ACCOUNTING_UNAVAILABLE")
+    if str(submission.get("accounting_mode") or "") == "v2_supabase":
+        if accounting_reservation_fn is None:
+            return _block(action, "V2_ACCOUNTING_RECHECK_UNAVAILABLE")
+        try:
+            if not accounting_reservation_fn(package):
+                return _block(action, "V2_APPLICATION_RESERVATION_MISSING")
+        except Exception:
+            return _block(action, "V2_ACCOUNTING_RECHECK_FAILED")
+    else:
+        try:
+            external_client_id = int(submission.get("client_id", 0))
+        except (ValueError, TypeError):
+            return _block(action, "TRIAL_CANDIDATE_MAPPING_UNAVAILABLE")
+        if not reserve_trial_application(application_id, external_client_id, sender):
+            return _block(action, "TRIAL_LIMIT_OR_ACCOUNTING_UNAVAILABLE")
 
     try:
         transport_evidence = brevo_send_fn(message, sender, credential) if transport == "brevo" else send_fn(message, sender, credential)

@@ -1,14 +1,12 @@
 """Evidence-backed V2 customer application path.
 
-This module is deliberately separate from the legacy campaign/auditor queue. A signed-in
-customer explicitly selects one verified job and presses Send. The server re-loads the
-job, profile, and private CV from Supabase, sends the attachment through Brevo, requires
-provider evidence, and reconciles the same application record.
+A signed-in customer explicitly selects one verified job and presses Send. The server
+re-loads the job, profile, and private CV from Supabase. Email is exposed only when the
+existing verified-contact store has an exact employer match, and delivery goes through
+the existing Auditor + durable email dispatcher before the V2 record is reconciled.
 """
 from __future__ import annotations
 
-import base64
-import hashlib
 import os
 import re
 import uuid
@@ -17,6 +15,7 @@ from typing import Any
 from urllib.parse import quote
 
 import requests
+import v2_verified_email
 
 BREVO_ENDPOINT = "https://api.brevo.com/v3/smtp/email"
 BREVO_ACCOUNT_ENDPOINT = "https://api.brevo.com/v3/account"
@@ -174,6 +173,7 @@ def recommended_jobs(token: str, *, role: str, city: str, limit: int = 8) -> lis
             reasons.append(f"location matches {city}")
         if not reasons:
             reasons.append("verified Saudi opportunity from a public ATS")
+        capability = v2_verified_email.email_capability(company)
         output.append(
             {
                 "id": str(job.get("id") or ""),
@@ -185,6 +185,7 @@ def recommended_jobs(token: str, *, role: str, city: str, limit: int = 8) -> lis
                 "summary": str(job.get("description") or "Verified public ATS posting.")[:500],
                 "matchReason": " · ".join(reasons),
                 "freshness": str(job.get("lastSeenAt") or ""),
+                **capability,
             }
         )
         if len(output) >= limit:
@@ -359,71 +360,16 @@ def _patch_application(token: str, user_id: str, application_id: str, values: di
     return _one(rows)
 
 
-def _send_brevo(
-    *,
-    to_email: str,
-    candidate_email: str,
-    candidate_name: str,
-    role_title: str,
-    message: str,
-    cv_bytes: bytes,
-    cv_name: str,
-    idempotency_key: str,
-) -> str:
-    api_key = os.environ.get("BREVO_API_KEY", "").strip()
-    sender_email = os.environ.get("BREVO_SENDER_EMAIL", "").strip() or "apply@hsndm.tech"
-    sender_name = os.environ.get("BREVO_SENDER_NAME", "").strip() or "AutoApply SA"
-    if not api_key:
-        raise V2Error("brevo-not-configured", 503)
-
-    payload = {
-        "sender": {"email": sender_email, "name": sender_name},
-        "to": [{"email": to_email}],
-        "replyTo": {"email": candidate_email, "name": candidate_name},
-        "subject": f"{candidate_name} for {role_title}",
-        "textContent": message,
-        "attachment": [{"content": base64.b64encode(cv_bytes).decode("ascii"), "name": cv_name}],
-    }
-    try:
-        response = requests.post(
-            BREVO_ENDPOINT,
-            headers={
-                "api-key": api_key,
-                "content-type": "application/json",
-                "accept": "application/json",
-                "idempotency-key": idempotency_key[:120],
-            },
-            json=payload,
-            timeout=15,
-        )
-    except requests.RequestException as exc:
-        raise V2Error("brevo-send-uncertain", 502) from exc
-
-    if response.status_code >= 400:
-        raise V2Error("brevo-rejected", response.status_code)
-    try:
-        result = response.json()
-    except ValueError as exc:
-        raise V2Error("brevo-invalid-response", 502) from exc
-    message_id = str(result.get("messageId") or "").strip() if isinstance(result, dict) else ""
-    if not message_id:
-        raise V2Error("brevo-missing-message-id", 502)
-    return message_id
-
-
 def send_application(
     token: str,
     user: dict[str, Any],
     *,
-    to_email: str,
     job_id: str,
 ) -> dict[str, Any]:
     user_id = str(user.get("id") or "").strip()
     candidate_email = str(user.get("email") or "").strip()
     if not user_id or not candidate_email:
         raise V2Error("candidate-email-required", 409)
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to_email.strip()):
-        raise V2Error("invalid-application-email", 400)
 
     profile = _profile(token, user_id)
     if not profile or not str(profile.get("fullName") or "").strip():
@@ -435,22 +381,39 @@ def send_application(
     if not job:
         raise V2Error("verified-job-not-found", 404)
 
+    contact = v2_verified_email.verified_contact_for_company(str(job.get("company") or ""))
+    if not contact:
+        raise V2Error("verified-recipient-required", 409)
+
     cv_bytes, cv_name = _download_cv(token, user_id, profile)
     cv_path = str(profile.get("resumeStoragePath") or "")
-    application = _reserve_application(token, user_id, job, to_email.strip(), cv_path)
+    application = _reserve_application(token, user_id, job, str(contact["email"]), cv_path)
     application_id = str(application.get("id") or "")
+    source_url = str(job.get("canonicalUrl") or "")
+
+    def accounting_check() -> bool:
+        current = _existing_application(token, user_id, source_url)
+        return bool(
+            current
+            and str(current.get("id") or "") == application_id
+            and str(current.get("status") or "") == "queued"
+            and str(current.get("recipientEmail") or "").casefold() == str(contact["email"]).casefold()
+        )
+
     try:
-        message_id = _send_brevo(
-            to_email=to_email.strip(),
+        result = v2_verified_email.dispatch_v2_application(
+            user_id=user_id,
             candidate_email=candidate_email,
             candidate_name=str(profile.get("fullName") or "").strip(),
-            role_title=str(job.get("title") or "").strip(),
-            message=_grounded_message(profile, job),
+            job=job,
+            contact=contact,
             cv_bytes=cv_bytes,
             cv_name=cv_name,
-            idempotency_key="application-" + hashlib.sha256(f"{user_id}:{job_id}".encode()).hexdigest()[:48],
+            draft=_grounded_message(profile, job),
+            v2_application_id=application_id,
+            accounting_check=accounting_check,
         )
-    except V2Error as exc:
+    except v2_verified_email.V2VerifiedEmailError as exc:
         if application_id:
             try:
                 _patch_application(
@@ -461,7 +424,11 @@ def send_application(
                 )
             except V2Error:
                 pass
-        raise
+        raise V2Error(exc.reason, exc.status) from exc
+
+    message_id = str(result.get("transport_evidence") or "").strip()
+    if not message_id:
+        raise V2Error("provider-evidence-missing", 502)
 
     sent_at = _now()
     updated = _patch_application(
