@@ -65,6 +65,8 @@ CORS_ORIGIN = os.environ.get("CORS_ORIGIN", DEFAULT_CORS_ORIGINS)
 ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN", "")
 JOB_IMPORT_TOKEN = os.environ.get("JOB_IMPORT_TOKEN", "")
 ALLOW_LEGACY_EXTERNAL_EXECUTION = os.environ.get("ALLOW_LEGACY_EXTERNAL_EXECUTION", "false").lower() == "true"
+V2_RELEASE = "verified-contact-v2-20260926-1"
+V2_FEATURE_REVISION = "2e67aa444ea712b9ebb4a939397106f2912d4137"
 
 
 def _utc_now() -> str:
@@ -366,7 +368,13 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
         if path == "/api/v2/health":
-            self._send({"ok": True, "status": "ok", "service": "autoapply-v2"})
+            self._send({
+                "ok": True,
+                "status": "ok",
+                "service": "autoapply-v2",
+                "release": V2_RELEASE,
+                "featureRevision": V2_FEATURE_REVISION,
+            })
             return
         if path == "/healthz/auth":
             try:
