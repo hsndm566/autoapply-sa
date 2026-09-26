@@ -20,11 +20,7 @@ class V2CustomerFlowTests(unittest.TestCase):
             "verifiedUntil": "2026-10-02T18:10:05Z",
             "verification": "public_ats",
         }]
-        capability = {
-            "emailEligible": True,
-            "recipientEmail": "careers@example.com",
-            "recipientVerificationSource": "verified-public-listing",
-        }
+        capability = {"emailEligible": True}
         with (
             patch.object(v2_site, "_request_json", return_value=rows),
             patch.object(v2_site.v2_verified_email, "email_capability", return_value=capability),
@@ -33,8 +29,8 @@ class V2CustomerFlowTests(unittest.TestCase):
         self.assertEqual(1, len(jobs))
         self.assertEqual("Example Logistics", jobs[0]["companyName"])
         self.assertTrue(jobs[0]["emailEligible"])
-        self.assertEqual("careers@example.com", jobs[0]["recipientEmail"])
-        self.assertEqual("verified-public-listing", jobs[0]["recipientVerificationSource"])
+        self.assertNotIn("recipientEmail", jobs[0])
+        self.assertNotIn("recipientVerificationSource", jobs[0])
         self.assertNotIn("linkedin.com/jobs/search", str(jobs).lower())
         self.assertNotIn("bayt.com/en/saudi-arabia/jobs", str(jobs).lower())
 
