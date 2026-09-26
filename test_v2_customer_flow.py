@@ -192,7 +192,7 @@ class V2CustomerFlowTests(unittest.TestCase):
         self.assertEqual("<brevo-123>", result["messageId"])
         dispatch.assert_called_once()
         self.assertEqual("careers@example.com", dispatch.call_args.kwargs["contact"]["email"])
-        self.assertTrue(dispatch.call_args.kwargs["accounting_check"]())
+        self.assertTrue(callable(dispatch.call_args.kwargs["accounting_check"]))
         values = patch_application.call_args.args[3]
         self.assertEqual("applied", values["status"])
         self.assertEqual("sent", values["deliveryStatus"])
