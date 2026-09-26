@@ -8,25 +8,33 @@ import v2_site
 
 
 class V2CustomerFlowTests(unittest.TestCase):
-    def test_recommended_jobs_returns_only_verified_supabase_rows(self) -> None:
-        rows = [
-            {
-                "id": "199945cc-4e96-451c-bb4f-e999f37c6873",
-                "canonicalUrl": "https://jobs.example.com/ops",
-                "company": "Example Logistics",
-                "title": "Operations Engineer",
-                "location": "Jeddah, Saudi Arabia",
-                "description": "Industrial engineering and operations role",
-                "lastSeenAt": "2026-09-25T18:10:05Z",
-                "verifiedUntil": "2026-10-02T18:10:05Z",
-                "verification": "public_ats",
-            }
-        ]
-        with patch.object(v2_site, "_request_json", return_value=rows):
+    def test_recommended_jobs_exposes_email_only_from_verified_contact_bridge(self) -> None:
+        rows = [{
+            "id": "199945cc-4e96-451c-bb4f-e999f37c6873",
+            "canonicalUrl": "https://jobs.example.com/ops",
+            "company": "Example Logistics",
+            "title": "Operations Engineer",
+            "location": "Jeddah, Saudi Arabia",
+            "description": "Industrial engineering and operations role",
+            "lastSeenAt": "2026-09-25T18:10:05Z",
+            "verifiedUntil": "2026-10-02T18:10:05Z",
+            "verification": "public_ats",
+        }]
+        capability = {
+            "emailEligible": True,
+            "recipientEmail": "careers@example.com",
+            "recipientVerificationSource": "verified-public-listing",
+        }
+        with (
+            patch.object(v2_site, "_request_json", return_value=rows),
+            patch.object(v2_site.v2_verified_email, "email_capability", return_value=capability),
+        ):
             jobs = v2_site.recommended_jobs("token", role="Industrial Engineer", city="Jeddah")
         self.assertEqual(1, len(jobs))
         self.assertEqual("Example Logistics", jobs[0]["companyName"])
-        self.assertEqual("https://jobs.example.com/ops", jobs[0]["url"])
+        self.assertTrue(jobs[0]["emailEligible"])
+        self.assertEqual("careers@example.com", jobs[0]["recipientEmail"])
+        self.assertEqual("verified-public-listing", jobs[0]["recipientVerificationSource"])
         self.assertNotIn("linkedin.com/jobs/search", str(jobs).lower())
         self.assertNotIn("bayt.com/en/saudi-arabia/jobs", str(jobs).lower())
 
@@ -53,8 +61,7 @@ class V2CustomerFlowTests(unittest.TestCase):
             )
         self.assertEqual(b"%PDF-test\n%%EOF", payload)
         self.assertEqual("Candidate CV.pdf", name)
-        url = get.call_args.args[0]
-        self.assertIn("/storage/v1/object/authenticated/candidate-cvs/user-123/abc-cv.pdf", url)
+        self.assertIn("/storage/v1/object/authenticated/candidate-cvs/user-123/abc-cv.pdf", get.call_args.args[0])
         self.assertEqual("Bearer user-jwt", get.call_args.kwargs["headers"]["Authorization"])
 
     def test_private_cv_download_rejects_cross_user_path_before_network(self) -> None:
@@ -63,59 +70,10 @@ class V2CustomerFlowTests(unittest.TestCase):
                 v2_site._download_cv(
                     "token",
                     "user-a",
-                    {
-                        "resumeStoragePath": "user-b/cv.pdf",
-                        "resumeFileName": "cv.pdf",
-                    },
+                    {"resumeStoragePath": "user-b/cv.pdf", "resumeFileName": "cv.pdf"},
                 )
         self.assertEqual("cv-ownership-mismatch", error.exception.reason)
         get.assert_not_called()
-
-    def test_brevo_send_requires_provider_message_id_and_attaches_cv(self) -> None:
-        response = MagicMock()
-        response.status_code = 201
-        response.json.return_value = {"messageId": "<brevo-123>"}
-        with (
-            patch.dict(os.environ, {"BREVO_API_KEY": "secret", "BREVO_SENDER_EMAIL": "apply@hsndm.tech"}, clear=False),
-            patch.object(v2_site.requests, "post", return_value=response) as post,
-        ):
-            message_id = v2_site._send_brevo(
-                to_email="hr@example.com",
-                candidate_email="candidate@example.com",
-                candidate_name="Candidate",
-                role_title="Operations Engineer",
-                message="Grounded message",
-                cv_bytes=b"%PDF-test\n%%EOF",
-                cv_name="cv.pdf",
-                idempotency_key="application-123",
-            )
-        self.assertEqual("<brevo-123>", message_id)
-        payload = post.call_args.kwargs["json"]
-        self.assertEqual("candidate@example.com", payload["replyTo"]["email"])
-        self.assertEqual("cv.pdf", payload["attachment"][0]["name"])
-        self.assertTrue(payload["attachment"][0]["content"])
-        self.assertEqual("application-123", post.call_args.kwargs["headers"]["idempotency-key"])
-
-    def test_brevo_2xx_without_message_id_fails_closed(self) -> None:
-        response = MagicMock()
-        response.status_code = 201
-        response.json.return_value = {}
-        with (
-            patch.dict(os.environ, {"BREVO_API_KEY": "secret"}, clear=False),
-            patch.object(v2_site.requests, "post", return_value=response),
-        ):
-            with self.assertRaises(v2_site.V2Error) as error:
-                v2_site._send_brevo(
-                    to_email="hr@example.com",
-                    candidate_email="candidate@example.com",
-                    candidate_name="Candidate",
-                    role_title="Operations Engineer",
-                    message="Grounded message",
-                    cv_bytes=b"%PDF-test\n%%EOF",
-                    cv_name="cv.pdf",
-                    idempotency_key="application-123",
-                )
-        self.assertEqual("brevo-missing-message-id", error.exception.reason)
 
     def test_retry_reuses_failed_application_but_blocks_already_sent_duplicate(self) -> None:
         failed = {"id": "app-1", "status": "queued", "deliveryStatus": "blocked", "providerMessageId": None}
@@ -124,8 +82,7 @@ class V2CustomerFlowTests(unittest.TestCase):
             patch.object(v2_site, "_request_json", return_value=[{**failed, "deliveryStatus": "unknown"}]) as request,
         ):
             row = v2_site._reserve_application(
-                "token",
-                "user-1",
+                "token", "user-1",
                 {
                     "id": "199945cc-4e96-451c-bb4f-e999f37c6873",
                     "canonicalUrl": "https://jobs.example.com/ops",
@@ -143,8 +100,7 @@ class V2CustomerFlowTests(unittest.TestCase):
         with patch.object(v2_site, "_existing_application", return_value={**failed, "status": "applied", "providerMessageId": "<m>"}):
             with self.assertRaises(v2_site.V2Error) as error:
                 v2_site._reserve_application(
-                    "token",
-                    "user-1",
+                    "token", "user-1",
                     {
                         "id": "199945cc-4e96-451c-bb4f-e999f37c6873",
                         "canonicalUrl": "https://jobs.example.com/ops",
@@ -156,7 +112,7 @@ class V2CustomerFlowTests(unittest.TestCase):
                 )
         self.assertEqual("duplicate-application", error.exception.reason)
 
-    def test_send_application_reconciles_provider_evidence_into_same_record(self) -> None:
+    def test_send_application_requires_server_verified_recipient(self) -> None:
         profile = {
             "fullName": "Candidate",
             "targetRole": "Industrial Engineer",
@@ -174,25 +130,69 @@ class V2CustomerFlowTests(unittest.TestCase):
             "location": "Jeddah",
             "verification": "public_ats",
         }
-        reserved = {"id": "app-1", "status": "queued"}
+        with (
+            patch.object(v2_site, "_profile", return_value=profile),
+            patch.object(v2_site, "_job", return_value=job),
+            patch.object(v2_site.v2_verified_email, "verified_contact_for_company", return_value=None),
+        ):
+            with self.assertRaises(v2_site.V2Error) as error:
+                v2_site.send_application(
+                    "token",
+                    {"id": "user-1", "email": "candidate@example.com"},
+                    job_id=job["id"],
+                )
+        self.assertEqual("verified-recipient-required", error.exception.reason)
+
+    def test_send_application_reconciles_audited_provider_evidence(self) -> None:
+        profile = {
+            "fullName": "Candidate",
+            "targetRole": "Industrial Engineer",
+            "targetIndustry": "Engineering",
+            "experienceLevel": "Entry level",
+            "resumeFileName": "cv.pdf",
+            "resumeSummary": "Excel, process improvement",
+            "resumeStoragePath": "user-1/cv.pdf",
+        }
+        job = {
+            "id": "199945cc-4e96-451c-bb4f-e999f37c6873",
+            "canonicalUrl": "https://jobs.example.com/ops",
+            "company": "Example Logistics",
+            "title": "Operations Engineer",
+            "location": "Jeddah",
+            "verification": "public_ats",
+        }
+        contact = {"id": "contact-1", "email": "careers@example.com"}
+        reserved = {"id": "app-1", "status": "queued", "recipientEmail": "careers@example.com"}
         sent = {"id": "app-1", "status": "applied", "providerMessageId": "<brevo-123>"}
+
+        def existing(*_args):
+            return reserved
+
         with (
             patch.object(v2_site, "_profile", return_value=profile),
             patch.object(v2_site, "_job", return_value=job),
             patch.object(v2_site, "_download_cv", return_value=(b"%PDF-test\n%%EOF", "cv.pdf")),
             patch.object(v2_site, "_reserve_application", return_value=reserved),
-            patch.object(v2_site, "_send_brevo", return_value="<brevo-123>"),
+            patch.object(v2_site, "_existing_application", side_effect=existing),
+            patch.object(v2_site.v2_verified_email, "verified_contact_for_company", return_value=contact),
+            patch.object(
+                v2_site.v2_verified_email,
+                "dispatch_v2_application",
+                return_value={"status": "accepted", "transport_evidence": "<brevo-123>"},
+            ) as dispatch,
             patch.object(v2_site, "_patch_application", return_value=sent) as patch_application,
         ):
             result = v2_site.send_application(
                 "token",
                 {"id": "user-1", "email": "candidate@example.com"},
-                to_email="hr@example.com",
-                job_id="199945cc-4e96-451c-bb4f-e999f37c6873",
+                job_id=job["id"],
             )
+
         self.assertTrue(result["ok"])
         self.assertEqual("<brevo-123>", result["messageId"])
-        self.assertEqual("<brevo-123>", result["application"]["providerMessageId"])
+        dispatch.assert_called_once()
+        self.assertEqual("careers@example.com", dispatch.call_args.kwargs["contact"]["email"])
+        self.assertTrue(dispatch.call_args.kwargs["accounting_check"]())
         values = patch_application.call_args.args[3]
         self.assertEqual("applied", values["status"])
         self.assertEqual("sent", values["deliveryStatus"])
