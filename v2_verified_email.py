@@ -73,18 +73,8 @@ def verified_contact_for_company(company: str) -> dict[str, Any] | None:
 
 
 def email_capability(company: str) -> dict[str, Any]:
-    contact = verified_contact_for_company(company)
-    if not contact:
-        return {
-            "emailEligible": False,
-            "recipientEmail": None,
-            "recipientVerificationSource": None,
-        }
-    return {
-        "emailEligible": True,
-        "recipientEmail": contact["email"],
-        "recipientVerificationSource": contact["verification_source"],
-    }
+    """Expose only capability, never the verified contact itself, to V2 clients."""
+    return {"emailEligible": verified_contact_for_company(company) is not None}
 
 
 def _persist_exact_pdf(cv_bytes: bytes, original_name: str, user_id: str, job_id: str) -> Path:
