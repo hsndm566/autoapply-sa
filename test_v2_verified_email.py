@@ -39,15 +39,12 @@ class V2VerifiedEmailBridgeTests(unittest.TestCase):
     def test_exact_company_verified_contact_is_exposed(self) -> None:
         self.verified_contact()
         capability = v2_verified_email.email_capability("Example Logistics")
-        self.assertTrue(capability["emailEligible"])
-        self.assertEqual("careers@example.com", capability["recipientEmail"])
-        self.assertEqual("https://example.com/careers/contact", capability["recipientVerificationSource"])
+        self.assertEqual({"emailEligible": True}, capability)
 
     def test_similar_company_name_does_not_cross_match(self) -> None:
         self.verified_contact(company="Example Logistics Holdings")
         capability = v2_verified_email.email_capability("Example Logistics")
-        self.assertFalse(capability["emailEligible"])
-        self.assertIsNone(capability["recipientEmail"])
+        self.assertEqual({"emailEligible": False}, capability)
 
     def test_unverified_or_suppressed_contact_is_never_exposed(self) -> None:
         db.upsert_outreach_contact(
