@@ -473,6 +473,9 @@ def build_approved_email(
     message = EmailMessage()
     message["From"] = sender
     message["To"] = _text(destination.get("recipient"))
+    reply_to = _text(candidate.get("email"))
+    if reply_to and "@" in reply_to and reply_to.casefold() != sender.casefold():
+        message["Reply-To"] = reply_to
     message["Subject"] = _text(destination.get("subject")) or f"Application — {_text(job.get('role'))} at {_text(job.get('company'))}"
     message.set_content(_text(package.get("draft")))
     message.add_attachment(cv_bytes, maintype="application", subtype="pdf", filename=cv_path.name)
