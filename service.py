@@ -480,16 +480,14 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
                     self._send({"ok": False, "error": auth_error}, status_code)
                     return
                 data = self._read_json()
-                to_email = str(data.get("toEmail") or "").strip()
                 job_id = str(data.get("jobId") or "").strip()
-                if not to_email or not job_id:
-                    self._send({"ok": False, "error": "invalid-application-email"}, HTTPStatus.BAD_REQUEST)
+                if not job_id:
+                    self._send({"ok": False, "error": "verified-job-required"}, HTTPStatus.BAD_REQUEST)
                     return
                 try:
                     result = v2_site.send_application(
                         _bearer_token(self),
                         user or {},
-                        to_email=to_email,
                         job_id=job_id,
                     )
                 except v2_site.V2Error as exc:
