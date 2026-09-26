@@ -297,6 +297,7 @@ class AutoApplyHandler(BaseHTTPRequestHandler):
         origin = self.headers.get("Origin", "")
         if origin and origin.rstrip("/") in _allowed_cors_origins():
             self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Access-Control-Allow-Credentials", "true")
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Campaign-Token, X-Admin-Token, X-Job-Import-Token, X-Hermes-Gateway-Token")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")

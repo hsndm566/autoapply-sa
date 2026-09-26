@@ -76,6 +76,7 @@ class V2SiteRoutesTests(unittest.TestCase):
             status, _payload, headers = self.request("GET", "/api/v2/health", headers={"Origin": origin})
             self.assertEqual(status, 200)
             self.assertEqual(origin, headers.get("Access-Control-Allow-Origin"))
+            self.assertEqual("true", headers.get("Access-Control-Allow-Credentials"))
 
     def test_recommended_jobs_uses_verified_supabase_feed_for_signed_in_user(self) -> None:
         jobs = [{
