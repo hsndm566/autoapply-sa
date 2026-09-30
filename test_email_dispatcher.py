@@ -241,7 +241,7 @@ class EmailDispatcherTests(unittest.TestCase):
         package.update({
             "application_id": "warmup-brevo-001",
             "job": {"company": "BrightTech", "role": "Operations Analyst", "url": "", "evidence_type": WARMUP_EVIDENCE_TYPE},
-            "candidate": {"full_name": "Reusable Sender Candidate", "email": "apply1@hsndm.tech", "cv_path": str(self.cv)},
+            "candidate": {"full_name": "Reusable Sender Candidate", "email": "candidate@example.com", "cv_path": str(self.cv)},
             "submission": {
                 "channel": "email", "mode": "live", "cv_transport": "email_attachment",
                 "client_id": 2, "sender_email": "apply1@hsndm.tech",
@@ -260,6 +260,7 @@ class EmailDispatcherTests(unittest.TestCase):
         def fake_brevo(message, sender, key):
             sent.append((message, sender, key))
             self.assertEqual("apply1@hsndm.tech", sender)
+            self.assertEqual("candidate@example.com", message["Reply-To"])
             self.assertEqual("test-brevo-key", key)
             attachments = list(message.iter_attachments())
             self.assertEqual(1, len(attachments))
