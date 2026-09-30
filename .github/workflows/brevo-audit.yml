@@ -1,0 +1,63 @@
+name: Brevo outbound audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "brevo-audit-trigger.txt"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: autoapply-brevo-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Query Brevo transactional events without exposing recipients
+        shell: bash
+        run: |
+          test -n "$BREVO_API_KEY"
+          python - <<'PY'
+          import collections, datetime, json, os, urllib.parse, urllib.request
+          today=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+          qs=urllib.parse.urlencode({"startDate":today,"endDate":today,"limit":5000,"sort":"asc"})
+          req=urllib.request.Request(
+              "https://api.brevo.com/v3/smtp/statistics/events?"+qs,
+              headers={"api-key":os.environ["BREVO_API_KEY"],"accept":"application/json"},
+          )
+          with urllib.request.urlopen(req, timeout=30) as r:
+              payload=json.loads(r.read() or b"{}")
+          allowed={"apply@hsndm.tech","apply1@hsndm.tech","apply2@hsndm.tech"}
+          events=[e for e in payload.get("events",[]) if str(e.get("from") or "").lower() in allowed]
+          by_event=collections.Counter(str(e.get("event") or "unknown").lower() for e in events)
+          requests=[e for e in events if str(e.get("event") or "").lower() in {"request","sent"}]
+          by_sender=collections.Counter(str(e.get("from") or "").lower() for e in requests)
+          message_ids={str(e.get("messageId") or e.get("message-id") or "") for e in requests if e.get("messageId") or e.get("message-id")}
+          report={
+              "date_utc":today,
+              "events_total":len(events),
+              "request_events":len(requests),
+              "unique_requested_message_ids":len(message_ids),
+              "request_events_by_sender":dict(sorted(by_sender.items())),
+              "events_by_type":dict(sorted(by_event.items())),
+          }
+          open("brevo-audit-latest.json","w",encoding="utf-8").write(json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print(json.dumps(report,sort_keys=True))
+          PY
+      - name: Persist sanitized audit
+        run: |
+          git config user.name "AutoApply SA audit"
+          git config user.email "apply@hsndm.tech"
+          git add brevo-audit-latest.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Record sanitized Brevo outbound audit"
+          git pull --rebase origin main
+          git push origin HEAD:main
