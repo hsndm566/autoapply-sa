@@ -158,25 +158,17 @@ def _server_client() -> Any | None:
         return None
 
 
-def _mapping_candidate_id(client: Any, external_client_id: int, sender_email: str) -> str | None:
-    """Resolve the candidate from an active mapping, preferring the stable client ID."""
-    table = client.schema(SCHEMA).table("delivery_client_mappings")
-    response = (
-        table.select("candidate_id")
-        .eq("external_client_id", external_client_id)
-        .eq("active", True)
-        .limit(1)
-        .execute()
-    )
-    row = _first_row(response)
-    if row and str(row.get("candidate_id") or "").strip():
-        return str(row["candidate_id"])
+def _mapping_candidate_id(client: Any, external_client_id: int, _sender_email: str) -> str | None:
+    """Resolve the candidate only from the stable client mapping.
 
+    Sender addresses are reusable transport identities and are intentionally
+    never used as candidate identifiers or fallback lookup keys.
+    """
     response = (
         client.schema(SCHEMA)
         .table("delivery_client_mappings")
         .select("candidate_id")
-        .eq("sender_email", sender_email.strip().casefold())
+        .eq("external_client_id", external_client_id)
         .eq("active", True)
         .limit(1)
         .execute()
