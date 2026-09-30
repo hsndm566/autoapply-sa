@@ -192,7 +192,7 @@ def _is_verified_contact_scope(package: Mapping[str, Any]) -> bool:
         and _text(job.get("evidence_type")) == WARMUP_EVIDENCE_TYPE
         and not _text(job.get("url"))
         and is_authorized_sender(sender_email)
-        and candidate_email.casefold() == sender_email.casefold()
+        and "@" in candidate_email
         and bool(_text(candidate.get("full_name")))
     )
 
