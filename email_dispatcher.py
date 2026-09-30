@@ -95,7 +95,8 @@ def _authorized_brevo_sender(package: Mapping[str, Any]) -> str:
         return ""
     if str(job.get("evidence_type") or "") != WARMUP_EVIDENCE_TYPE or str(job.get("url") or "").strip():
         return ""
-    if str(candidate.get("email") or "").strip().casefold() != sender.casefold():
+    candidate_email = str(candidate.get("email") or "").strip()
+    if not candidate_email or "@" not in candidate_email:
         return ""
     if not str(candidate.get("full_name") or "").strip():
         return ""
