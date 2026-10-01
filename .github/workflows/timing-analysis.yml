@@ -5,6 +5,9 @@ on:
     - cron: '0 5 1 * *'   # 1st of month, 05:00 UTC (after rejection + hidden runs)
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   timing:
     runs-on: ubuntu-latest
@@ -24,4 +27,9 @@ jobs:
           git config user.email "agent@hsndm.tech"
           git config user.name "Hermes Agent"
           git add skills/timing-intelligence.md
-          git diff --cached --quiet || git commit -m "timing: monthly analysis" && git push
+          if git diff --cached --quiet; then
+            echo "No timing changes to commit."
+            exit 0
+          fi
+          git commit -m "timing: monthly analysis"
+          git push origin HEAD:main
