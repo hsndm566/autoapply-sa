@@ -1,1 +1,1 @@
-2026-10-09 22:20 Asia/Riyadh read-only provider events using production sender credential
+2026-10-09 22:25 Asia/Riyadh cohort-level read-only Brevo delivery audit
