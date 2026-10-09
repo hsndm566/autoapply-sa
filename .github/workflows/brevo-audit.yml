@@ -113,6 +113,7 @@ jobs:
               "Sultan Saud": "apply1@hsndm.tech",
           }
           targets = collections.defaultdict(set)
+          cohort_targets = collections.defaultdict(set)
           accepted = collections.Counter()
           for batch in rows:
               candidate = batch.get("candidate_name")
@@ -120,12 +121,14 @@ jobs:
                   continue
               if str(batch.get("sender_email") or "").lower() != allowed[candidate]:
                   raise SystemExit("Candidate sender mismatch in secure ledger")
+              cohort = "original_oct6" if str(batch.get("created_at") or "")[:10] <= "2026-10-06" else "additional_oct9"
               result = batch.get("result") or {}
               accepted[candidate] += int(result.get("accepted") or 0)
               for m in result.get("messages") or []:
                   mid = clean_id(m.get("messageId"))
                   if mid:
                       targets[candidate].add(mid)
+                      cohort_targets[(candidate, cohort)].add(mid)
 
           event_types = collections.defaultdict(set)
           for e in event_rows:
@@ -152,8 +155,27 @@ jobs:
                   "ids_without_provider_events": len(ids) - len(matched),
               }
 
+          by_cohort = {}
+          for candidate in sorted(allowed):
+              for cohort in ("original_oct6", "additional_oct9"):
+                  ids = cohort_targets[(candidate, cohort)]
+                  if not ids:
+                      continue
+                  without_delivery = [mid for mid in ids if "delivered" not in event_types[mid]]
+                  by_cohort[candidate + "/" + cohort] = {
+                      "unique_provider_ids": len(ids),
+                      "confirmed_delivered": len(ids) - len(without_delivery),
+                      "without_delivery_event": len(without_delivery),
+                      "deferred_without_delivery": sum("deferred" in event_types[mid] for mid in without_delivery),
+                      "hard_bounce_without_delivery": sum(
+                          bool(event_types[mid].intersection({"hardbounce", "hard_bounce"}))
+                          for mid in without_delivery
+                      ),
+                  }
+
           report = {
               "as_of_utc": now.isoformat(),
+              "by_cohort": by_cohort,
               "event_window_utc": [start.isoformat(), end.isoformat()],
               "brevo_events_queried": len(event_rows),
               "campaign": summary,
