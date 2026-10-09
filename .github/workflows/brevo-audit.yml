@@ -18,39 +18,150 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v5
-      - name: Query Brevo transactional events without exposing recipients
+      - name: Read-only Brevo events matched to secure application ledger
         shell: bash
         run: |
-          test -n "$BREVO_API_KEY"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
           python - <<'PY'
-          import collections, datetime, json, os, urllib.parse, urllib.request
-          today=datetime.datetime.now(datetime.timezone.utc).date().isoformat()
-          qs=urllib.parse.urlencode({"startDate":today,"endDate":today,"limit":5000,"sort":"asc"})
-          req=urllib.request.Request(
-              "https://api.brevo.com/v3/smtp/statistics/events?"+qs,
-              headers={"api-key":os.environ["BREVO_API_KEY"],"accept":"application/json"},
-          )
-          with urllib.request.urlopen(req, timeout=30) as r:
-              payload=json.loads(r.read() or b"{}")
-          allowed={"apply@hsndm.tech","apply1@hsndm.tech","apply2@hsndm.tech"}
-          events=[e for e in payload.get("events",[]) if str(e.get("from") or "").lower() in allowed]
-          by_event=collections.Counter(str(e.get("event") or "unknown").lower() for e in events)
-          requests=[e for e in events if str(e.get("event") or "").lower() in {"request","sent"}]
-          by_sender=collections.Counter(str(e.get("from") or "").lower() for e in requests)
-          message_ids={str(e.get("messageId") or e.get("message-id") or "") for e in requests if e.get("messageId") or e.get("message-id")}
-          report={
-              "date_utc":today,
-              "events_total":len(events),
-              "request_events":len(requests),
-              "unique_requested_message_ids":len(message_ids),
-              "request_events_by_sender":dict(sorted(by_sender.items())),
-              "events_by_type":dict(sorted(by_event.items())),
+          import collections
+          import datetime
+          import json
+          import os
+          import urllib.parse
+          import urllib.request
+
+          supabase = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+          db_headers = {
+              "apikey": service_key,
+              "Authorization": "Bearer " + service_key,
+              "Content-Type": "application/json",
           }
-          open("brevo-audit-latest.json","w",encoding="utf-8").write(json.dumps(report,indent=2,sort_keys=True)+"\n")
-          print(json.dumps(report,sort_keys=True))
+
+          def request_json(url, headers, method="GET", payload=None):
+              data = None if payload is None else json.dumps(payload).encode("utf-8")
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req, timeout=30) as resp:
+                  return json.loads(resp.read() or b"{}")
+
+          brevo_key = request_json(
+              supabase + "/rest/v1/rpc/get_secure_outbound_brevo_key",
+              db_headers, method="POST", payload={}
+          )
+          if not isinstance(brevo_key, str) or not brevo_key.strip():
+              raise SystemExit("Secure Brevo credential unavailable")
+          brevo_headers = {"api-key": brevo_key.strip(), "accept": "application/json"}
+
+          now = datetime.datetime.now(datetime.timezone.utc)
+          start = max(datetime.date(2026, 10, 5), (now - datetime.timedelta(days=29)).date())
+          end = now.date()
+          event_rows = []
+          offset = 0
+          while True:
+              params = urllib.parse.urlencode({
+                  "startDate": start.isoformat(),
+                  "endDate": end.isoformat(),
+                  "limit": 5000,
+                  "offset": offset,
+                  "sort": "asc",
+              })
+              data = request_json(
+                  "https://api.brevo.com/v3/smtp/statistics/events?" + params,
+                  brevo_headers
+              )
+              page = data.get("events") or []
+              if not isinstance(page, list):
+                  raise SystemExit("Invalid Brevo event response shape")
+              event_rows.extend(page)
+              if len(page) < 5000:
+                  break
+              offset += len(page)
+              if offset >= 100000:
+                  raise SystemExit("Unexpectedly large Brevo event history")
+
+          rows = []
+          offset = 0
+          while True:
+              params = urllib.parse.urlencode({
+                  "select": "id,candidate_name,sender_email,created_at,state,result",
+                  "created_at": "gte.2026-10-05T00:00:00Z",
+                  "order": "created_at.asc",
+                  "limit": 1000,
+                  "offset": offset,
+              })
+              page = request_json(
+                  supabase + "/rest/v1/secure_outbound_batches?" + params,
+                  db_headers,
+              )
+              if not isinstance(page, list):
+                  raise SystemExit("Invalid secure ledger response shape")
+              rows.extend(page)
+              if len(page) < 1000:
+                  break
+              offset += len(page)
+
+          def clean_id(x):
+              return str(x or "").strip()
+
+          allowed = {
+              "Yasmin Adam": "apply@hsndm.tech",
+              "Sultan Saud": "apply1@hsndm.tech",
+          }
+          targets = collections.defaultdict(set)
+          accepted = collections.Counter()
+          for batch in rows:
+              candidate = batch.get("candidate_name")
+              if candidate not in allowed or batch.get("state") != "sent":
+                  continue
+              if str(batch.get("sender_email") or "").lower() != allowed[candidate]:
+                  raise SystemExit("Candidate sender mismatch in secure ledger")
+              result = batch.get("result") or {}
+              accepted[candidate] += int(result.get("accepted") or 0)
+              for m in result.get("messages") or []:
+                  mid = clean_id(m.get("messageId"))
+                  if mid:
+                      targets[candidate].add(mid)
+
+          event_types = collections.defaultdict(set)
+          for e in event_rows:
+              mid = clean_id(e.get("messageId") or e.get("message-id"))
+              if mid:
+                  event_types[mid].add(str(e.get("event") or "").lower())
+
+          summary = {}
+          for candidate in sorted(allowed):
+              ids = targets[candidate]
+              matched = [mid for mid in ids if mid in event_types]
+              def count_type(*types):
+                  return sum(bool(event_types[mid].intersection(types)) for mid in ids)
+              summary[candidate] = {
+                  "accepted_by_brevo": accepted[candidate],
+                  "unique_provider_ids": len(ids),
+                  "ids_with_provider_events": len(matched),
+                  "confirmed_delivered": count_type("delivered"),
+                  "hard_bounced": count_type("hardbounce", "hard_bounce"),
+                  "soft_bounced": count_type("softbounce", "soft_bounce"),
+                  "blocked": count_type("blocked"),
+                  "invalid": count_type("invalid"),
+                  "deferred": count_type("deferred"),
+                  "ids_without_provider_events": len(ids) - len(matched),
+              }
+
+          report = {
+              "as_of_utc": now.isoformat(),
+              "event_window_utc": [start.isoformat(), end.isoformat()],
+              "brevo_events_queried": len(event_rows),
+              "campaign": summary,
+          }
+          with open("brevo-audit-latest.json", "w", encoding="utf-8") as f:
+              json.dump(report, f, indent=2, sort_keys=True)
+              f.write("\n")
+          print(json.dumps(report, sort_keys=True))
           PY
       - name: Persist sanitized audit
         run: |
