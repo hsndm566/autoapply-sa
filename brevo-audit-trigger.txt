@@ -1,1 +1,1 @@
-2026-09-30T13:18Z audit current Brevo outbound activity
+2026-10-09T22:12+03:00 verify read-only Brevo transactional events after October 9 sends
