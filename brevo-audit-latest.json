@@ -1,6 +1,36 @@
 {
-  "as_of_utc": "2026-10-09T19:20:50.807172+00:00",
+  "as_of_utc": "2026-10-09T19:22:28.203549+00:00",
   "brevo_events_queried": 306,
+  "by_cohort": {
+    "Sultan Saud/additional_oct9": {
+      "confirmed_delivered": 7,
+      "deferred_without_delivery": 0,
+      "hard_bounce_without_delivery": 0,
+      "unique_provider_ids": 10,
+      "without_delivery_event": 3
+    },
+    "Sultan Saud/original_oct6": {
+      "confirmed_delivered": 41,
+      "deferred_without_delivery": 2,
+      "hard_bounce_without_delivery": 0,
+      "unique_provider_ids": 50,
+      "without_delivery_event": 9
+    },
+    "Yasmin Adam/additional_oct9": {
+      "confirmed_delivered": 5,
+      "deferred_without_delivery": 0,
+      "hard_bounce_without_delivery": 0,
+      "unique_provider_ids": 5,
+      "without_delivery_event": 0
+    },
+    "Yasmin Adam/original_oct6": {
+      "confirmed_delivered": 47,
+      "deferred_without_delivery": 0,
+      "hard_bounce_without_delivery": 0,
+      "unique_provider_ids": 50,
+      "without_delivery_event": 3
+    }
+  },
   "campaign": {
     "Sultan Saud": {
       "accepted_by_brevo": 60,
