@@ -34,6 +34,9 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import base64
+          import hashlib
+          from zoneinfo import ZoneInfo
           import os
           import random
           import re
@@ -47,8 +50,8 @@ jobs:
               for line in open("secure-batch-trigger.txt", encoding="utf-8")
               if line.strip()
           ]
-          if not triggers or len(triggers) > 20:
-              raise SystemExit("Secure batch trigger list must contain 1-20 IDs")
+          if not triggers or len(triggers) > 10:
+              raise SystemExit("Secure batch trigger list must contain 1-10 IDs")
           if any(not re.fullmatch(r"[0-9a-fA-F-]{36}", item) for item in triggers):
               raise SystemExit("Invalid secure batch trigger")
 
@@ -84,12 +87,80 @@ jobs:
 
               batch = rows[0]
               messages = batch.get("messages") or []
-              if not isinstance(messages, list) or not 1 <= len(messages) <= 15:
-                  raise SystemExit(f"Secure batch {batch_number} message count is outside the allowed 1-15 range")
-              if batch.get("sender_email") not in {"apply@hsndm.tech", "apply1@hsndm.tech", "apply2@hsndm.tech"}:
-                  raise SystemExit(f"Secure batch {batch_number} sender is outside the approved sender pool")
-              if not batch.get("cv_base64") or not batch.get("cv_filename", "").lower().endswith(".pdf"):
-                  raise SystemExit(f"Secure batch {batch_number} requires a valid staged PDF attachment")
+              if not isinstance(messages, list) or not 1 <= len(messages) <= 10:
+                  raise SystemExit(f"Secure batch {batch_number} message count is outside the allowed 1-10 range")
+              allowed_candidates = {
+                  "Yasmin Adam": ("apply@hsndm.tech", "Yasmin_Adam_CV.pdf", "6e1a3f4534f06213749e990193db1f4efa009a411978423f868b1340a2a34262"),
+                  "Sultan Saud": ("apply1@hsndm.tech", "SultanSaud.pdf", "99e499572bcaed6e4e9c7c8c21749a1abf326ba3ff4fa6730964046210fa013c"),
+              }
+              expected = allowed_candidates.get(batch.get("candidate_name"))
+              if not expected or (batch.get("sender_email"), batch.get("cv_filename")) != expected[:2]:
+                  raise SystemExit(f"Secure batch {batch_number} candidate/sender/CV identity mismatch")
+              try:
+                  pdf_bytes = base64.b64decode(batch.get("cv_base64") or "", validate=True)
+              except (ValueError, base64.binascii.Error):
+                  raise SystemExit(f"Secure batch {batch_number} has invalid PDF encoding")
+              if (not pdf_bytes.startswith(b"%PDF-") or b"%%EOF" not in pdf_bytes[-2048:]
+                      or hashlib.sha256(pdf_bytes).hexdigest() != expected[2]):
+                  raise SystemExit(f"Secure batch {batch_number} PDF bytes do not match approved SHA-256")
+
+              # Fail closed when today's candidate limit or Brevo's actual credit balance is insufficient.
+              riyadh_now = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh"))
+              riyadh_midnight = riyadh_now.replace(hour=0, minute=0, second=0, microsecond=0)
+              updated_since = urllib.parse.quote(riyadh_midnight.astimezone(timezone.utc).isoformat(), safe="")
+              today = db_request(
+                  "GET",
+                  f"/rest/v1/secure_outbound_batches?updated_at=gte.{updated_since}&state=in.(sent,failed,sending)&select=candidate_name,result&limit=1000",
+              )
+              already_accepted = sum(
+                  int((row.get("result") or {}).get("accepted") or 0)
+                  for row in today if row.get("candidate_name") == batch["candidate_name"]
+              )
+              if already_accepted + len(messages) > 100:
+                  raise SystemExit(f"Secure batch {batch_number} exceeds candidate's 100/day cap")
+
+              acct_req = urllib.request.Request(
+                  "https://api.brevo.com/v3/account",
+                  headers={"api-key": brevo_key, "Accept": "application/json"},
+              )
+              with urllib.request.urlopen(acct_req, timeout=30) as response:
+                  account = json.loads(response.read() or b"{}")
+              balances = []
+              for plan in account.get("plan") or []:
+                  if plan.get("creditsType") == "sendLimit" and plan.get("type") != "sms":
+                      try:
+                          balances.append(int(plan["credits"]))
+                      except (ValueError, TypeError, KeyError):
+                          pass
+              if not balances or max(balances) < len(messages):
+                  raise SystemExit(f"Secure batch {batch_number} lacks verified Brevo sending credits")
+
+              # Detect candidate-to-company AND candidate-to-address repeats from every
+              # previous provider-accepted secure batch, even when the prior batch failed.
+              history = db_request(
+                  "GET",
+                  "/rest/v1/secure_outbound_batches?state=in.(sent,failed,sending)&select=id,candidate_name,result&limit=1000",
+              )
+              previous_addresses = set()
+              previous_companies = set()
+              def normalize_company(value):
+                  return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
+              for old in history:
+                  if old.get("id") == batch["id"] or old.get("candidate_name") != batch["candidate_name"]:
+                      continue
+                  for prior in (old.get("result") or {}).get("messages") or []:
+                      previous_addresses.add(str(prior.get("to") or "").strip().lower())
+                      previous_companies.add(normalize_company(prior.get("company")))
+              current_addresses, current_companies = set(), set()
+              for message in messages:
+                  address = str(message.get("to") or "").strip().lower()
+                  company_key = normalize_company(message.get("company"))
+                  if (not address or not company_key or address in previous_addresses
+                          or company_key in previous_companies or address in current_addresses
+                          or company_key in current_companies):
+                      raise SystemExit(f"Secure batch {batch_number} has missing or duplicate recipient/company")
+                  current_addresses.add(address)
+                  current_companies.add(company_key)
 
               db_request("PATCH", f"/rest/v1/secure_outbound_batches?id=eq.{encoded}", {
                   "state": "sending",
