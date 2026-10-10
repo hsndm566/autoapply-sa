@@ -135,6 +135,30 @@ jobs:
               if not balances or max(balances) < len(messages):
                   raise SystemExit(f"Secure batch {batch_number} lacks verified Brevo sending credits")
 
+              # Check the actual provider suppression list before accepting any new sends.
+              # Fail closed if a page cannot be inspected. Never override unsubscribes.
+              blocked_recipients = set()
+              offset = 0
+              while True:
+                  blocked_req = urllib.request.Request(
+                      "https://api.brevo.com/v3/smtp/blockedContacts?limit=100&offset=" + str(offset),
+                      headers={"api-key": brevo_key, "Accept": "application/json"},
+                  )
+                  with urllib.request.urlopen(blocked_req, timeout=30) as response:
+                      blocked_page = json.loads(response.read() or b"{}")
+                  contacts = blocked_page.get("contacts") or []
+                  blocked_recipients.update(
+                      str(item.get("email") or "").strip().lower() for item in contacts
+                  )
+                  total_blocked = int(blocked_page.get("count") or 0)
+                  offset += len(contacts)
+                  if offset >= total_blocked:
+                      break
+                  if not contacts or offset >= 10000:
+                      raise SystemExit("Could not fully inspect Brevo blocked contacts")
+              if any(str(m.get("to") or "").strip().lower() in blocked_recipients for m in messages):
+                  raise SystemExit(f"Secure batch {batch_number} contains a Brevo-blocked recipient")
+
               # Detect candidate-to-company AND candidate-to-address repeats from every
               # previous provider-accepted secure batch, even when the prior batch failed.
               history = db_request(
