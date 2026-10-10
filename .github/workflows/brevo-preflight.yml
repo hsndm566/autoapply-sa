@@ -112,4 +112,15 @@ jobs:
           missing = sorted(wanted - set(seen)) if _ != 403 else []
           if missing:
               print("MISSING_SENDERS=" + ",".join(missing))
+          print("BREVO_SENDERS_READ_ACCESS=" + str(_ == 200).lower())
+          try:
+              blocked_status, blocked = get("/smtp/blockedContacts?limit=1&offset=0")
+              print("BREVO_BLOCKED_CONTACTS_ACCESS=" + str(blocked_status == 200).lower())
+              if blocked_status == 200:
+                  print("BREVO_BLOCKED_CONTACTS_COUNT=" + str(blocked.get("count", "unknown")))
+          except urllib.error.HTTPError as exc:
+              if exc.code in (401, 403):
+                  print("BREVO_BLOCKED_CONTACTS_ACCESS=false")
+              else:
+                  raise
           PY
