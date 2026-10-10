@@ -15,18 +15,38 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
-      BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_DEV_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_DEV_SERVICE_ROLE_KEY }}
     steps:
       - name: Verify Brevo account, domain, and senders
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$BREVO_API_KEY"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
 
           python - <<'PY'
           import json, os, urllib.request, urllib.error
 
-          key = os.environ["BREVO_API_KEY"]
+          # Source the same Brevo key as the proven secure outbound batch workflow.
+          # Never print or persist the key or the Supabase privileged credential.
+          supabase_url = os.environ["SUPABASE_URL"].rstrip("/")
+          service_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+          key_req = urllib.request.Request(
+              supabase_url + "/rest/v1/rpc/get_secure_outbound_brevo_key",
+              data=b"{}",
+              headers={
+                  "apikey": service_key,
+                  "Authorization": "Bearer " + service_key,
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(key_req, timeout=20) as response:
+              key = json.loads(response.read() or b'""')
+          if not isinstance(key, str) or not key.strip():
+              raise RuntimeError("Secure Brevo credential unavailable")
+          key = key.strip()
 
           def get(path):
               req = urllib.request.Request(
