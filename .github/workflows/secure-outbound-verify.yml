@@ -1,0 +1,55 @@
+name: Secure outbound no-send contract verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/secure-outbound-verify.yml"
+      - ".github/workflows/send-secure-outbound-batch.yml"
+      - "secure-outbound-verify-trigger.txt"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: Parse and validate secure sender contract without any credentials or emails
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import textwrap
+
+          path = Path(".github/workflows/send-secure-outbound-batch.yml")
+          body = path.read_text(encoding="utf-8")
+          script = re.search(r"(?ms)^          python - <<'PY'\n(.*?)^          PY$", body)
+          if not script:
+              raise SystemExit("Inline sender Python code missing")
+          python_source = textwrap.dedent(script.group(1))
+          compile(python_source, str(path), "exec")
+
+          required = [
+              "len(triggers) > 10",
+              "1 <= len(messages) <= 10",
+              "allowed_candidates",
+              "hashlib.sha256(pdf_bytes).hexdigest()",
+              'already_accepted + len(messages) > 100',
+              "max(balances) < len(messages)",
+              "previous_companies",
+              "previous_addresses",
+              'state": "sent"',
+              "random.randint(15, 25)",
+              "get_secure_outbound_brevo_key",
+          ]
+          missing = [check for check in required if check not in python_source]
+          if missing:
+              raise SystemExit("Missing required sending contracts: " + ", ".join(missing))
+          print("SECURE_OUTBOUND_CONTRACT_VALID=true")
+          print("NO_EMAILS_SENT=true")
+          PY
