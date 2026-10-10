@@ -1,9 +1,8 @@
 name: Audited AutoApply SA scheduled delivery
 
+# Legacy dispatcher is retained only for manual no-send validation.
+# Outbound applications use the approved Supabase secure batches + GitHub workflow.
 on:
-  schedule:
-    - cron: "0 6 * * *"
-    - cron: "0 18 * * *"
   workflow_dispatch:
 
 permissions:
