@@ -1,0 +1,2 @@
+AutoApply SA read-only Brevo connectivity and GitHub contents-write diagnostic, 2026-10-10.
+No sending authorized by this file.
