@@ -123,4 +123,33 @@ jobs:
                   print("BREVO_BLOCKED_CONTACTS_ACCESS=false")
               else:
                   raise
+
+          # Read-only contact-level suppression check for this verified daily shortlist.
+          shortlist = {
+              "careers@almalki.group",
+              "careers@edugates-school.edu.sa",
+              "hr@edugates-school.edu.sa",
+              "hr@isfc.com.sa",
+              "hrrecruitment@coca-cola.com.sa",
+              "careers@foodsources.com.sa",
+              "talent.acquisitions@arm.sa",
+          }
+          blocked_emails = set()
+          count = 1
+          offset = 0
+          while offset < count:
+              try:
+                  stat, page = get("/smtp/blockedContacts?limit=100&offset=" + str(offset))
+              except urllib.error.HTTPError as exc:
+                  print("BREVO_SHORTLIST_SUPPRESSION_CHECK=unavailable")
+                  raise
+              contacts = page.get("contacts") or []
+              blocked_emails.update(str(c.get("email") or "").strip().lower() for c in contacts)
+              count = int(page.get("count") or 0)
+              offset += len(contacts)
+              if not contacts and offset < count:
+                  raise RuntimeError("Incomplete blockedContacts pagination")
+          print("BREVO_SHORTLIST_SUPPRESSION_CHECK=complete")
+          for email in sorted(shortlist):
+              print("BREVO_CONTACT_BLOCKED " + email + "=" + str(email in blocked_emails).lower())
           PY
