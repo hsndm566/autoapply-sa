@@ -43,7 +43,7 @@ jobs:
           import time
           import urllib.parse
           import urllib.request
-          from datetime import datetime, timezone
+          from datetime import datetime, timezone, timedelta
 
           triggers = [
               line.strip()
@@ -158,6 +158,52 @@ jobs:
                       raise SystemExit("Could not fully inspect Brevo blocked contacts")
               if any(str(m.get("to") or "").strip().lower() in blocked_recipients for m in messages):
                   raise SystemExit(f"Secure batch {batch_number} contains a Brevo-blocked recipient")
+
+              # Account-wide bounce circuit breaker: Brevo uses plural event values
+              # ("hardbounces"/"softbounces"), which the old audit once missed.
+              # Check before every batch; fail closed if provider event data is unavailable.
+              event_types = {}
+              bounced_emails = set()
+              page_offset = 0
+              while True:
+                  params = urllib.parse.urlencode({
+                      "startDate": (riyadh_now.date() - timedelta(days=1)).isoformat(),
+                      "endDate": riyadh_now.date().isoformat(),
+                      "limit": 5000,
+                      "offset": page_offset,
+                      "sort": "asc",
+                  })
+                  event_req = urllib.request.Request(
+                      "https://api.brevo.com/v3/smtp/statistics/events?" + params,
+                      headers={"api-key": brevo_key, "Accept": "application/json"},
+                  )
+                  with urllib.request.urlopen(event_req, timeout=30) as response:
+                      page = json.loads(response.read() or b"{}").get("events") or []
+                  if not isinstance(page, list):
+                      raise SystemExit("Brevo event audit returned an invalid shape")
+                  for entry in page:
+                      event = str(entry.get("event") or "").casefold()
+                      mid = str(entry.get("messageId") or entry.get("message-id") or "").strip()
+                      if mid:
+                          event_types.setdefault(mid, set()).add(event)
+                      if event in {"hardbounce", "hard_bounce", "hardbounces", "blocked", "invalid"}:
+                          bounced_emails.add(str(entry.get("email") or "").strip().lower())
+                  if len(page) < 5000:
+                      break
+                  page_offset += len(page)
+                  if page_offset >= 100000:
+                      raise SystemExit("Brevo event audit pagination limit reached")
+              for message in messages:
+                  if str(message.get("to") or "").strip().lower() in bounced_emails:
+                      raise SystemExit(f"Secure batch {batch_number} includes a previous hard-bounced recipient")
+
+              requested = [events for events in event_types.values() if "requests" in events]
+              recent_hard = sum(
+                  bool(events.intersection({"hardbounce", "hard_bounce", "hardbounces"}))
+                  for events in requested
+              )
+              if len(requested) >= 5 and recent_hard >= 2 and recent_hard / len(requested) >= 0.05:
+                  raise SystemExit("Brevo circuit breaker OPEN: elevated recent hard-bounce rate; manual review required")
 
               # Detect candidate-to-company AND candidate-to-address repeats from every
               # previous provider-accepted secure batch, even when the prior batch failed.
