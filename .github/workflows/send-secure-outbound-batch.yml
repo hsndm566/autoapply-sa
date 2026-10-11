@@ -110,12 +110,14 @@ jobs:
               def enforce_safety_gate(recipients):
                   gate = db_request("POST", "/rest/v1/rpc/secure_outbound_safety_gate", {
                       "p_recipients": recipients,
+                      "p_candidate": batch["candidate_name"],
                   })
                   if not isinstance(gate, dict) or gate.get("allowed") is not True:
                       reason = gate.get("reason", "unavailable") if isinstance(gate, dict) else "unavailable"
                       raise SystemExit(f"Supabase secure outbound safety gate DENIED: {reason}")
+                  return gate
 
-              enforce_safety_gate([m.get("to", "") for m in messages])
+              gate_mode = enforce_safety_gate([m.get("to", "") for m in messages]).get("reason")
 
               # Fail closed when today's candidate limit or Brevo's actual credit balance is insufficient.
               riyadh_now = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh"))
@@ -216,7 +218,14 @@ jobs:
                   for events in requested
               )
               if len(requested) >= 5 and recent_hard >= 2 and recent_hard / len(requested) >= 0.05:
-                  raise SystemExit("Brevo circuit breaker OPEN: elevated recent hard-bounce rate; manual review required")
+                  # An explicitly approved, single-recipient, short-lived permit is
+                  # allowed only when today's existing two hard bounces have not risen.
+                  # This does not disable the breaker for normal scheduled batches.
+                  if (gate_mode != "time_bound_manual_trial"
+                          or len(messages) != 1
+                          or recent_hard > 2):
+                      raise SystemExit("Brevo circuit breaker OPEN: elevated recent hard-bounce rate; manual review required")
+                  print("CONTROLLED_SINGLE_RECIPIENT_TRIAL=true")
 
               # Detect candidate-to-company AND candidate-to-address repeats from every
               # previous provider-accepted secure batch, even when the prior batch failed.
