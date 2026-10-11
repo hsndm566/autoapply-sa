@@ -1,2 +1,1 @@
-2026-10-11 11:17 Asia/Riyadh — reconcile fresh Yasmin (2) and Sultan (4) Brevo accepted messages against delivery/bounce events.
-Read-only provider audit. No additional sends authorized.
+2026-10-11 Riyadh-day Brevo reconciliation of 2 Yasmin and 4 Sultan fresh applications. Read-only provider events; no sends authorized.
