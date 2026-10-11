@@ -51,6 +51,8 @@ jobs:
               "recent_hard >= 2",
               "bounced_emails",
               "Brevo circuit breaker OPEN",
+              "secure_outbound_safety_gate",
+              "enforce_safety_gate([message.get(",
           ]
           missing = [check for check in required if check not in python_source]
           if missing:
