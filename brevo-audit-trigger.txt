@@ -1,1 +1,1 @@
-2026-10-11 13:56 Riyadh — independent Brevo audit of Sultan SMI single Notion-verified application; check hardbounces/deferred/delivered. No send.
+2026-10-11 13:58 Riyadh — verify Dar Alzikr Yasmin single-email pilot delivery, hard-bounces, conflicts before other sending. Read-only.
