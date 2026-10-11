@@ -117,6 +117,45 @@ jobs:
                       raise SystemExit(f"Supabase secure outbound safety gate DENIED: {reason}")
                   return gate
 
+              # Never send unless the recipient is in a FRESH snapshot of the actual
+              # Notion Contacts CRM view: Current official + Ready + Do Not Send=false.
+              # "Sent", "Bounced", "Hold" and historical rows are never new prospects.
+              # An empty, outdated or missing snapshot FAILS CLOSED.
+              def require_notion_verified_ready(candidates):
+                  with open("notion-verified-ready-snapshot.json", encoding="utf-8") as snapshot_file:
+                      snapshot = json.load(snapshot_file)
+                  if (snapshot.get("schema_version") != 1
+                          or snapshot.get("data_source_id") != "e22e718f-3141-41a9-aa5d-40fdc3aa98f9"):
+                      raise SystemExit("Notion source-of-truth snapshot missing or invalid")
+                  synced = datetime.fromisoformat(str(snapshot.get("generated_at_utc", "")).replace("Z", "+00:00"))
+                  age = datetime.now(timezone.utc) - synced.astimezone(timezone.utc)
+                  if age.total_seconds() < -120 or age > timedelta(minutes=15):
+                      raise SystemExit("Notion verified contact snapshot stale; refresh from live Notion before sending")
+                  roster = snapshot.get("eligible_contacts")
+                  if not isinstance(roster, list):
+                      raise SystemExit("Notion ready roster missing")
+                  for message in candidates:
+                      recipient = str(message.get("to") or "").lower().strip()
+                      company = re.sub(r"[^a-z0-9]+", "", str(message.get("company") or "").casefold())
+                      matches = [
+                          row for row in roster
+                          if isinstance(row, dict)
+                          and str(row.get("Email") or "").lower().strip() == recipient
+                          and re.sub(r"[^a-z0-9]+", "", str(row.get("Company") or "").casefold()) == company
+                          and row.get("Verification") == "Current official"
+                          and row.get("Send Status") == "Ready"
+                          and row.get("Do Not Send") in (False, "__NO__")
+                          and row.get("Sender") == batch["sender_email"]
+                          and str(row.get("Contact Type") or "") in ("Recruitment", "Careers")
+                          and str(row.get("Source URL") or "").startswith("https://")
+                          and str(row.get("notion_page_url") or "").startswith("https://")
+                          and str(row.get("date:Last Verified:start") or "") >=
+                              (datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh")).date() - timedelta(days=30)).isoformat()
+                      ]
+                      if len(matches) != 1:
+                          raise SystemExit("NOTION_SOURCE_GATE_DENIED: contact not uniquely Current official + Ready + unsuppressed")
+
+              require_notion_verified_ready(messages)
               gate_mode = enforce_safety_gate([m.get("to", "") for m in messages]).get("reason")
 
               # Fail closed when today's candidate limit or Brevo's actual credit balance is insufficient.
@@ -264,6 +303,7 @@ jobs:
               try:
                   for index, message in enumerate(messages, start=1):
                       # Recheck global pause and suppressions before EACH individual send.
+                      require_notion_verified_ready([message])
                       enforce_safety_gate([message.get("to", "")])
                       recipient = str(message.get("to") or "").strip().lower()
                       subject = str(message.get("subject") or "").strip()
