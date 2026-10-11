@@ -46,6 +46,11 @@ jobs:
               'state": "sent"',
               "random.randint(15, 25)",
               "get_secure_outbound_brevo_key",
+              "smtp/statistics/events?",
+              "hardbounces",
+              "recent_hard >= 2",
+              "bounced_emails",
+              "Brevo circuit breaker OPEN",
           ]
           missing = [check for check in required if check not in python_source]
           if missing:
