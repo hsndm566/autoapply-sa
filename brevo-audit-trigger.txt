@@ -1,1 +1,1 @@
-2026-10-11 13:58 Riyadh — verify Dar Alzikr Yasmin single-email pilot delivery, hard-bounces, conflicts before other sending. Read-only.
+2026-10-11 14:01 Riyadh — verify The World Academy Yasmin single-email pilot delivered or hardbounced, then close Notion reconciliation. Read-only.
