@@ -48,6 +48,24 @@ jobs:
               raise RuntimeError("Secure Brevo credential unavailable")
           key = key.strip()
 
+          # Read-only check of the secure, service-role-only send gate.
+          gate_req = urllib.request.Request(
+              supabase_url + "/rest/v1/rpc/secure_outbound_safety_gate",
+              data=json.dumps({"p_recipients": ["no-send-test@example.invalid"]}).encode("utf-8"),
+              headers={
+                  "apikey": service_key,
+                  "Authorization": "Bearer " + service_key,
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(gate_req, timeout=20) as response:
+              gate = json.loads(response.read() or b"{}")
+          if not isinstance(gate, dict) or not isinstance(gate.get("allowed"), bool):
+              raise RuntimeError("Secure outbound safety RPC unavailable")
+          print("SUPABASE_SAFETY_GATE_ALLOWED=" + str(gate["allowed"]).lower())
+          print("SUPABASE_SAFETY_GATE_REASON=" + str(gate.get("reason", "unknown")))
+
           def get(path):
               req = urllib.request.Request(
                   "https://api.brevo.com/v3" + path,
