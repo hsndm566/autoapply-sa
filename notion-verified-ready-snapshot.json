@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
+  "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
+  "generated_at_utc": "2026-10-11T09:02:23.617Z",
+  "eligible_only_when": "Verification=Current official AND Send Status=Ready AND Do Not Send=false AND exact candidate sender and first-party source",
+  "eligible_contacts": [],
+  "note": "From live Notion query on 2026-10-11. Zero eligible Ready + Current official rows. This empty snapshot must block all sends."
+}
