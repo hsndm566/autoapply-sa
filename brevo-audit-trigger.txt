@@ -1,1 +1,1 @@
-2026-10-11 — urgent read-only corrected Brevo audit for plural bounce statuses and individual message reconciliation. No sends.
+2026-10-11 11:24 Riyadh — read-only final bounce reason diagnostic for verified outreach. No sends.
