@@ -1,2 +1,2 @@
-AutoApply SA read-only Brevo connectivity and GitHub contents-write diagnostic, 2026-10-10.
-No sending authorized by this file.
+Read-only Brevo authentication, account credits, blocked contacts and health preflight — 2026-10-11 (Asia/Riyadh).
+No sending or contact staging authorized by this diagnostic.
