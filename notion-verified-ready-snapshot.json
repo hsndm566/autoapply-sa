@@ -2,20 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-11T10:58:50.006Z",
-  "eligible_contacts": [
-    {
-      "Email": "twa@jischool.org",
-      "Company": "The World Academy",
-      "Sender": "apply@hsndm.tech",
-      "Verification": "Current official",
-      "Send Status": "Ready",
-      "Do Not Send": "__NO__",
-      "Contact Type": "Careers",
-      "Source URL": "https://twa.edu.sa/careers/",
-      "notion_page_url": "https://app.notion.com/3f6b3173524581478c5fff442a37b022",
-      "date:Last Verified:start": "2026-10-11"
-    }
-  ],
-  "note": "One remaining live Notion Ready contact; all delivered earlier contacts removed."
+  "generated_at_utc": "2026-10-11T11:01:01.934Z",
+  "eligible_contacts": [],
+  "note": "Verified live Notion query: zero Ready contacts after four singleton batches. This intentionally denies all outbound sends."
 }
