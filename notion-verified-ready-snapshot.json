@@ -2,8 +2,8 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-11T10:49:57.571Z",
-  "eligible_only_when": "Verification=Current official AND Send Status=Ready AND Do Not Send=false AND matching candidate sender, no previous candidate-to-company/contact and first-party recruitment evidence",
+  "generated_at_utc": "2026-10-11T10:54:33.176Z",
+  "eligible_only_when": "Verification=Current official AND Send Status=Ready AND Do Not Send=false AND valid candidate sender and current first party source",
   "eligible_contacts": [
     {
       "Email": "twa@jischool.org",
@@ -40,19 +40,7 @@
       "Source URL": "https://alzikr.edu.sa/%D8%AA%D9%88%D8%A7%D8%B5%D9%84-%D9%85%D8%B9%D9%86%D8%A7/",
       "notion_page_url": "https://app.notion.com/3f6b3173524581a29beceb6025991bbe",
       "date:Last Verified:start": "2026-10-11"
-    },
-    {
-      "Email": "career@nahda-academy.edu.sa",
-      "Company": "Nahda Academy",
-      "Sender": "apply@hsndm.tech",
-      "Verification": "Current official",
-      "Send Status": "Ready",
-      "Do Not Send": "__NO__",
-      "Contact Type": "Careers",
-      "Source URL": "https://nahda-academy.edu.sa/careers/",
-      "notion_page_url": "https://app.notion.com/3f6b3173524581a5a00ace9170e63b2e",
-      "date:Last Verified:start": "2026-10-11"
     }
   ],
-  "note": "Exact live Notion query output; not mail deliverability verification. Must re-check provider suppressed contacts and sending pause before any send."
+  "note": "Created strictly from live verified Ready Notion query; no inferred emails."
 }
