@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-11T10:56:43.076Z",
+  "generated_at_utc": "2026-10-11T10:58:50.006Z",
   "eligible_contacts": [
     {
       "Email": "twa@jischool.org",
@@ -15,19 +15,7 @@
       "Source URL": "https://twa.edu.sa/careers/",
       "notion_page_url": "https://app.notion.com/3f6b3173524581478c5fff442a37b022",
       "date:Last Verified:start": "2026-10-11"
-    },
-    {
-      "Email": "career@alzikr.edu.sa",
-      "Company": "Dar Alzikr Schools",
-      "Sender": "apply@hsndm.tech",
-      "Verification": "Current official",
-      "Send Status": "Ready",
-      "Do Not Send": "__NO__",
-      "Contact Type": "Careers",
-      "Source URL": "https://alzikr.edu.sa/%D8%AA%D9%88%D8%A7%D8%B5%D9%84-%D9%85%D8%B9%D9%86%D8%A7/",
-      "notion_page_url": "https://app.notion.com/3f6b3173524581a29beceb6025991bbe",
-      "date:Last Verified:start": "2026-10-11"
     }
   ],
-  "note": "Live Notion Ready roster; two completed applications removed."
+  "note": "One remaining live Notion Ready contact; all delivered earlier contacts removed."
 }
