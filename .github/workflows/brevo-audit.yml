@@ -136,10 +136,17 @@ jobs:
                           today_ids[candidate].add(mid)
 
           event_types = collections.defaultdict(set)
+          bounce_explanations = collections.defaultdict(list)
           for e in event_rows:
               mid = clean_id(e.get("messageId") or e.get("message-id"))
               if mid:
-                  event_types[mid].add(str(e.get("event") or "").lower())
+                  event = str(e.get("event") or "").lower()
+                  event_types[mid].add(event)
+                  if event in {"hardbounce", "hard_bounce", "hardbounces", "softbounce", "soft_bounce", "softbounces"}:
+                      bounce_explanations[mid].append({
+                          "event": event,
+                          "reason": str(e.get("reason") or e.get("message") or "not provided")[:180],
+                      })
 
           summary = {}
           for candidate in sorted(allowed):
@@ -190,7 +197,7 @@ jobs:
                   "blocked": sum("blocked" in event_types[mid] for mid in mids),
                   "without_delivery_event": sum("delivered" not in event_types[mid] for mid in mids),
                   "soft_bounced": sum(bool(event_types[mid].intersection({"softbounce", "soft_bounce", "softbounces"})) for mid in mids),
-                  "event_types_by_message": [{"message_id": mid, "events": sorted(event_types[mid])} for mid in sorted(mids)],
+                  "event_types_by_message": [{"message_id": mid, "events": sorted(event_types[mid]), "bounce_reason": bounce_explanations.get(mid, [])} for mid in sorted(mids)],
                   "other_event_types": sorted(set().union(*(event_types[mid] for mid in mids)) - {"delivered", "deferred", "hardbounce", "hard_bounce", "blocked"}),
               }
 
