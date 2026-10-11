@@ -66,23 +66,9 @@ jobs:
           print("SUPABASE_SAFETY_GATE_ALLOWED=" + str(gate["allowed"]).lower())
           print("SUPABASE_SAFETY_GATE_REASON=" + str(gate.get("reason", "unknown")))
 
-          for candidate, recipient in (
-              ("Yasmin Adam", "jobs@kki.edu.sa"),
-              ("Sultan Saud", "careers@uneom.com"),
-          ):
-              req = urllib.request.Request(
-                  supabase_url + "/rest/v1/rpc/secure_outbound_safety_gate",
-                  data=json.dumps({"p_recipients": [recipient], "p_candidate": candidate}).encode("utf-8"),
-                  headers={"apikey": service_key, "Authorization": "Bearer " + service_key, "Content-Type": "application/json"},
-                  method="POST",
-              )
-              with urllib.request.urlopen(req, timeout=20) as response:
-                  permit = json.loads(response.read() or b"{}")
-              ok = permit.get("allowed") is True and permit.get("reason") == "time_bound_manual_trial"
-              print("TRIAL_PERMIT " + recipient + "=" + str(ok).lower())
-              if not ok:
-                  raise SystemExit("One-time recipient permit expired or is unavailable")
-
+          # Prior one-time pilot permits were revoked. A non-permitted
+          # recipient must be blocked by the current global pause; do not
+          # require expired test permits to remain active.
 
           def get(path):
               req = urllib.request.Request(
@@ -165,6 +151,10 @@ jobs:
               "careers@almalki.group",
               "jobs@kki.edu.sa",
               "careers@uneom.com",
+              "career@nahda-academy.edu.sa",
+              "twa@jischool.org",
+              "recruitment@smi.com.sa",
+              "career@alzikr.edu.sa",
               "careers@edugates-school.edu.sa",
               "hr@edugates-school.edu.sa",
               "hr@isfc.com.sa",
