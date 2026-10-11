@@ -1,5 +1,5 @@
 {
-  "as_of_utc": "2026-10-11T08:19:21.314958+00:00",
+  "as_of_utc": "2026-10-11T08:22:24.131508+00:00",
   "brevo_events_queried": 325,
   "by_cohort": {
     "Sultan Saud/additional_oct9": {
@@ -65,6 +65,12 @@
       "delivered": 3,
       "event_types_by_message": [
         {
+          "bounce_reason": [
+            {
+              "event": "softbounces",
+              "reason": "Message delivery failed"
+            }
+          ],
           "events": [
             "delivered",
             "requests",
@@ -73,6 +79,7 @@
           "message_id": "<202610110815.44100325959@smtp-relay.mailin.fr>"
         },
         {
+          "bounce_reason": [],
           "events": [
             "delivered",
             "opened",
@@ -81,6 +88,7 @@
           "message_id": "<202610110815.80325594065@smtp-relay.mailin.fr>"
         },
         {
+          "bounce_reason": [],
           "events": [
             "deferred",
             "delivered",
@@ -89,6 +97,12 @@
           "message_id": "<202610110816.66318260838@smtp-relay.mailin.fr>"
         },
         {
+          "bounce_reason": [
+            {
+              "event": "hardbounces",
+              "reason": "550-5.1.1 The email account that you tried to reach does not exist. Please try\n   550-5.1.1 double-checking the recipient's email address for typos or\n   550-5.1.1 unnecessary spac"
+            }
+          ],
           "events": [
             "hardbounces",
             "requests"
@@ -114,6 +128,7 @@
       "delivered": 1,
       "event_types_by_message": [
         {
+          "bounce_reason": [],
           "events": [
             "delivered",
             "requests"
@@ -121,6 +136,12 @@
           "message_id": "<202610110814.10502246145@smtp-relay.mailin.fr>"
         },
         {
+          "bounce_reason": [
+            {
+              "event": "hardbounces",
+              "reason": "550 No Such User Here"
+            }
+          ],
           "events": [
             "hardbounces",
             "requests"
