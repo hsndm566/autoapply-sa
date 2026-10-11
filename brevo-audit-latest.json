@@ -1,12 +1,12 @@
 {
-  "as_of_utc": "2026-10-11T10:53:34.508023+00:00",
-  "brevo_events_queried": 333,
+  "as_of_utc": "2026-10-11T10:55:47.757651+00:00",
+  "brevo_events_queried": 336,
   "by_cohort": {
     "Sultan Saud/additional_oct9": {
-      "confirmed_delivered": 10,
+      "confirmed_delivered": 11,
       "deferred_without_delivery": 0,
       "hard_bounce_without_delivery": 4,
-      "unique_provider_ids": 16,
+      "unique_provider_ids": 17,
       "without_delivery_event": 6
     },
     "Sultan Saud/original_oct6": {
@@ -33,17 +33,17 @@
   },
   "campaign": {
     "Sultan Saud": {
-      "accepted_by_brevo": 66,
+      "accepted_by_brevo": 67,
       "blocked": 0,
-      "confirmed_delivered": 51,
+      "confirmed_delivered": 52,
       "conflicting_delivery_and_hard_bounce": 2,
       "deferred": 5,
       "hard_bounced": 11,
-      "ids_with_provider_events": 66,
+      "ids_with_provider_events": 67,
       "ids_without_provider_events": 0,
       "invalid": 0,
       "soft_bounced": 6,
-      "unique_provider_ids": 66
+      "unique_provider_ids": 67
     },
     "Yasmin Adam": {
       "accepted_by_brevo": 59,
@@ -62,10 +62,10 @@
   "daily": {
     "Sultan Saud": {
       "blocked": 0,
-      "brevo_accepted": 5,
+      "brevo_accepted": 6,
       "conflicting_delivery_and_hard_bounce": 1,
       "deferred": 1,
-      "delivered": 3,
+      "delivered": 4,
       "event_types_by_message": [
         {
           "bounce_reason": [
@@ -125,6 +125,15 @@
             "requests"
           ],
           "message_id": "<202610110843.98121668993@smtp-relay.mailin.fr>"
+        },
+        {
+          "bounce_reason": [],
+          "events": [
+            "delivered",
+            "opened",
+            "requests"
+          ],
+          "message_id": "<202610111055.65099687804@smtp-relay.mailin.fr>"
         }
       ],
       "hard_bounced": 2,
@@ -134,7 +143,7 @@
         "requests",
         "softbounces"
       ],
-      "provider_events_recorded": 5,
+      "provider_events_recorded": 6,
       "soft_bounced": 1,
       "without_delivery_event": 2
     },
