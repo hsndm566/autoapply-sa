@@ -1,1 +1,1 @@
-2026-10-11 final read-only reconciliation: treat any hardbounce after delivered as conflicting/failed, not clean delivery. No additional outbound sends.
+2026-10-11 13:54 Asia/Riyadh - independently reconcile Nahda Academy single-email manual Notion-verified pilot; no sends authorized.
