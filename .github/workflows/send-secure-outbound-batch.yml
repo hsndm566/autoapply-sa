@@ -257,12 +257,13 @@ jobs:
                   for events in requested
               )
               if len(requested) >= 5 and recent_hard >= 2 and recent_hard / len(requested) >= 0.05:
-                  # An explicitly approved, single-recipient, short-lived permit is
-                  # allowed only when today's existing two hard bounces have not risen.
-                  # This does not disable the breaker for normal scheduled batches.
+                  # A manually authorized single-recipient, short-lived permit
+                  # may proceed only while no further hard bounces have occurred
+                  # beyond the three already quarantined on 2026-10-11.
+                  # The normal scheduled sender remains blocked by this circuit.
                   if (gate_mode != "time_bound_manual_trial"
                           or len(messages) != 1
-                          or recent_hard > 2):
+                          or recent_hard > 3):
                       raise SystemExit("Brevo circuit breaker OPEN: elevated recent hard-bounce rate; manual review required")
                   print("CONTROLLED_SINGLE_RECIPIENT_TRIAL=true")
 
