@@ -104,6 +104,19 @@ jobs:
                       or hashlib.sha256(pdf_bytes).hexdigest() != expected[2]):
                   raise SystemExit(f"Secure batch {batch_number} PDF bytes do not match approved SHA-256")
 
+              # The canonical Supabase control and local bounce/complaint suppression
+              # tables live in a private schema. This security-invoker RPC is granted
+              # only to service_role, and fails closed on any unknown or paused state.
+              def enforce_safety_gate(recipients):
+                  gate = db_request("POST", "/rest/v1/rpc/secure_outbound_safety_gate", {
+                      "p_recipients": recipients,
+                  })
+                  if not isinstance(gate, dict) or gate.get("allowed") is not True:
+                      reason = gate.get("reason", "unavailable") if isinstance(gate, dict) else "unavailable"
+                      raise SystemExit(f"Supabase secure outbound safety gate DENIED: {reason}")
+
+              enforce_safety_gate([m.get("to", "") for m in messages])
+
               # Fail closed when today's candidate limit or Brevo's actual credit balance is insufficient.
               riyadh_now = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh"))
               riyadh_midnight = riyadh_now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -241,6 +254,8 @@ jobs:
               accepted = []
               try:
                   for index, message in enumerate(messages, start=1):
+                      # Recheck global pause and suppressions before EACH individual send.
+                      enforce_safety_gate([message.get("to", "")])
                       recipient = str(message.get("to") or "").strip().lower()
                       subject = str(message.get("subject") or "").strip()
                       body = str(message.get("body") or "").strip()
