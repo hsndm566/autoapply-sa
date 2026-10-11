@@ -158,7 +158,8 @@ jobs:
                   "accepted_by_brevo": accepted[candidate],
                   "unique_provider_ids": len(ids),
                   "ids_with_provider_events": len(matched),
-                  "confirmed_delivered": count_type("delivered"),
+                  "confirmed_delivered": sum(("delivered" in event_types[mid]) and not event_types[mid].intersection({"hardbounce","hard_bounce","hardbounces"}) for mid in ids),
+                  "conflicting_delivery_and_hard_bounce": sum(("delivered" in event_types[mid]) and bool(event_types[mid].intersection({"hardbounce","hard_bounce","hardbounces"})) for mid in ids),
                   "hard_bounced": count_type("hardbounce", "hard_bounce", "hardbounces"),
                   "soft_bounced": count_type("softbounce", "soft_bounce", "softbounces"),
                   "blocked": count_type("blocked"),
@@ -173,7 +174,7 @@ jobs:
                   ids = cohort_targets[(candidate, cohort)]
                   if not ids:
                       continue
-                  without_delivery = [mid for mid in ids if "delivered" not in event_types[mid]]
+                  without_delivery = [mid for mid in ids if "delivered" not in event_types[mid] or event_types[mid].intersection({"hardbounce","hard_bounce","hardbounces"})]
                   by_cohort[candidate + "/" + cohort] = {
                       "unique_provider_ids": len(ids),
                       "confirmed_delivered": len(ids) - len(without_delivery),
@@ -191,11 +192,12 @@ jobs:
               daily[candidate] = {
                   "brevo_accepted": len(mids),
                   "provider_events_recorded": sum(mid in event_types for mid in mids),
-                  "delivered": sum("delivered" in event_types[mid] for mid in mids),
+                  "delivered": sum(("delivered" in event_types[mid]) and not event_types[mid].intersection({"hardbounce","hard_bounce","hardbounces"}) for mid in mids),
+                  "conflicting_delivery_and_hard_bounce": sum(("delivered" in event_types[mid]) and bool(event_types[mid].intersection({"hardbounce","hard_bounce","hardbounces"})) for mid in mids),
                   "deferred": sum("deferred" in event_types[mid] for mid in mids),
                   "hard_bounced": sum(bool(event_types[mid].intersection({"hardbounce", "hard_bounce", "hardbounces"})) for mid in mids),
                   "blocked": sum("blocked" in event_types[mid] for mid in mids),
-                  "without_delivery_event": sum("delivered" not in event_types[mid] for mid in mids),
+                  "without_delivery_event": sum("delivered" not in event_types[mid] or bool(event_types[mid].intersection({"hardbounce","hard_bounce","hardbounces"})) for mid in mids),
                   "soft_bounced": sum(bool(event_types[mid].intersection({"softbounce", "soft_bounce", "softbounces"})) for mid in mids),
                   "event_types_by_message": [{"message_id": mid, "events": sorted(event_types[mid]), "bounce_reason": bounce_explanations.get(mid, [])} for mid in sorted(mids)],
                   "other_event_types": sorted(set().union(*(event_types[mid] for mid in mids)) - {"delivered", "deferred", "hardbounce", "hard_bounce", "blocked"}),
