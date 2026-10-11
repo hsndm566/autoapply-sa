@@ -1,5 +1,5 @@
 {
-  "as_of_utc": "2026-10-11T10:58:00.594046+00:00",
+  "as_of_utc": "2026-10-11T11:00:13.000640+00:00",
   "brevo_events_queried": 338,
   "by_cohort": {
     "Sultan Saud/additional_oct9": {
@@ -20,8 +20,8 @@
       "confirmed_delivered": 9,
       "deferred_without_delivery": 0,
       "hard_bounce_without_delivery": 1,
-      "unique_provider_ids": 10,
-      "without_delivery_event": 1
+      "unique_provider_ids": 11,
+      "without_delivery_event": 2
     },
     "Yasmin Adam/original_oct6": {
       "confirmed_delivered": 47,
@@ -46,17 +46,17 @@
       "unique_provider_ids": 67
     },
     "Yasmin Adam": {
-      "accepted_by_brevo": 60,
+      "accepted_by_brevo": 61,
       "blocked": 0,
       "confirmed_delivered": 56,
       "conflicting_delivery_and_hard_bounce": 0,
       "deferred": 0,
       "hard_bounced": 2,
       "ids_with_provider_events": 60,
-      "ids_without_provider_events": 0,
+      "ids_without_provider_events": 1,
       "invalid": 0,
       "soft_bounced": 2,
-      "unique_provider_ids": 60
+      "unique_provider_ids": 61
     }
   },
   "daily": {
@@ -149,7 +149,7 @@
     },
     "Yasmin Adam": {
       "blocked": 0,
-      "brevo_accepted": 5,
+      "brevo_accepted": 6,
       "conflicting_delivery_and_hard_bounce": 0,
       "deferred": 0,
       "delivered": 4,
@@ -198,6 +198,11 @@
             "requests"
           ],
           "message_id": "<202610111057.52619629236@smtp-relay.mailin.fr>"
+        },
+        {
+          "bounce_reason": [],
+          "events": [],
+          "message_id": "<202610111059.74686352520@smtp-relay.mailin.fr>"
         }
       ],
       "hard_bounced": 1,
@@ -205,9 +210,9 @@
         "hardbounces",
         "requests"
       ],
-      "provider_events_recorded": 5,
+      "provider_events_recorded": 6,
       "soft_bounced": 0,
-      "without_delivery_event": 1
+      "without_delivery_event": 2
     }
   },
   "event_window_utc": [
