@@ -1,1 +1,1 @@
-2026-10-11 second independent read-only delivery check after two one-time scoped candidate applications; no further emails authorized.
+2026-10-11 final read-only reconciliation: treat any hardbounce after delivered as conflicting/failed, not clean delivery. No additional outbound sends.
