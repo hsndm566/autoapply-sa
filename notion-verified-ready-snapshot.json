@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-11T11:01:01.934Z",
+  "generated_at_utc": "2026-10-12T07:53:54.474Z",
   "eligible_contacts": [],
-  "note": "Verified live Notion query: zero Ready contacts after four singleton batches. This intentionally denies all outbound sends."
+  "note": "Live Notion CRM query on 2026-10-12 found zero Send Status=Ready rows. All outbound denied. Global sending pause remains in effect."
 }
