@@ -1,44 +1,31 @@
-# AutoApply SA — First-party recruitment prospects (2026-10-12)
+# AutoApply SA — first-party recruitment audit (2026-10-12)
 
-**NON-SENDING RESEARCH ONLY. This file is not the authorized Notion Ready snapshot. Do not import to the sender, stage, or dispatch from this file.**
+> **DO NOT SEND OR STAGE. These are NOT fresh leads.** Supabase secure-batch history revealed that **all four researched employer addresses had already been contacted**. The earlier version of this research document incorrectly treated them as uncontacted prospects based on insufficient dedup checks.
 
-Live Notion collection: `collection://e22e718f-3141-41a9-aa5d-40fdc3aa98f9`.
+Live Notion CRM: `collection://e22e718f-3141-41a9-aa5d-40fdc3aa98f9`.
 
-At research time, the live Notion SQL query returned **0** records with `Send Status = Ready`. Supabase `autoapply_private.email_sending_control` was `paused=true`, reason `new-installation`. A subsequent Notion deduplication query was blocked by the Notion query quota; therefore **all these entries remain unapproved/unstaged**, even though the employer-published email addresses were observed on first-party websites.
+| Candidate | Employer | Official recruitment email | Verified first-party source | Actual outcome / safety status |
+|---|---|---|---|---|
+| Yasmin Adam | Saudi Autism Society | jobs@saautism.org.sa | https://saautism.org.sa/1/وظائف-شاغرة/ | Included in 2026-10-06 secure batch, Brevo **accepted only**; delivery unconfirmed. New Notion row: **Hold, Do Not Send** |
+| Sultan Saud | Arabian House Industries | careers@ahi.com.sa | https://www.ahi.com.sa/careers.html | Included in 2026-10-09 secure batch, Brevo **accepted only**; delivery unconfirmed. New Notion row: **Hold, Do Not Send** |
+| Sultan Saud | PAC Environmental and Facility Services | hr@pac.com.sa | https://pac.com.sa/en/careers | Included in 2026-10-09 secure batch, Brevo **accepted only**; delivery unconfirmed. Official page also says there are **no current openings**. New Notion row: **Hold, Do Not Send** |
+| Sultan Saud | Food Sources | careers@foodsources.com.sa | https://www.foodsources.com.sa/en/contact | Secure batch October 11 **hard bounced (550 5.1.1 mailbox does not exist)**; existing Notion row: **Bounced, Invalid, Do Not Send, permanently suppressed** |
 
-## Candidate Yasmin Adam — sender apply@hsndm.tech
+## Verified Notion pages
 
-1. **Saudi Autism Society** — `jobs@saautism.org.sa`
-   - Employer-published recruitment email on official jobs page: https://saautism.org.sa/1/وظائف-شاغرة/
-   - Relevance: autism/psychology/support-related roles; exact vacancy, supervision eligibility and SCFHS requirements still need validation.
-   - Status: Research only; Notion, entire send history, and provider-level suppression/dedup not cleared.
+- Saudi Autism Society: https://app.notion.com/p/3f7b3173524581169c78dd5eb4f88a0a
+- Arabian House Industries: https://app.notion.com/p/3f7b3173524581b28237d4d7b1c3a2a6
+- PAC: https://app.notion.com/p/3f7b3173524581dabbbad290219480fa
+- Food Sources (existing bounced row): https://app.notion.com/p/3f6b3173524581ad9326cc1181bc3e38
 
-## Candidate Sultan Saud — sender apply1@hsndm.tech
+The three previously missing records were added under the same Notion CRM and **verified by fetching them after creation**. Status `Hold`, `Do Not Send = true` ensures none can enter the `Ready` secure outbound queue. Their first-party `Verification = Current official` refers only to the employer-published recruitment address, **not** to message deliverability.
 
-2. **Arabian House Industries (AHI)** — `careers@ahi.com.sa`
-   - Employer-published recruitment email: https://www.ahi.com.sa/careers.html
-   - Relevance: process engineering, manufacturing operations, supply chain, quality systems. Page explicitly welcomes early-career applications; Riyadh roles.
-   - Status: Research only; Notion, entire send history, and provider-level suppression/dedup not cleared.
+## Sending controls and audit
 
-3. **Food Sources Trading** — `careers@foodsources.com.sa`
-   - Employer-published careers contact: https://www.foodsources.com.sa/en/contact
-   - Relevance: supply chain and operations; no specific open position validated.
-   - Status: Research only; Notion, entire send history, and provider-level suppression/dedup not cleared.
+- The 2026-10-12 live Notion SQL query returned zero records marked `Ready` before Notion's later detailed-query usage cap.
+- Supabase global control was verified `paused = true`, `pause_reason = new-installation`.
+- The secure batch result for these prior messages reports Brevo *accepted*, not *delivered*; `autoapply_private.brevo_delivery_events` had zero recorded events when checked.
+- These recipient addresses did not appear in GitHub `tracking.csv`, showing **tracking.csv alone is not a reliable dedup source**.
+- The four contacts must **not** be automatically promoted to Ready or re-sent. Only newly discovered, independently verified, never-contacted roles and recruitment addresses may be eligible after the full historical, Notion, provider suppression, and safety review.
 
-4. **PAC** — `hr@pac.com.sa`
-   - Employer-published recruitment contact: https://pac.com.sa/en/careers
-   - Relevance: operational services, quality, process improvement.
-   - **Caution: the employer's careers page explicitly says there are no available positions currently**; deprioritize.
-   - Status: Research only; Notion, entire send history, and provider-level suppression/dedup not cleared.
-
-## Checks performed
-
-- These exact four recipient emails were not found in the inspected GitHub `tracking.csv` (522 lines including header). This is not sufficient deduplication.
-- No matches to these addresses / named employers were returned from the inspected private Supabase employer contacts query.
-- The candidate/recipient dedup across all prior secure batches, Notion, historical records, and Brevo blocked/unsubscribed lists is **not complete**.
-- No verification of mailbox deliverability, provider suppression, CV bytes, or up-to-date vacancy was performed.
-- No emails were sent, staged, or queued from this research.
-
-## Required before future outreach
-
-Re-query live Notion and read exact records; finish cross-system candidate/company and exact-email dedup, including Brevo suppression and delivery events; check role/licensing fit; ensure PDF SHA-256 and candidate/sender pairing; obtain valid `Ready` Notion records only with evidence; confirm global sending pause is lifted through authorized operations; refresh the approved empty-or-eligible snapshot from Notion; use secure capped pacing and verify outcomes.
+No messages were sent by this audit.
