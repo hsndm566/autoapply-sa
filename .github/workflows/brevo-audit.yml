@@ -1,10 +1,16 @@
 name: Brevo outbound audit
 
 on:
+  schedule:
+    # 08:40 Asia/Riyadh, independent of sending and never unpauses it.
+    - cron: "40 5 * * *"
   push:
     branches: [main]
     paths:
       - "brevo-audit-trigger.txt"
+      - ".github/workflows/brevo-audit.yml"
+      - "scripts/reconcile_brevo_events.py"
+      - "scripts/test_reconcile_brevo_events.py"
 
 permissions:
   contents: write
@@ -217,6 +223,12 @@ jobs:
               f.write("\n")
           print(json.dumps(report, sort_keys=True))
           PY
+      - name: Validate reconciliation logic and persist real provider evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s scripts -p 'test_reconcile_brevo_events.py' -v
+          python scripts/reconcile_brevo_events.py --apply
       - name: Persist sanitized audit
         run: |
           git config user.name "AutoApply SA audit"
