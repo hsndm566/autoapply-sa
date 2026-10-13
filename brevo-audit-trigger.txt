@@ -1,1 +1,3 @@
 2026-10-11 14:02 Riyadh — final follow-up read-only audit for The World Academy pending Brevo delivery; all permits revoked, sender paused.
+
+2026-10-13: run read-only Brevo audit and secured delivery-event reconciliation. Sending remains globally paused.
