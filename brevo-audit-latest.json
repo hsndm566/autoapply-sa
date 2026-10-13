@@ -1,6 +1,6 @@
 {
-  "as_of_utc": "2026-10-11T11:01:24.650865+00:00",
-  "brevo_events_queried": 341,
+  "as_of_utc": "2026-10-13T14:32:43.445167+00:00",
+  "brevo_events_queried": 355,
   "by_cohort": {
     "Sultan Saud/additional_oct9": {
       "confirmed_delivered": 11,
@@ -62,167 +62,34 @@
   "daily": {
     "Sultan Saud": {
       "blocked": 0,
-      "brevo_accepted": 6,
-      "conflicting_delivery_and_hard_bounce": 1,
-      "deferred": 1,
-      "delivered": 4,
-      "event_types_by_message": [
-        {
-          "bounce_reason": [
-            {
-              "event": "softbounces",
-              "reason": "Message delivery failed"
-            }
-          ],
-          "events": [
-            "delivered",
-            "requests",
-            "softbounces"
-          ],
-          "message_id": "<202610110815.44100325959@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [],
-          "events": [
-            "delivered",
-            "opened",
-            "requests"
-          ],
-          "message_id": "<202610110815.80325594065@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [],
-          "events": [
-            "deferred",
-            "delivered",
-            "requests"
-          ],
-          "message_id": "<202610110816.66318260838@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [
-            {
-              "event": "hardbounces",
-              "reason": "550-5.1.1 The email account that you tried to reach does not exist. Please try\n   550-5.1.1 double-checking the recipient's email address for typos or\n   550-5.1.1 unnecessary spac"
-            }
-          ],
-          "events": [
-            "hardbounces",
-            "requests"
-          ],
-          "message_id": "<202610110816.82160692586@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [
-            {
-              "event": "hardbounces",
-              "reason": "email account that you tried to reach does not exist"
-            }
-          ],
-          "events": [
-            "delivered",
-            "hardbounces",
-            "requests"
-          ],
-          "message_id": "<202610110843.98121668993@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [],
-          "events": [
-            "delivered",
-            "opened",
-            "requests"
-          ],
-          "message_id": "<202610111055.65099687804@smtp-relay.mailin.fr>"
-        }
-      ],
-      "hard_bounced": 2,
-      "other_event_types": [
-        "hardbounces",
-        "opened",
-        "requests",
-        "softbounces"
-      ],
-      "provider_events_recorded": 6,
-      "soft_bounced": 1,
-      "without_delivery_event": 2
+      "brevo_accepted": 0,
+      "conflicting_delivery_and_hard_bounce": 0,
+      "deferred": 0,
+      "delivered": 0,
+      "event_types_by_message": [],
+      "hard_bounced": 0,
+      "other_event_types": [],
+      "provider_events_recorded": 0,
+      "soft_bounced": 0,
+      "without_delivery_event": 0
     },
     "Yasmin Adam": {
       "blocked": 0,
-      "brevo_accepted": 6,
+      "brevo_accepted": 0,
       "conflicting_delivery_and_hard_bounce": 0,
       "deferred": 0,
-      "delivered": 5,
-      "event_types_by_message": [
-        {
-          "bounce_reason": [],
-          "events": [
-            "delivered",
-            "requests"
-          ],
-          "message_id": "<202610110814.10502246145@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [
-            {
-              "event": "hardbounces",
-              "reason": "550 No Such User Here"
-            }
-          ],
-          "events": [
-            "hardbounces",
-            "requests"
-          ],
-          "message_id": "<202610110815.97766579956@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [],
-          "events": [
-            "delivered",
-            "requests"
-          ],
-          "message_id": "<202610110842.70711883213@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [],
-          "events": [
-            "delivered",
-            "requests"
-          ],
-          "message_id": "<202610111052.81094733781@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [],
-          "events": [
-            "delivered",
-            "requests"
-          ],
-          "message_id": "<202610111057.52619629236@smtp-relay.mailin.fr>"
-        },
-        {
-          "bounce_reason": [],
-          "events": [
-            "delivered",
-            "opened",
-            "requests"
-          ],
-          "message_id": "<202610111059.74686352520@smtp-relay.mailin.fr>"
-        }
-      ],
-      "hard_bounced": 1,
-      "other_event_types": [
-        "hardbounces",
-        "opened",
-        "requests"
-      ],
-      "provider_events_recorded": 6,
+      "delivered": 0,
+      "event_types_by_message": [],
+      "hard_bounced": 0,
+      "other_event_types": [],
+      "provider_events_recorded": 0,
       "soft_bounced": 0,
-      "without_delivery_event": 1
+      "without_delivery_event": 0
     }
   },
   "event_window_utc": [
     "2026-10-05",
-    "2026-10-11"
+    "2026-10-13"
   ],
-  "today_riyadh": "2026-10-11"
+  "today_riyadh": "2026-10-13"
 }
