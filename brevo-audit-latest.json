@@ -1,5 +1,5 @@
 {
-  "as_of_utc": "2026-10-22T10:34:53.545821+00:00",
+  "as_of_utc": "2026-10-23T10:27:48.993011+00:00",
   "brevo_events_queried": 363,
   "by_cohort": {
     "Sultan Saud/additional_oct9": {
@@ -89,7 +89,7 @@
   },
   "event_window_utc": [
     "2026-10-05",
-    "2026-10-22"
+    "2026-10-23"
   ],
-  "today_riyadh": "2026-10-22"
+  "today_riyadh": "2026-10-23"
 }
