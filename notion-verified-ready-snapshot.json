@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-13T14:37:46.201Z",
+  "generated_at_utc": "2026-10-24T02:34:42.923Z",
   "eligible_contacts": [],
-  "note": "Live Notion Contacts CRM query returned zero Ready records on 2026-10-13. Supabase global pause must remain enforced. This snapshot authorizes no outbound messages."
+  "note": "Live Notion query returned zero eligible Current official + Ready + Do Not Send=false records on 2026-10-24. Supabase global outbound pause remains enabled. This snapshot authorizes ZERO messages."
 }
