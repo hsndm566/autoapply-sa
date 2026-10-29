@@ -17,7 +17,7 @@ Flow (per Claude's P1: verify before + after, never fight anti-bot):
 
 Returns dict: {ok, submitted, pre_verified, post_verified, url, note}
 """
-import os, re, time, requests
+import os, re, time, tempfile, requests
 import captcha_solver
 
 BB_KEY = os.environ.get("BROWSERBASE_API_KEY", "")
@@ -38,6 +38,50 @@ def _connect(sid):
         headers={"x-bb-api-key": BB_KEY}, timeout=20).json()
     return info.get("connectUrl")
 
+def _extract_captcha_answer(page):
+    selectors = [
+        'img[src*="captcha" i]',
+        'img[id*="captcha" i]',
+        'img[class*="captcha" i]',
+        'canvas[id*="captcha" i]',
+        'canvas[class*="captcha" i]',
+    ]
+    image_path = None
+    try:
+        for sel in selectors:
+            el = page.query_selector(sel)
+            if el:
+                fd, image_path = tempfile.mkstemp(suffix=".png")
+                os.close(fd)
+                el.screenshot(path=image_path)
+                value = captcha_solver.solve_text_captcha(image_path).strip()
+                return value
+    except Exception:
+        return ""
+    finally:
+        if image_path and os.path.exists(image_path):
+            try:
+                os.remove(image_path)
+            except Exception:
+                pass
+    return ""
+
+def _fill_captcha_field(page, value):
+    field_selectors = [
+        'input[name*="captcha" i]',
+        'input[id*="captcha" i]',
+        'input[placeholder*="captcha" i]',
+        'textarea[name*="captcha" i]',
+        'textarea[id*="captcha" i]',
+        'textarea[placeholder*="captcha" i]',
+    ]
+    for sel in field_selectors:
+        el = page.query_selector(sel)
+        if el:
+            el.fill(value)
+            return True
+    return False
+
 def submit_application(url, cv_data=None, headless=True):
     """Real Breezy-style portal submit. cv_data = {cName,cEmail,cPhoneNumber,cCoverLetter}.
     Returns dict with pre/post verification."""
@@ -57,12 +101,22 @@ def submit_application(url, cv_data=None, headless=True):
             page = b.new_page()
             page.goto(url, timeout=30000); page.wait_for_timeout(6000)
             page.click('a:has-text("Apply")'); page.wait_for_timeout(8000)
-            html = page.content()
-            has_captcha = 'recaptcha' in html.lower() or 'captcha' in html.lower() or 'hcaptcha' in html.lower()
-            if has_captcha:
+            html = page.content().lower()
+            has_recaptcha = 'recaptcha' in html or 'hcaptcha' in html
+            saw_plain_captcha = ('captcha' in html) and not has_recaptcha
+            solved_plain_captcha = False
+            if has_recaptcha:
                 b.close()
                 return {"ok": True, "submitted": False, "pre_verified": False,
                         "post_verified": False, "note": "CAPTCHA wall — degrade to email"}
+            if saw_plain_captcha:
+                captcha_value = _extract_captcha_answer(page)
+                if captcha_value and _fill_captcha_field(page, captcha_value):
+                    solved_plain_captcha = True
+                else:
+                    b.close()
+                    return {"ok": True, "submitted": False, "pre_verified": False,
+                            "post_verified": False, "note": "CAPTCHA wall — degrade to email"}
             # fill + verify each field
             pre_ok = True
             for fld, val in cv_data.items():
@@ -86,10 +140,24 @@ def submit_application(url, cv_data=None, headless=True):
             post = page.content()
             post_ok = 'apply/submitted' in page.url or any(
                 w in post.lower() for w in ['thank','received','submitted','confirmation','success'])
+            if solved_plain_captcha and not post_ok:
+                captcha_value = _extract_captcha_answer(page)
+                if captcha_value and _fill_captcha_field(page, captcha_value):
+                    clicked_retry = page.evaluate("""() => {
+                        const btns=[...document.querySelectorAll('button')];
+                        const sub=btns.find(b=>/submit|apply|send|next/i.test(b.textContent)||b.type==='submit');
+                        if(sub){sub.click(); return sub.textContent.trim();}
+                        return 'NO_BTN';
+                    }""")
+                    page.wait_for_timeout(9000)
+                    post = page.content()
+                    post_ok = 'apply/submitted' in page.url or any(
+                        w in post.lower() for w in ['thank','received','submitted','confirmation','success'])
+                    clicked = f"{clicked} retry={clicked_retry}"
             b.close()
             return {"ok": True, "submitted": post_ok, "pre_verified": pre_ok,
                     "post_verified": post_ok, "url": page.url if False else url,
-                    "note": f"submit_clicked={clicked}, captcha_free=True"}
+                    "note": f"submit_clicked={clicked}, captcha_free={not saw_plain_captcha}"}
     except Exception as e:
         return {"ok": False, "submitted": False, "note": f"err: {e}"}
     finally:
