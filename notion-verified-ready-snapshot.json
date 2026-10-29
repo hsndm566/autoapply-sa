@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-28T07:07:04.009Z",
+  "generated_at_utc": "2026-10-29T07:25:40.488Z",
   "eligible_contacts": [],
-  "note": "2026-10-28 live Notion CRM grouped-status query returned no Ready records. No recipients authorized. Supabase global outbound pause remains enabled (new-installation). No batches staged and no workflow triggered."
+  "note": "2026-10-29 live Notion SQL audit: 674 CRM rows; 0 Send Status=Ready. No recipients authorized. Supabase global sending pause=true (new-installation); 0 queued batches; no workflow triggered."
 }
