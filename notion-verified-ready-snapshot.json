@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-29T07:25:40.488Z",
+  "generated_at_utc": "2026-10-30T07:54:43.065Z",
   "eligible_contacts": [],
-  "note": "2026-10-29 live Notion SQL audit: 674 CRM rows; 0 Send Status=Ready. No recipients authorized. Supabase global sending pause=true (new-installation); 0 queued batches; no workflow triggered."
+  "note": "2026-10-30 live Notion SQL audit: 772 CRM rows; 0 Send Status=Ready. No recipients authorized. Supabase global sending pause=true (new-installation); 0 active batches; no workflow triggered."
 }
