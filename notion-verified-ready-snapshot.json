@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-10-30T07:54:43.065Z",
+  "generated_at_utc": "2026-10-31T07:23:54.500Z",
   "eligible_contacts": [],
-  "note": "2026-10-30 live Notion SQL audit: 772 CRM rows; 0 Send Status=Ready. No recipients authorized. Supabase global sending pause=true (new-installation); 0 active batches; no workflow triggered."
+  "note": "2026-10-31 live Notion Ready query returned 0 eligible records. Three newly verified Sultan prospects were added as Hold only; none staged. Supabase global sending pause=true (new-installation); all 37 historical secure batches are sent and no batch is queued or active. No workflow triggered."
 }
