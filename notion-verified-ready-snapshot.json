@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-11-02T07:28:02.275Z",
+  "generated_at_utc": "2026-11-03T07:26:15.173Z",
   "eligible_contacts": [],
-  "note": "Fresh live query of the authorized AutoApply SA — Contacts CRM on 2026-11-02 returned zero records with Send Status='Ready'. The Stepping Stones historical contact was recorded as Hold/Do Not Send for dedup; Petron remains Hold. No contacts were staged."
+  "note": "Fresh live query of the authorized AutoApply SA — Contacts CRM on 2026-11-03 returned zero records satisfying the required Ready, Current official, unsuppressed, recent-verification, source, role, and candidate-sender eligibility checks. No contacts were staged."
 }
