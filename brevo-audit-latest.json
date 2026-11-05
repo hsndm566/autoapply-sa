@@ -1,6 +1,6 @@
 {
-  "as_of_utc": "2026-11-04T13:14:15.494586+00:00",
-  "brevo_events_queried": 369,
+  "as_of_utc": "2026-11-05T13:27:30.602659+00:00",
+  "brevo_events_queried": 118,
   "by_cohort": {
     "Sultan Saud/additional_oct9": {
       "confirmed_delivered": 11,
@@ -10,11 +10,11 @@
       "without_delivery_event": 6
     },
     "Sultan Saud/original_oct6": {
-      "confirmed_delivered": 41,
-      "deferred_without_delivery": 2,
-      "hard_bounce_without_delivery": 7,
+      "confirmed_delivered": 0,
+      "deferred_without_delivery": 0,
+      "hard_bounce_without_delivery": 0,
       "unique_provider_ids": 50,
-      "without_delivery_event": 9
+      "without_delivery_event": 50
     },
     "Yasmin Adam/additional_oct9": {
       "confirmed_delivered": 10,
@@ -24,38 +24,38 @@
       "without_delivery_event": 1
     },
     "Yasmin Adam/original_oct6": {
-      "confirmed_delivered": 47,
+      "confirmed_delivered": 0,
       "deferred_without_delivery": 0,
-      "hard_bounce_without_delivery": 1,
+      "hard_bounce_without_delivery": 0,
       "unique_provider_ids": 50,
-      "without_delivery_event": 3
+      "without_delivery_event": 50
     }
   },
   "campaign": {
     "Sultan Saud": {
       "accepted_by_brevo": 67,
       "blocked": 0,
-      "confirmed_delivered": 52,
+      "confirmed_delivered": 11,
       "conflicting_delivery_and_hard_bounce": 2,
-      "deferred": 5,
-      "hard_bounced": 11,
-      "ids_with_provider_events": 67,
-      "ids_without_provider_events": 0,
+      "deferred": 1,
+      "hard_bounced": 4,
+      "ids_with_provider_events": 18,
+      "ids_without_provider_events": 49,
       "invalid": 0,
-      "soft_bounced": 6,
+      "soft_bounced": 4,
       "unique_provider_ids": 67
     },
     "Yasmin Adam": {
       "accepted_by_brevo": 61,
       "blocked": 0,
-      "confirmed_delivered": 57,
+      "confirmed_delivered": 10,
       "conflicting_delivery_and_hard_bounce": 0,
       "deferred": 0,
-      "hard_bounced": 2,
-      "ids_with_provider_events": 61,
-      "ids_without_provider_events": 0,
+      "hard_bounced": 1,
+      "ids_with_provider_events": 19,
+      "ids_without_provider_events": 42,
       "invalid": 0,
-      "soft_bounced": 2,
+      "soft_bounced": 0,
       "unique_provider_ids": 61
     }
   },
@@ -88,8 +88,8 @@
     }
   },
   "event_window_utc": [
-    "2026-10-06",
-    "2026-11-04"
+    "2026-10-07",
+    "2026-11-05"
   ],
-  "today_riyadh": "2026-11-04"
+  "today_riyadh": "2026-11-05"
 }
