@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-11-08T07:29:48.685Z",
+  "generated_at_utc": "2026-11-08T07:39:53.156Z",
   "eligible_contacts": [],
-  "note": "Fresh live Notion CRM query for Send Status = Ready returned zero rows. No records met the eligibility gate; nothing was staged."
+  "note": "Fresh live Notion CRM query for Send Status = Ready returned zero rows after research-only CRM updates. No records met the eligibility gate; nothing was staged."
 }
