@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-11-13T07:16:02Z",
+  "generated_at_utc": "2026-11-13T07:23:31Z",
   "eligible_contacts": [],
-  "note": "Live Notion data source query on 2026-11-13 confirmed 780 CRM rows, 0 Send Status=Ready rows, and 43 Current official rows. No record met the full eligibility gate; no contacts staged."
+  "note": "Live Notion data source query on 2026-11-13 confirmed 780 CRM rows, 0 Send Status=Ready rows, and 43 Current official rows. Candidate-specific current official records verified within 30 days are all Hold; no contacts meet the full eligibility gate, so none are staged."
 }
