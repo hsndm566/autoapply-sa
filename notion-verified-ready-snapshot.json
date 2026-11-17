@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4",
-  "generated_at_utc": "2026-11-15T07:14:47Z",
+  "generated_at_utc": "2026-11-17T07:23:35Z",
   "eligible_contacts": [],
-  "note": "Live Notion data source query on 2026-11-15 confirmed 780 CRM rows, 43 Current official rows, and 0 Send Status=Ready rows. Yasmin has 49 CRM rows with 2 Current official records verified within 30 days; Sultan has 24 CRM rows with 6 Current official records verified within 30 days. All 8 recent candidate-specific Current official records are Hold, so no contacts meet the full eligibility gate and none are staged."
+  "note": "Live Notion data source query on 2026-11-17 returned zero rows matching Verification=Current official, Send Status=Ready, and Do Not Send=false. No contacts staged."
 }
