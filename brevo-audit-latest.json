@@ -1,5 +1,5 @@
 {
-  "as_of_utc": "2026-11-16T13:56:38.153182+00:00",
+  "as_of_utc": "2026-11-17T14:50:36.698794+00:00",
   "brevo_events_queried": 16,
   "by_cohort": {
     "Sultan Saud/additional_oct9": {
@@ -52,8 +52,8 @@
       "conflicting_delivery_and_hard_bounce": 0,
       "deferred": 0,
       "hard_bounced": 0,
-      "ids_with_provider_events": 5,
-      "ids_without_provider_events": 56,
+      "ids_with_provider_events": 6,
+      "ids_without_provider_events": 55,
       "invalid": 0,
       "soft_bounced": 0,
       "unique_provider_ids": 61
@@ -88,8 +88,8 @@
     }
   },
   "event_window_utc": [
-    "2026-10-18",
-    "2026-11-16"
+    "2026-10-19",
+    "2026-11-17"
   ],
-  "today_riyadh": "2026-11-16"
+  "today_riyadh": "2026-11-17"
 }
