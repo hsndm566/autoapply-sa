@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4?pvs=204",
-  "generated_at_utc": "2026-11-19T07:37:48Z",
+  "generated_at_utc": "2026-11-19T08:00:58.718Z",
   "eligible_contacts": [],
-  "note": "Live Notion Contacts CRM query completed on 2026-11-19. Zero rows for the authorized candidate senders satisfy the required Current official + Ready + Do Not Send=false + Recruitment/Careers + exact email + HTTPS first-party source + Last Verified within 30 days criteria. No contacts staged and no batch may be triggered."
+  "note": "Live Notion Ready to Send view queried on 2026-11-19. Zero active rows returned. No contacts staged; no batch may be triggered."
 }
