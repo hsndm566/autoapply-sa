@@ -112,7 +112,7 @@ jobs:
                       "p_recipients": recipients,
                       "p_candidate": batch["candidate_name"],
                   })
-                  if not isinstance(gate, dict) or gate.get("allowed") is not True:
+                  if not isinstance(gate, dict) or gate.get("allowed") is not True or gate.get("reason") != "clear":
                       reason = gate.get("reason", "unavailable") if isinstance(gate, dict) else "unavailable"
                       raise SystemExit(f"Supabase secure outbound safety gate DENIED: {reason}")
                   return gate
@@ -156,7 +156,7 @@ jobs:
                           raise SystemExit("NOTION_SOURCE_GATE_DENIED: contact not uniquely Current official + Ready + unsuppressed")
 
               require_notion_verified_ready(messages)
-              gate_mode = enforce_safety_gate([m.get("to", "") for m in messages]).get("reason")
+              enforce_safety_gate([m.get("to", "") for m in messages])
 
               # Fail closed when today's candidate limit or Brevo's actual credit balance is insufficient.
               riyadh_now = datetime.now(timezone.utc).astimezone(ZoneInfo("Asia/Riyadh"))
@@ -257,15 +257,7 @@ jobs:
                   for events in requested
               )
               if len(requested) >= 5 and recent_hard >= 2 and recent_hard / len(requested) >= 0.05:
-                  # A manually authorized single-recipient, short-lived permit
-                  # may proceed only while no further hard bounces have occurred
-                  # beyond the three already quarantined on 2026-10-11.
-                  # The normal scheduled sender remains blocked by this circuit.
-                  if (gate_mode != "time_bound_manual_trial"
-                          or len(messages) != 1
-                          or recent_hard > 3):
-                      raise SystemExit("Brevo circuit breaker OPEN: elevated recent hard-bounce rate; manual review required")
-                  print("CONTROLLED_SINGLE_RECIPIENT_TRIAL=true")
+                  raise SystemExit("Brevo circuit breaker OPEN: elevated recent hard-bounce rate; manual review required")
 
               # Detect candidate-to-company AND candidate-to-address repeats from every
               # previous provider-accepted secure batch, even when the prior batch failed.
