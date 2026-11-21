@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4?pvs=204",
-  "generated_at_utc": "2026-11-21T07:15:42.416Z",
+  "generated_at_utc": "2026-11-21T07:29:50.057Z",
   "eligible_contacts": [],
-  "note": "Live Notion AutoApply SA — Contacts CRM queried on 2026-11-21 using the strict current-official + Ready + Do Not Send=false + employer-published recruitment/careers email + current source URL + Last Verified within 30 days + candidate sender + relevant role criteria. Zero eligible rows. No contacts staged; no batch may be triggered."
+  "note": "Final live Notion query on 2026-11-21 returned zero eligible rows under strict Current official + Ready + Do Not Send=false + employer-published recruitment/careers email + current source URL + Last Verified within 30 days + correct candidate sender + relevant role criteria. No contacts staged; no batch may be triggered."
 }
