@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4?pvs=204",
-  "generated_at_utc": "2026-11-22T07:13:40.394Z",
+  "generated_at_utc": "2026-11-22T07:32:54Z",
   "eligible_contacts": [],
-  "note": "Final live Notion query on 2026-11-22 returned zero rows with Send Status=Ready. Strict eligibility also requires Verification=Current official, Do Not Send=false, an exact employer-published recruitment/careers email and current HTTPS source URL, Last Verified within 30 days, a relevant role, and the correct candidate sender. No contacts staged; no batch may be triggered."
+  "note": "Live Notion query on 2026-11-22 returned zero eligible rows. No contacts staged. This snapshot contains only rows that satisfy the strict current-official, Ready, Do Not Send=false, current first-party recruitment/careers email and HTTPS source URL, Last Verified within 30 days, relevant role, and exact candidate sender requirements."
 }
