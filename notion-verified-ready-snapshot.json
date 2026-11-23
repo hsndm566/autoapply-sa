@@ -2,7 +2,6 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4?pvs=204",
-  "generated_at_utc": "2026-11-23T07:39:30Z",
-  "eligible_contacts": [],
-  "note": "Live Notion query on 2026-11-23 returned zero eligible rows for Yasmin Adam and Sultan Saud. JPGS is recorded as Hold and is excluded. No contacts staged."
+  "generated_at_utc": "2026-11-23T08:30:53.829Z",
+  "eligible_contacts": []
 }
