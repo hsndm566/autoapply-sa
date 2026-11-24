@@ -28,12 +28,20 @@ jobs:
         run: |
           test -n "$SUPABASE_URL"
           test -n "$SUPABASE_SERVICE_ROLE_KEY"
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          host = urlparse(os.environ["SUPABASE_URL"]).hostname
+          if host != "ufyvelnxexjvlibhweau.supabase.co":
+              raise SystemExit("SUPABASE_URL must target the authorized live Supabase project")
+          PY
 
       - name: Send queued tailored batches with pacing
         shell: bash
         run: |
           python - <<'PY'
           import json
+          import csv
           import base64
           import hashlib
           from zoneinfo import ZoneInfo
@@ -195,7 +203,7 @@ jobs:
               offset = 0
               while True:
                   blocked_req = urllib.request.Request(
-                      "https://api.brevo.com/v3/smtp/blockedContacts?limit=100&offset=" + str(offset),
+                      "https://api.brevo.com/v3/smtp/blockedContacts?limit=50&offset=" + str(offset),
                       headers={"api-key": brevo_key, "Accept": "application/json"},
                   )
                   with urllib.request.urlopen(blocked_req, timeout=30) as response:
@@ -267,6 +275,17 @@ jobs:
               )
               previous_addresses = set()
               previous_companies = set()
+              # tracking.csv is a second historical recipient ledger. Require its
+              # schema and include all rows for this candidate sender in exact-email dedup.
+              with open("tracking.csv", newline="", encoding="utf-8-sig") as tracking_file:
+                  tracking_reader = csv.DictReader(tracking_file)
+                  if not tracking_reader.fieldnames or not {"recipient_email", "sender_used"}.issubset(set(tracking_reader.fieldnames)):
+                      raise SystemExit("tracking.csv schema unavailable; refusing to send")
+                  for tracked in tracking_reader:
+                      tracked_sender = str(tracked.get("sender_used") or "").strip().lower()
+                      tracked_email = str(tracked.get("recipient_email") or "").strip().lower()
+                      if tracked_sender == str(batch["sender_email"]).strip().lower() and tracked_email:
+                          previous_addresses.add(tracked_email)
               def normalize_company(value):
                   return re.sub(r"[^a-z0-9]+", "", str(value or "").casefold())
               for old in history:
