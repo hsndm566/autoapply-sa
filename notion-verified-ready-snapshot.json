@@ -2,6 +2,23 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4?pvs=204",
-  "generated_at_utc": "2026-11-25T07:34:47.000Z",
-  "eligible_contacts": []
+  "generated_at_utc": "2026-11-25T07:57:37.000Z",
+  "eligible_contacts": [
+    {
+      "Company": "Abrican",
+      "Email": "recruiting@abrican.com.sa",
+      "Sender": "apply1@hsndm.tech",
+      "Contact Type": "Recruitment",
+      "Verification": "Current official",
+      "Send Status": "Ready",
+      "Do Not Send": "__NO__",
+      "Source": "Employer careers page — Recruitment enquiries",
+      "Source URL": "https://www.abrican.com/careers",
+      "Evidence": "Official careers page lists recruiting@abrican.com.sa under Recruitment enquiries; it states opportunities may include field operations, engineering, maintenance, QHSE, logistics and business-support functions, and welcomes high-performing Saudi graduates.",
+      "Sector / Role": "Oil & Gas Services — Saudi Graduate Talent Network: Industrial Engineering, Operations, Logistics, QHSE and Business Support",
+      "date:Last Verified:start": "2026-11-25",
+      "notion_page_url": "https://app.notion.com/p/423b3173524581339fe0f82048f8d592?pvs=204",
+      "Notes": "Candidate match: Sultan Saud, Industrial Engineering / operations / quality / process improvement / planning / supply chain. This is a talent-network/recruitment-enquiry contact, not a named vacancy; the employer also provides an application form. Use a concise enquiry and do not claim a specific vacancy. Dedup completed: no exact email or normalized-company match in candidate secure batches, Supabase historical employer registry, tracking.csv, email_outreach_pending.csv, current CRM search, legacy CRM search, or internal suppression table. Brevo blocked-contact list returned 29 entries and did not include this address; Brevo contact lookup returned 404 (not present). Last verified 2026-11-25."
+    }
+  ]
 }
