@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4?pvs=204",
-  "generated_at_utc": "2026-11-25T07:57:37.000Z",
+  "generated_at_utc": "2026-11-25T08:14:18.106Z",
   "eligible_contacts": [
     {
       "Company": "Abrican",
@@ -18,7 +18,7 @@
       "Sector / Role": "Oil & Gas Services — Saudi Graduate Talent Network: Industrial Engineering, Operations, Logistics, QHSE and Business Support",
       "date:Last Verified:start": "2026-11-25",
       "notion_page_url": "https://app.notion.com/p/423b3173524581339fe0f82048f8d592?pvs=204",
-      "Notes": "Candidate match: Sultan Saud, Industrial Engineering / operations / quality / process improvement / planning / supply chain. This is a talent-network/recruitment-enquiry contact, not a named vacancy; the employer also provides an application form. Use a concise enquiry and do not claim a specific vacancy. Dedup completed: no exact email or normalized-company match in candidate secure batches, Supabase historical employer registry, tracking.csv, email_outreach_pending.csv, current CRM search, legacy CRM search, or internal suppression table. Brevo blocked-contact list returned 29 entries and did not include this address; Brevo contact lookup returned 404 (not present). Last verified 2026-11-25."
+      "Notes": "Candidate match: Sultan Saud, Industrial Engineering / operations / quality / process improvement / planning / supply chain. This is a talent-network/recruitment-enquiry contact, not a named vacancy; the employer also provides an application form. Dedup completed: no exact email or normalized-company match in all 37 secure batches (564 message rows across raw/result payloads), historical AutoApply Companies & Contacts Notion database (1,820 rows), current Notion CRM, Supabase historical employer registry, tracking.csv (520 rows), email_outreach_pending.csv (99 rows), baseline applications (207 rows), or internal permanent suppression table. Brevo blockedContacts returned 29 entries and did not include this address. Last verified 2026-11-25."
     }
   ]
 }
