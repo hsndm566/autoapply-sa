@@ -2,7 +2,7 @@
   "schema_version": 1,
   "data_source_id": "e22e718f-3141-41a9-aa5d-40fdc3aa98f9",
   "notion_database_url": "https://app.notion.com/p/35df33702d624d07b4b69d55e11cc1c4?pvs=204",
-  "generated_at_utc": "2026-11-26T07:47:49.306Z",
+  "generated_at_utc": "2026-11-27T07:51:17.207Z",
   "eligible_contacts": [
     {
       "Company": "Abrican",
@@ -19,7 +19,7 @@
       "Do Not Send": "__NO__",
       "Source": "Employer careers page — Recruitment enquiries",
       "Source URL": "https://www.abrican.com/careers",
-      "Evidence": "Official careers page lists recruiting@abrican.com.sa under Recruitment enquiries; it states opportunities may include field operations, engineering, maintenance, QHSE, logistics and business-support functions, and welcomes high-performing Saudi graduates.",
+      "Evidence": "Official careers page lists [recruiting@abrican.com.sa](mailto:recruiting@abrican.com.sa) under Recruitment enquiries; it states opportunities may include field operations, engineering, maintenance, QHSE, logistics and business-support functions, and welcomes high-performing Saudi graduates.",
       "Sector / Role": "Oil & Gas Services — Saudi Graduate Talent Network: Industrial Engineering, Operations, Logistics, QHSE and Business Support",
       "date:Last Verified:start": "2026-11-25",
       "notion_page_url": "https://app.notion.com/p/423b3173524581339fe0f82048f8d592",
